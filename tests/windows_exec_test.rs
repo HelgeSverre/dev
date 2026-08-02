@@ -127,3 +127,35 @@ fn ctrl_break_is_forwarded_to_the_child_process_group() -> anyhow::Result<()> {
     assert!(!late.exists(), "the interrupted child kept running");
     Ok(())
 }
+
+#[test]
+fn command_quoting_preserves_spaces_empty_arguments_and_quotes() -> anyhow::Result<()> {
+    let temp = tempfile::tempdir()?;
+    let capture = temp.path().join("capture.ps1");
+    let observed = temp.path().join("observed.json");
+    let powershell_path = |path: &Path| path.to_string_lossy().replace('\'', "''");
+    fs::write(
+        &capture,
+        format!(
+            "$payload = [ordered]@{{ cwd = (Get-Location).Path; args = @($args) }}\n[IO.File]::WriteAllText('{}', (ConvertTo-Json -Compress -InputObject $payload))\n",
+            powershell_path(&observed)
+        ),
+    )?;
+    let shim = format!(
+        "@echo off\n\"%SystemRoot%\\System32\\WindowsPowerShell\\v1.0\\powershell.exe\" -NoLogo -NoProfile -NonInteractive -File \"{}\" %*\n",
+        capture.display()
+    );
+    let (project, bin) = project_with_npm(temp.path(), &shim)?;
+
+    let output = dev_command(&project, &bin)
+        .args(["--", "--flag", "a b", "", "a'b\"c"])
+        .output()?;
+    anyhow::ensure!(output.status.success(), "dev failed: {output:?}");
+    let payload: serde_json::Value = serde_json::from_slice(&fs::read(observed)?)?;
+    assert_eq!(payload["cwd"], project.to_string_lossy().as_ref());
+    assert_eq!(
+        payload["args"],
+        serde_json::json!(["run", "dev", "--", "--flag", "a b", "", "a'b\"c"])
+    );
+    Ok(())
+}
