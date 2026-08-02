@@ -10,7 +10,7 @@ use crate::intent::Intent;
 use crate::path::resolve_program;
 use crate::scan::{IndexEntry, IndexedFileType};
 
-use super::target::explicitly_anchored;
+use super::target::{explicitly_anchored, target_scope};
 use super::{Detection, Detector, ScanCtx, TargetRunner};
 
 pub struct PythonFileDetector;
@@ -72,7 +72,11 @@ fn file_candidate(absolute: &Path, relative_to_scan: &Path, explicit: bool) -> C
             SelectionPolicy::ExplicitHint
         },
     );
-    candidate.origin = CandidateOrigin::Synthetic;
+    candidate.origin = if explicit {
+        CandidateOrigin::Declared
+    } else {
+        CandidateOrigin::Synthetic
+    };
     candidate.label = format!("Python file {}", relative_to_scan.display());
     candidate.description = format!("Standalone Python target using {runner_reason}");
     candidate.evidence.push(Evidence {
@@ -84,11 +88,7 @@ fn file_candidate(absolute: &Path, relative_to_scan: &Path, explicit: bool) -> C
     candidate.search = SearchDocument {
         identities: vec![stem, filename.to_string_lossy().into_owned()],
         target_paths: vec![PathBuf::from(&filename), relative_to_scan.to_path_buf()],
-        scopes: relative_to_scan
-            .parent()
-            .into_iter()
-            .map(|path| path.to_string_lossy().into_owned())
-            .collect(),
+        scopes: vec![target_scope(relative_to_scan)],
         tags: vec!["python".to_owned(), "py".to_owned()],
         text: vec![candidate.description.clone()],
     };

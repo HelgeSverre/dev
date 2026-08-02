@@ -1334,6 +1334,19 @@ fn standalone_php_targets_use_the_interpreter_and_hint_widening() -> anyhow::Res
     fs::write(&target, "<?php echo 'ok';\n")?;
     let bin = fake_program(temp.path(), "php")?;
 
+    let mut explicit_json = cargo_bin_cmd!("dev");
+    let output = explicit_json
+        .args(["run", "--json", "--at"])
+        .arg(&target)
+        .env("PATH", &bin)
+        .output()?;
+    anyhow::ensure!(
+        output.status.success(),
+        "explicit PHP JSON failed: {output:?}"
+    );
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout)?;
+    assert_eq!(json["candidates"][0]["origin"], "declared");
+
     let mut explicit = cargo_bin_cmd!("dev");
     explicit
         .args(["run", "--quiet", "--at"])
@@ -1353,6 +1366,19 @@ fn standalone_php_targets_use_the_interpreter_and_hint_widening() -> anyhow::Res
         "cwd=<{}>\narg0=<legacy_importer.php>\n",
         target.parent().unwrap_or(&project).display()
     ));
+
+    let mut hinted_json = cargo_bin_cmd!("dev");
+    let output = hinted_json
+        .args(["run", "legacy", "importer", "--json", "--at"])
+        .arg(&project)
+        .env("PATH", &bin)
+        .output()?;
+    anyhow::ensure!(
+        output.status.success(),
+        "hinted PHP JSON failed: {output:?}"
+    );
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout)?;
+    assert_eq!(json["candidates"][0]["origin"], "synthetic");
     Ok(())
 }
 

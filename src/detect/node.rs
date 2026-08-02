@@ -462,7 +462,7 @@ fn bin_candidates(
             candidate.search = SearchDocument {
                 identities: vec![name],
                 target_paths: vec![PathBuf::from(path)],
-                scopes: manifest.name.iter().cloned().collect(),
+                scopes: vec![package_scope(manifest, package_directory)],
                 tags: synonyms.iter().map(|value| (*value).to_owned()).collect(),
                 text: vec![candidate.description.clone()],
             };
@@ -512,7 +512,7 @@ fn conventional_file_candidates(
                     filename.to_owned(),
                 ],
                 target_paths: vec![PathBuf::from(filename)],
-                scopes: Vec::new(),
+                scopes: vec![package_scope_from_directory(package_directory)],
                 tags: synonyms.iter().map(|value| (*value).to_owned()).collect(),
                 text: vec![candidate.description.clone()],
             };
@@ -647,7 +647,7 @@ fn framework_fallbacks(
             candidate.search = SearchDocument {
                 identities: vec![name.to_owned(), framework.to_owned()],
                 target_paths: vec![manifest_path.to_path_buf()],
-                scopes: manifest.name.iter().cloned().collect(),
+                scopes: vec![package_scope(manifest, package_directory)],
                 tags: synonyms
                     .iter()
                     .map(|value| (*value).to_owned())
@@ -700,12 +700,14 @@ fn package_scope(manifest: &PackageManifest, directory: &Path) -> String {
     manifest
         .name
         .clone()
-        .or_else(|| {
-            directory
-                .file_name()
-                .map(|name| name.to_string_lossy().into_owned())
-        })
-        .unwrap_or_else(|| ".".to_owned())
+        .unwrap_or_else(|| package_scope_from_directory(directory))
+}
+
+fn package_scope_from_directory(directory: &Path) -> String {
+    directory.file_name().map_or_else(
+        || ".".to_owned(),
+        |name| name.to_string_lossy().into_owned(),
+    )
 }
 
 impl TargetBinder for NodeTestBinder {

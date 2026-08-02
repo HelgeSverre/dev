@@ -8,7 +8,7 @@ use crate::intent::Intent;
 use crate::scan::{IndexEntry, IndexedFileType};
 
 use super::script::{read_shebang, Shebang};
-use super::target::explicitly_anchored;
+use super::target::{explicitly_anchored, target_scope};
 use super::{Detection, Detector, ScanCtx, TargetRunner};
 
 pub struct ShellDetector;
@@ -69,7 +69,11 @@ impl TargetRunner for ShellDetector {
             } else {
                 SelectionPolicy::ExplicitHint
             },
-            CandidateOrigin::Synthetic,
+            if explicit {
+                CandidateOrigin::Declared
+            } else {
+                CandidateOrigin::Synthetic
+            },
         )
     }
 }
@@ -216,11 +220,7 @@ fn script_candidate(
     candidate.search = SearchDocument {
         identities: vec![stem, filename.to_string_lossy().into_owned()],
         target_paths: vec![PathBuf::from(&filename), relative_to_scan.to_path_buf()],
-        scopes: relative_to_scan
-            .parent()
-            .into_iter()
-            .map(|path| path.to_string_lossy().into_owned())
-            .collect(),
+        scopes: vec![target_scope(relative_to_scan)],
         tags: vec!["shell".to_owned(), "script".to_owned()],
         text: vec![candidate.description.clone()],
     };

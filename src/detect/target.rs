@@ -197,6 +197,15 @@ pub(super) fn explicitly_anchored(target: &IndexEntry, context: &ScanCtx<'_>) ->
     path.strip_prefix(&context.roots.scan_root).unwrap_or(path) == target.relative_path
 }
 
+pub(super) fn target_scope(path: &Path) -> String {
+    path.parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .map_or_else(
+            || ".".to_owned(),
+            |parent| parent.to_string_lossy().into_owned(),
+        )
+}
+
 #[cfg(unix)]
 fn executable(_path: &Path, metadata: &std::fs::Metadata) -> bool {
     use std::os::unix::fs::PermissionsExt as _;

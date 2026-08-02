@@ -116,6 +116,23 @@ fn render_case(
     let mut candidates =
         dev_launcher::dedupe::deduplicate(detection.candidates, &invocation.target);
     for candidate in &mut candidates {
+        anyhow::ensure!(
+            !candidate.action_key.is_empty()
+                && !candidate.action_name.is_empty()
+                && !candidate.label.is_empty()
+                && !candidate.description.is_empty(),
+            "{name}/{intent}: candidate metadata is incomplete for {}",
+            candidate.action_key
+        );
+        anyhow::ensure!(
+            !candidate.evidence.is_empty()
+                && !candidate.search.identities.is_empty()
+                && !candidate.search.target_paths.is_empty()
+                && !candidate.search.scopes.is_empty()
+                && !candidate.search.tags.is_empty(),
+            "{name}/{intent}: candidate evidence/search document is incomplete for {}",
+            candidate.action_key
+        );
         candidate.availability = Availability::Available {
             resolved_program: PathBuf::from("<fixture-tool>"),
         };

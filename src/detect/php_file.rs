@@ -8,7 +8,7 @@ use crate::candidate::{
 use crate::intent::Intent;
 use crate::scan::{IndexEntry, IndexedFileType};
 
-use super::target::explicitly_anchored;
+use super::target::{explicitly_anchored, target_scope};
 use super::{Detection, Detector, ScanCtx, TargetRunner};
 
 pub struct PhpFileDetector;
@@ -89,7 +89,11 @@ fn file_candidate(
             SelectionPolicy::ExplicitHint
         },
     );
-    candidate.origin = CandidateOrigin::Synthetic;
+    candidate.origin = if explicitly_anchored {
+        CandidateOrigin::Declared
+    } else {
+        CandidateOrigin::Synthetic
+    };
     candidate.label = format!("PHP file {}", relative_to_scan.display());
     candidate.description = format!("Standalone PHP target using {runner_reason}");
     candidate.evidence.push(Evidence {
@@ -101,11 +105,7 @@ fn file_candidate(
     candidate.search = SearchDocument {
         identities: vec![stem, filename.to_string_lossy().into_owned()],
         target_paths: vec![PathBuf::from(&filename), relative_to_scan.to_path_buf()],
-        scopes: relative_to_scan
-            .parent()
-            .into_iter()
-            .map(|path| path.to_string_lossy().into_owned())
-            .collect(),
+        scopes: vec![target_scope(relative_to_scan)],
         tags: vec!["php".to_owned()],
         text: vec![candidate.description.clone()],
     };

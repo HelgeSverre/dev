@@ -8,7 +8,7 @@ use crate::candidate::{
 use crate::intent::Intent;
 use crate::scan::{IndexEntry, IndexedFileType};
 
-use super::target::explicitly_anchored;
+use super::target::{explicitly_anchored, target_scope};
 use super::{Detection, Detector, ScanCtx, TargetRunner};
 
 pub struct ZigDetector;
@@ -161,7 +161,11 @@ fn standalone_candidate(absolute: &Path, relative: &Path, explicit: bool) -> Can
         },
     );
     candidate.passthrough = PassthroughStyle::DoubleDash;
-    candidate.origin = CandidateOrigin::Synthetic;
+    candidate.origin = if explicit {
+        CandidateOrigin::Declared
+    } else {
+        CandidateOrigin::Synthetic
+    };
     candidate.label = format!("Zig file {}", relative.display());
     candidate.description = "Standalone Zig source target".to_owned();
     candidate.evidence.push(Evidence {
@@ -173,11 +177,7 @@ fn standalone_candidate(absolute: &Path, relative: &Path, explicit: bool) -> Can
     candidate.search = SearchDocument {
         identities: vec![stem, filename.to_string_lossy().into_owned()],
         target_paths: vec![PathBuf::from(filename), relative.to_path_buf()],
-        scopes: relative
-            .parent()
-            .into_iter()
-            .map(|path| path.to_string_lossy().into_owned())
-            .collect(),
+        scopes: vec![target_scope(relative)],
         tags: vec!["zig".to_owned()],
         text: vec![candidate.description.clone()],
     };

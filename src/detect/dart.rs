@@ -13,7 +13,7 @@ use crate::intent::{Intent, Target};
 use crate::query::{match_candidate, normalize_query, MatchClass};
 use crate::scan::{IndexEntry, IndexedFileType};
 
-use super::target::explicitly_anchored;
+use super::target::{explicitly_anchored, target_scope};
 use super::{Detection, Detector, ScanCtx, TargetRunner};
 
 pub struct DartDetector;
@@ -74,7 +74,11 @@ impl TargetRunner for DartDetector {
         } else {
             standalone_without_pubspec(&absolute, explicit)
         };
-        candidate.origin = CandidateOrigin::Synthetic;
+        candidate.origin = if explicit {
+            CandidateOrigin::Declared
+        } else {
+            CandidateOrigin::Synthetic
+        };
         Some(candidate)
     }
 }
@@ -476,7 +480,11 @@ fn standalone_without_pubspec(target: &Path, explicit: bool) -> Candidate {
             SelectionPolicy::ExplicitHint
         },
     );
-    candidate.origin = CandidateOrigin::Synthetic;
+    candidate.origin = if explicit {
+        CandidateOrigin::Declared
+    } else {
+        CandidateOrigin::Synthetic
+    };
     candidate.label = format!("Dart file {}", target.display());
     candidate.description = "Standalone Dart source target".to_owned();
     candidate.evidence.push(Evidence {
@@ -488,7 +496,7 @@ fn standalone_without_pubspec(target: &Path, explicit: bool) -> Candidate {
     candidate.search = SearchDocument {
         identities: vec![identity, filename.to_string_lossy().into_owned()],
         target_paths: vec![PathBuf::from(filename), target.to_path_buf()],
-        scopes: Vec::new(),
+        scopes: vec![target_scope(target)],
         tags: vec!["dart".to_owned()],
         text: vec![candidate.description.clone()],
     };
