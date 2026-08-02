@@ -1,4 +1,4 @@
-schema=2 repositories=55
+schema=2 repositories=64
 
 ## 01-node-npm/run
 roots package=. workspace=- scan=.
@@ -113,6 +113,9 @@ candidate action=node:node-bun:script:dev detector=node source=node layer=Ecosys
   evidence kind=Manifest points=0 source=package.json reason=package.json declares script `dev`
   evidence kind=Proximity points=30 source=. reason=same directory as target
   evidence kind=Rule points=0 source=- reason=selected by <fixture>/bun.lock
+candidate action=bun:node-bun:auto-run detector=node source=node layer=ToolDefault origin=Declared policy=ExplicitHint base=40 total=70 distance=0 cwd=. scope=. program="bun" args=["run"] availability=available
+  evidence kind=Proximity points=30 source=. reason=same directory as target
+  evidence kind=Rule points=0 source=package.json reason=Bun is the project package manager; auto-detecting entry point
 candidate action=node:node-bun:script:build detector=node source=node layer=EcosystemTask origin=Declared policy=ExplicitHint base=15 total=45 distance=0 cwd=. scope=. program="bun" args=["run","build"] availability=available
   evidence kind=Manifest points=0 source=package.json reason=package.json declares script `build`
   evidence kind=Proximity points=30 source=. reason=same directory as target
@@ -1403,6 +1406,211 @@ candidate action=docker:root:build detector=docker source=docker layer=ToolDefau
   evidence kind=Proximity points=30 source=. reason=same directory as target
 
 ## 55-dockerfile/test
+roots package=. workspace=- scan=.
+scan structural=1 targets=0 truncated=false
+resolution status=NoCandidates reason=NoCandidates selected=-
+
+## 56-python-uv/run
+roots package=. workspace=- scan=.
+scan structural=2 targets=0 truncated=false
+resolution status=Ambiguous reason=NoAutomaticCandidates selected=-
+candidate action=python-prj:myapp:script:serve detector=python-prj source=python-prj layer=EcosystemTask origin=Declared policy=ExplicitHint base=35 total=65 distance=0 cwd=. scope=. program="uv" args=["run","--no-sync","serve"] availability=available
+  evidence kind=Manifest points=0 source=pyproject.toml reason=pyproject.toml declares script `serve`
+  evidence kind=Proximity points=30 source=. reason=same directory as target
+
+## 56-python-uv/build
+roots package=. workspace=- scan=.
+scan structural=2 targets=0 truncated=false
+resolution status=Ambiguous reason=NoAutomaticCandidates selected=-
+candidate action=python-prj:myapp:sync detector=python-prj source=python-prj layer=ToolDefault origin=Declared policy=ExplicitHint base=60 total=90 distance=0 cwd=. scope=. program="uv" args=["sync"] availability=available
+  evidence kind=Manifest points=0 source=pyproject.toml reason=pyproject.toml declares a Python project managed by uv
+  evidence kind=Proximity points=30 source=. reason=same directory as target
+
+## 56-python-uv/test
+roots package=. workspace=- scan=.
+scan structural=2 targets=0 truncated=false
+resolution status=Resolved reason=UniqueAutomaticCandidate selected=python-prj:myapp:test
+candidate action=python-prj:myapp:test detector=python-prj source=python-prj layer=ToolDefault origin=Declared policy=Automatic base=90 total=120 distance=0 cwd=. scope=. program="uv" args=["run","--no-sync","pytest"] availability=available
+  evidence kind=Manifest points=0 source=pyproject.toml reason=pyproject.toml declares pytest as a project dependency
+  evidence kind=Proximity points=30 source=. reason=same directory as target
+
+## 57-sveltekit/run
+roots package=. workspace=- scan=.
+scan structural=2 targets=0 truncated=false
+resolution status=Resolved reason=UniqueAutomaticCandidate selected=node:sveltekit-app:script:dev
+candidate action=node:sveltekit-app:script:dev detector=node source=sveltekit layer=EcosystemTask origin=Declared policy=Automatic base=95 total=130 distance=0 cwd=. scope=. program="npm" args=["run","dev"] availability=available
+  evidence kind=Manifest points=10 source=package.json reason=package declares sveltekit
+  evidence kind=Manifest points=0 source=package.json reason=package.json declares script `dev`
+  evidence kind=Proximity points=30 source=. reason=same directory as target
+  evidence kind=Rule points=-5 source=- reason=defaulted to npm because no package-manager marker was found
+candidate action=node:sveltekit-app:script:build detector=node source=node layer=EcosystemTask origin=Declared policy=ExplicitHint base=15 total=40 distance=0 cwd=. scope=. program="npm" args=["run","build"] availability=available
+  evidence kind=Manifest points=0 source=package.json reason=package.json declares script `build`
+  evidence kind=Proximity points=30 source=. reason=same directory as target
+  evidence kind=Rule points=-5 source=- reason=defaulted to npm because no package-manager marker was found
+candidate action=sveltekit:sveltekit-app:preview detector=node source=sveltekit layer=ToolDefault origin=Declared policy=ExplicitHint base=25 total=15 distance=0 cwd=. scope=. program="npm" args=["exec","--offline","--","svelte-kit","preview"] availability=unsupported:project-local sveltekit binary is not installed; dev will not download it
+  evidence kind=Manifest points=10 source=package.json reason=package declares sveltekit without a canonical `preview` script
+  evidence kind=Proximity points=30 source=. reason=same directory as target
+  evidence kind=Availability points=-50 source=- reason=project-local sveltekit binary is not installed; dev will not download it
+  evidence kind=Rule points=0 source=- reason=npm uses its local-only binary execution mode
+
+## 57-sveltekit/build
+roots package=. workspace=- scan=.
+scan structural=2 targets=0 truncated=false
+resolution status=Resolved reason=UniqueAutomaticCandidate selected=node:sveltekit-app:script:build
+candidate action=node:sveltekit-app:script:build detector=node source=sveltekit layer=EcosystemTask origin=Declared policy=Automatic base=95 total=130 distance=0 cwd=. scope=. program="npm" args=["run","build"] availability=available
+  evidence kind=Manifest points=10 source=package.json reason=package declares sveltekit
+  evidence kind=Manifest points=0 source=package.json reason=package.json declares script `build`
+  evidence kind=Proximity points=30 source=. reason=same directory as target
+  evidence kind=Rule points=-5 source=- reason=defaulted to npm because no package-manager marker was found
+
+## 57-sveltekit/test
+roots package=. workspace=- scan=.
+scan structural=2 targets=0 truncated=false
+resolution status=NoCandidates reason=NoCandidates selected=-
+
+## 58-bun-native/run
+roots package=. workspace=- scan=.
+scan structural=4 targets=0 truncated=false
+resolution status=Ambiguous reason=NoAutomaticCandidates selected=-
+candidate action=bun:bun-app:auto-run detector=node source=node layer=ToolDefault origin=Declared policy=ExplicitHint base=40 total=70 distance=0 cwd=. scope=. program="bun" args=["run"] availability=available
+  evidence kind=Proximity points=30 source=. reason=same directory as target
+  evidence kind=Rule points=0 source=package.json reason=Bun is the project package manager; auto-detecting entry point
+
+## 58-bun-native/build
+roots package=. workspace=- scan=.
+scan structural=4 targets=0 truncated=false
+resolution status=Ambiguous reason=NoAutomaticCandidates selected=-
+candidate action=bun:bun-app:build detector=node source=node layer=ToolDefault origin=Declared policy=ExplicitHint base=40 total=70 distance=0 cwd=. scope=. program="bun" args=["build"] availability=available
+  evidence kind=Proximity points=30 source=. reason=same directory as target
+  evidence kind=Rule points=0 source=package.json reason=Bun is the project package manager; offering native bundler
+
+## 58-bun-native/test
+roots package=. workspace=- scan=.
+scan structural=4 targets=0 truncated=false
+resolution status=Resolved reason=UniqueAutomaticCandidate selected=bun:bun-app:test
+candidate action=bun:bun-app:test detector=node source=node layer=ToolDefault origin=Declared policy=Automatic base=90 total=120 distance=0 cwd=. scope=. program="bun" args=["test"] availability=available
+  evidence kind=Proximity points=30 source=. reason=same directory as target
+  evidence kind=Rule points=0 source=package.json reason=Bun is the project package manager; offering native test runner
+
+## 59-cmake/run
+roots package=. workspace=- scan=.
+scan structural=1 targets=0 truncated=false
+resolution status=Ambiguous reason=NoAutomaticCandidates selected=-
+candidate action=cmake:59-cmake:unconfigured detector=cmake source=cmake layer=ToolDefault origin=Declared policy=ExplicitHint base=20 total=0 distance=0 cwd=. scope=. program="cmake" args=["--build","build"] availability=unsupported:no CMake build directory found in <fixture>
+  evidence kind=Manifest points=0 source=CMakeLists.txt reason=project contains CMakeLists.txt
+  evidence kind=Proximity points=30 source=. reason=same directory as target
+  evidence kind=Availability points=-50 source=- reason=no CMake build directory found in <fixture>
+
+## 59-cmake/build
+roots package=. workspace=- scan=.
+scan structural=1 targets=0 truncated=false
+resolution status=Ambiguous reason=NoAutomaticCandidates selected=-
+candidate action=cmake:59-cmake:unconfigured detector=cmake source=cmake layer=ToolDefault origin=Declared policy=ExplicitHint base=20 total=0 distance=0 cwd=. scope=. program="cmake" args=["--build","build"] availability=unsupported:no CMake build directory found in <fixture>
+  evidence kind=Manifest points=0 source=CMakeLists.txt reason=project contains CMakeLists.txt
+  evidence kind=Proximity points=30 source=. reason=same directory as target
+  evidence kind=Availability points=-50 source=- reason=no CMake build directory found in <fixture>
+
+## 59-cmake/test
+roots package=. workspace=- scan=.
+scan structural=1 targets=0 truncated=false
+resolution status=Ambiguous reason=NoAutomaticCandidates selected=-
+candidate action=cmake:59-cmake:unconfigured detector=cmake source=cmake layer=ToolDefault origin=Declared policy=ExplicitHint base=20 total=0 distance=0 cwd=. scope=. program="cmake" args=["--build","build"] availability=unsupported:no CMake build directory found in <fixture>
+  evidence kind=Manifest points=0 source=CMakeLists.txt reason=project contains CMakeLists.txt
+  evidence kind=Proximity points=30 source=. reason=same directory as target
+  evidence kind=Availability points=-50 source=- reason=no CMake build directory found in <fixture>
+
+## 60-rescript/run
+roots package=. workspace=- scan=.
+scan structural=1 targets=0 truncated=false
+resolution status=Resolved reason=UniqueAutomaticCandidate selected=rescript:rescript-app:dev
+candidate action=rescript:rescript-app:dev detector=rescript source=rescript layer=ToolDefault origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. scope=. program="rescript" args=["dev"] availability=available
+  evidence kind=Manifest points=0 source=rescript.json reason=rescript.json declares a ReScript project
+  evidence kind=Proximity points=30 source=. reason=same directory as target
+
+## 60-rescript/build
+roots package=. workspace=- scan=.
+scan structural=1 targets=0 truncated=false
+resolution status=Resolved reason=UniqueAutomaticCandidate selected=rescript:rescript-app:build
+candidate action=rescript:rescript-app:build detector=rescript source=rescript layer=ToolDefault origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. scope=. program="rescript" args=["build"] availability=available
+  evidence kind=Manifest points=0 source=rescript.json reason=rescript.json declares a ReScript project
+  evidence kind=Proximity points=30 source=. reason=same directory as target
+
+## 60-rescript/test
+roots package=. workspace=- scan=.
+scan structural=1 targets=0 truncated=false
+resolution status=NoCandidates reason=NoCandidates selected=-
+
+## 61-odin/run
+roots package=. workspace=- scan=.
+scan structural=1 targets=0 truncated=false
+resolution status=Resolved reason=UniqueAutomaticCandidate selected=odin:61-odin:run
+candidate action=odin:61-odin:run detector=odin source=odin layer=ToolDefault origin=Declared policy=Automatic base=90 total=120 distance=0 cwd=. scope=. program="odin" args=["run","main.odin"] availability=available
+  evidence kind=Convention points=0 source=main.odin reason=detected main.odin entry point
+  evidence kind=Proximity points=30 source=. reason=same directory as target
+
+## 61-odin/build
+roots package=. workspace=- scan=.
+scan structural=1 targets=0 truncated=false
+resolution status=Ambiguous reason=NoAutomaticCandidates selected=-
+candidate action=odin:61-odin:build detector=odin source=odin layer=ToolDefault origin=Declared policy=ExplicitHint base=60 total=90 distance=0 cwd=. scope=. program="odin" args=["build","main.odin"] availability=available
+  evidence kind=Convention points=0 source=main.odin reason=detected main.odin entry point
+  evidence kind=Proximity points=30 source=. reason=same directory as target
+
+## 61-odin/test
+roots package=. workspace=- scan=.
+scan structural=1 targets=0 truncated=false
+resolution status=NoCandidates reason=NoCandidates selected=-
+
+## 62-nim/run
+roots package=. workspace=- scan=.
+scan structural=3 targets=0 truncated=false
+resolution status=Resolved reason=UniqueAutomaticCandidate selected=nim:62-nim:run
+candidate action=nim:62-nim:run detector=nim source=nim layer=ToolDefault origin=Declared policy=Automatic base=90 total=120 distance=0 cwd=. scope=. program="nim" args=["r","src/main.nim"] availability=available
+  evidence kind=Convention points=0 source=src/main.nim reason=detected Nim project with main entry point
+  evidence kind=Proximity points=30 source=. reason=same directory as target
+
+## 62-nim/build
+roots package=. workspace=- scan=.
+scan structural=3 targets=0 truncated=false
+resolution status=Ambiguous reason=NoAutomaticCandidates selected=-
+candidate action=nim:62-nim:build detector=nim source=nim layer=ToolDefault origin=Declared policy=ExplicitHint base=60 total=90 distance=0 cwd=. scope=. program="nim" args=["c","src/main.nim"] availability=available
+  evidence kind=Convention points=0 source=src/main.nim reason=detected Nim project with main entry point
+  evidence kind=Proximity points=30 source=. reason=same directory as target
+
+## 62-nim/test
+roots package=. workspace=- scan=.
+scan structural=3 targets=0 truncated=false
+resolution status=Resolved reason=UniqueAutomaticCandidate selected=nim:62-nim:test
+candidate action=nim:62-nim:test detector=nim source=nim layer=ToolDefault origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. scope=. program="nimble" args=["test"] availability=available
+  evidence kind=Manifest points=0 source=- reason=Nimble project supports conventional test task
+  evidence kind=Proximity points=30 source=. reason=same directory as target
+
+## 63-wren/run
+roots package=. workspace=- scan=.
+scan structural=1 targets=0 truncated=false
+resolution status=NoCandidates reason=NoCandidates selected=-
+
+## 63-wren/build
+roots package=. workspace=- scan=.
+scan structural=1 targets=0 truncated=false
+resolution status=NoCandidates reason=NoCandidates selected=-
+
+## 63-wren/test
+roots package=. workspace=- scan=.
+scan structural=1 targets=0 truncated=false
+resolution status=NoCandidates reason=NoCandidates selected=-
+
+## 64-lira/run
+roots package=. workspace=- scan=.
+scan structural=1 targets=0 truncated=false
+resolution status=NoCandidates reason=NoCandidates selected=-
+
+## 64-lira/build
+roots package=. workspace=- scan=.
+scan structural=1 targets=0 truncated=false
+resolution status=NoCandidates reason=NoCandidates selected=-
+
+## 64-lira/test
 roots package=. workspace=- scan=.
 scan structural=1 targets=0 truncated=false
 resolution status=NoCandidates reason=NoCandidates selected=-

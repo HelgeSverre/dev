@@ -43,7 +43,7 @@ fn structural_corpus_matches_golden_and_is_repeatable() -> anyhow::Result<()> {
         fs::write(
             PathBuf::from(env!("CARGO_MANIFEST_DIR"))
                 .join("tests/snapshots/corpus-structural.snap"),
-            actual,
+            &actual,
         )?;
         return Ok(());
     }

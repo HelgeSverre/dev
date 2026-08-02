@@ -1,8 +1,8 @@
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
-use crate::cli::ShellChoice;
 use crate::cli::write_completions;
+use crate::cli::ShellChoice;
 
 /// Details about an installed completion script.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -150,12 +150,18 @@ mod tests {
             shell_from_program(OsStr::new("/opt/homebrew/bin/zsh")),
             Some(ShellChoice::Zsh)
         );
-        assert_eq!(shell_from_program(OsStr::new("fish")), Some(ShellChoice::Fish));
+        assert_eq!(
+            shell_from_program(OsStr::new("fish")),
+            Some(ShellChoice::Fish)
+        );
         assert_eq!(
             shell_from_program(OsStr::new("pwsh")),
             Some(ShellChoice::PowerShell)
         );
-        assert_eq!(shell_from_program(OsStr::new("nu")), Some(ShellChoice::Nushell));
+        assert_eq!(
+            shell_from_program(OsStr::new("nu")),
+            Some(ShellChoice::Nushell)
+        );
     }
 
     #[test]
@@ -176,7 +182,11 @@ mod tests {
                 "fish",
                 config.join("fish/completions/dev.fish"),
             ),
-            (ShellChoice::Elvish, "elvish", config.join("elvish/lib/dev.elv")),
+            (
+                ShellChoice::Elvish,
+                "elvish",
+                config.join("elvish/lib/dev.elv"),
+            ),
             (
                 ShellChoice::Nushell,
                 "nushell",

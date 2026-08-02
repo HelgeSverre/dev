@@ -1,0 +1,6 @@
+[project]
+name = "myapp"
+dependencies = ["pytest"]
+
+[project.scripts]
+serve = "myapp.main:serve"

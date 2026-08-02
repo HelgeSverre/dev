@@ -165,9 +165,9 @@ native task-listing commands during detection.
 
 | Category | Sources |
 |---|---|
-| Package ecosystems | npm, pnpm, Yarn, Bun, Vite, Next.js, Cargo, Composer, Artisan, Go, Gradle, Maven, .NET, SwiftPM, Dart, Flutter, Zig, and Sema |
+| Package ecosystems | npm, pnpm, Yarn, Bun, Vite, Next.js, SvelteKit, Cargo, Composer, Artisan, Go, Gradle, Maven, .NET, SwiftPM, Dart, Flutter, Zig, Sema, Python (pyproject.toml/uv/pytest), ReScript, CMake, Nim, and Odin |
 | Project task facades | Just, Make, Jake, Taskfile, and mise |
-| Services and runnable targets | Docker Compose, shell scripts, Python files, and PHP files |
+| Standalone runnable targets | Shell scripts, Python files, PHP files, Wren files, and Lira files |
 
 Workspace-aware discovery covers Cargo workspaces, Node/pnpm workspaces, Go
 workspaces, Gradle multi-project builds, Maven reactors, and .NET solutions.
