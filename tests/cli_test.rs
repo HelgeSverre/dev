@@ -640,6 +640,18 @@ fn stale_remembered_choices_revalidate_exact_action_semantics() -> anyhow::Resul
         .stderr(predicates::str::contains(
             "project changed; remembered action still exists",
         ));
+
+    let mut fast_again = cargo_bin_cmd!("dev");
+    fast_again
+        .args(["run", "--quiet", "--at"])
+        .arg(&project)
+        .env("PATH", &bin)
+        .env("XDG_STATE_HOME", &state);
+    fast_again
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("arg1=<dev>"))
+        .stderr("");
     Ok(())
 }
 
@@ -859,5 +871,296 @@ fn remembered_choice_round_trips_a_non_utf8_project_path() -> anyhow::Result<()>
         .stdout
         .windows(b"arg1=<dev>\n".len())
         .any(|window| window == b"arg1=<dev>\n"));
+    Ok(())
+}
+
+#[test]
+fn composer_script_executes_with_documented_argument_forwarding() -> anyhow::Result<()> {
+    let temp = tempfile::tempdir()?;
+    let project = temp.path().join("composer-project");
+    fs::create_dir(&project)?;
+    fs::write(
+        project.join("composer.json"),
+        r#"{
+            "name":"acme/tool",
+            "scripts":{
+                "dev":["php server.php","php worker.php"],
+                "deploy":"php deploy.php"
+            }
+        }"#,
+    )?;
+    let bin = fake_program(temp.path(), "composer")?;
+
+    let mut command = cargo_bin_cmd!("dev");
+    command
+        .args(["run", "--quiet", "--at"])
+        .arg(&project)
+        .args(["--", "--host", "127.0.0.1"])
+        .env("PATH", &bin);
+    command.assert().success().stdout(format!(
+        "cwd=<{}>\narg0=<run-script>\narg1=<dev>\narg2=<-->\narg3=<--host>\narg4=<127.0.0.1>\n",
+        project.display()
+    ));
+    Ok(())
+}
+
+#[test]
+fn malformed_composer_manifest_is_diagnostic_not_a_command() -> anyhow::Result<()> {
+    let temp = tempfile::tempdir()?;
+    let project = temp.path().join("malformed-composer");
+    fs::create_dir(&project)?;
+    fs::write(project.join("composer.json"), "{\"scripts\":")?;
+    let bin = fake_program(temp.path(), "composer")?;
+
+    let mut command = cargo_bin_cmd!("dev");
+    let output = command
+        .args(["run", "--json", "--at"])
+        .arg(&project)
+        .env("PATH", &bin)
+        .output()?;
+    assert_eq!(output.status.code(), Some(4));
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout)?;
+    assert_eq!(json["resolution"]["status"], "no_candidates");
+    assert!(json["diagnostics"]
+        .as_array()
+        .is_some_and(|diagnostics| diagnostics.iter().any(|diagnostic| {
+            diagnostic["detector"] == "composer"
+                && diagnostic["message"]
+                    .as_str()
+                    .is_some_and(|message| message.contains("invalid composer.json"))
+        })));
+    Ok(())
+}
+
+#[test]
+fn laravel_prefers_composer_dev_and_binds_artisan_to_a_test_file() -> anyhow::Result<()> {
+    let temp = tempfile::tempdir()?;
+    let project = temp.path().join("laravel-project");
+    let test_file = project.join("tests/Feature/AuthTest.php");
+    fs::create_dir_all(test_file.parent().unwrap_or(&project))?;
+    fs::write(
+        project.join("composer.json"),
+        r#"{
+            "name":"acme/app",
+            "require":{"laravel/framework":"^13.0"},
+            "scripts":{"dev":["php artisan serve","npm run dev"]}
+        }"#,
+    )?;
+    fs::write(project.join("artisan"), "<?php\n")?;
+    fs::write(&test_file, "<?php\n")?;
+    let bin = fake_program(temp.path(), "composer")?;
+    fake_program(temp.path(), "php")?;
+
+    let mut run = cargo_bin_cmd!("dev");
+    let output = run
+        .args(["run", "--json", "--at"])
+        .arg(&project)
+        .env("PATH", &bin)
+        .output()?;
+    anyhow::ensure!(output.status.success(), "Laravel run failed: {output:?}");
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout)?;
+    assert_eq!(json["resolution"]["status"], "resolved");
+    let selected = json["resolution"]["selected_candidate_id"]
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("missing selected candidate"))?;
+    let selected_candidate = json["candidates"]
+        .as_array()
+        .and_then(|candidates| {
+            candidates
+                .iter()
+                .find(|candidate| candidate["id"].as_str() == Some(selected))
+        })
+        .ok_or_else(|| anyhow::anyhow!("missing selected Composer candidate"))?;
+    assert_eq!(selected_candidate["detector"], "composer");
+    assert_eq!(selected_candidate["lifecycle"], "multi_process");
+    assert!(json["candidates"]
+        .as_array()
+        .is_some_and(|candidates| candidates
+            .iter()
+            .any(|candidate| candidate["detector"] == "artisan")));
+
+    let mut test = cargo_bin_cmd!("dev");
+    test.args(["test", "--quiet", "--at"])
+        .arg(&test_file)
+        .env("PATH", &bin);
+    test.assert().success().stdout(format!(
+        "cwd=<{}>\narg0=<artisan>\narg1=<test>\narg2=<tests/Feature/AuthTest.php>\n",
+        project.display()
+    ));
+    Ok(())
+}
+
+#[test]
+fn composer_uses_an_explicit_project_local_test_runner() -> anyhow::Result<()> {
+    let temp = tempfile::tempdir()?;
+    let project = temp.path().join("composer-tests");
+    let runner = project.join("vendor/bin/pest");
+    let target = project.join("tests/Feature/PaymentTest.php");
+    fs::create_dir_all(runner.parent().unwrap_or(&project))?;
+    fs::create_dir_all(target.parent().unwrap_or(&project))?;
+    fs::write(project.join("composer.json"), r#"{"name":"acme/tests"}"#)?;
+    fs::write(&target, "<?php\n")?;
+    fs::write(
+        &runner,
+        "#!/bin/sh\nprintf 'runner=<pest>\\ncwd=<%s>\\narg0=<%s>\\n' \"$PWD\" \"$1\"\n",
+    )?;
+    let mut permissions = runner.metadata()?.permissions();
+    permissions.set_mode(0o755);
+    fs::set_permissions(&runner, permissions)?;
+
+    let mut command = cargo_bin_cmd!("dev");
+    command.args(["test", "--quiet", "--at"]).arg(&target);
+    command.assert().success().stdout(format!(
+        "runner=<pest>\ncwd=<{}>\narg0=<tests/Feature/PaymentTest.php>\n",
+        project.display()
+    ));
+    Ok(())
+}
+
+#[test]
+fn go_detector_targets_main_packages_without_invoking_go_list() -> anyhow::Result<()> {
+    let temp = tempfile::tempdir()?;
+    let project = temp.path().join("go-project");
+    fs::create_dir_all(project.join("cmd/worker"))?;
+    fs::write(
+        project.join("go.mod"),
+        "module example.com/acme/tool\n\ngo 1.26\n",
+    )?;
+    fs::write(project.join("main.go"), "package main\nfunc main() {}\n")?;
+    fs::write(
+        project.join("cmd/worker/main.go"),
+        "//go:build unix\n\npackage main\nfunc main() {}\n",
+    )?;
+    let bin = fake_program(temp.path(), "go")?;
+
+    let mut root = cargo_bin_cmd!("dev");
+    root.args(["run", "--quiet", "--at"])
+        .arg(&project)
+        .arg("tool")
+        .env("PATH", &bin);
+    root.assert().success().stdout(format!(
+        "cwd=<{}>\narg0=<run>\narg1=<.>\n",
+        project.display()
+    ));
+
+    let mut worker = cargo_bin_cmd!("dev");
+    worker
+        .args(["run", "--quiet", "worker", "--at"])
+        .arg(&project)
+        .env("PATH", &bin);
+    worker.assert().success().stdout(format!(
+        "cwd=<{}>\narg0=<run>\narg1=<./cmd/worker>\n",
+        project.display()
+    ));
+
+    let mut build = cargo_bin_cmd!("dev");
+    build
+        .args(["build", "--quiet", "worker", "--at"])
+        .arg(&project)
+        .env("PATH", &bin);
+    build.assert().success().stdout(format!(
+        "cwd=<{}>\narg0=<build>\narg1=<./cmd/worker>\n",
+        project.display()
+    ));
+
+    let mut test = cargo_bin_cmd!("dev");
+    test.args(["test", "--quiet", "--at"])
+        .arg(&project)
+        .env("PATH", &bin);
+    test.assert().success().stdout(format!(
+        "cwd=<{}>\narg0=<test>\narg1=<./...>\n",
+        project.display()
+    ));
+    Ok(())
+}
+
+#[test]
+fn go_test_binds_an_explicit_file_to_its_package() -> anyhow::Result<()> {
+    let temp = tempfile::tempdir()?;
+    let project = temp.path().join("go-tests");
+    let package = project.join("internal/auth");
+    let target = package.join("auth_test.go");
+    fs::create_dir_all(&package)?;
+    fs::write(project.join("go.mod"), "module example.com/acme/tests\n")?;
+    fs::write(package.join("auth.go"), "package auth\n")?;
+    fs::write(&target, "package auth\n")?;
+    let bin = fake_program(temp.path(), "go")?;
+
+    let mut command = cargo_bin_cmd!("dev");
+    command
+        .args(["test", "--quiet", "--at"])
+        .arg(&target)
+        .env("PATH", &bin);
+    command.assert().success().stdout(format!(
+        "cwd=<{}>\narg0=<test>\narg1=<./internal/auth>\n",
+        project.display()
+    ));
+
+    let mut hinted = cargo_bin_cmd!("dev");
+    hinted
+        .args(["test", "--quiet", "auth", "--at"])
+        .arg(&project)
+        .env("PATH", &bin);
+    hinted.assert().success().stdout(format!(
+        "cwd=<{}>\narg0=<test>\narg1=<./internal/auth>\n",
+        project.display()
+    ));
+    Ok(())
+}
+
+#[test]
+fn go_work_discovers_a_deep_static_module_member() -> anyhow::Result<()> {
+    let temp = tempfile::tempdir()?;
+    let workspace = temp.path().join("go-workspace");
+    let member = workspace.join("deep/services/runtime/worker");
+    fs::create_dir_all(&member)?;
+    fs::write(
+        workspace.join("go.work"),
+        "go 1.26\n\nuse ./deep/services/runtime/worker\n",
+    )?;
+    fs::write(member.join("go.mod"), "module example.com/acme/worker\n")?;
+    fs::write(member.join("main.go"), "package main\nfunc main() {}\n")?;
+    let bin = fake_program(temp.path(), "go")?;
+
+    let mut command = cargo_bin_cmd!("dev");
+    command
+        .args(["run", "--quiet", "worker", "--at"])
+        .arg(&workspace)
+        .env("PATH", &bin);
+    command.assert().success().stdout(format!(
+        "cwd=<{}>\narg0=<run>\narg1=<.>\n",
+        member.display()
+    ));
+    Ok(())
+}
+
+#[test]
+fn standalone_php_targets_use_the_interpreter_and_hint_widening() -> anyhow::Result<()> {
+    let temp = tempfile::tempdir()?;
+    let project = temp.path().join("php-targets");
+    let target = project.join("tools/legacy_importer.php");
+    fs::create_dir_all(target.parent().unwrap_or(&project))?;
+    fs::write(&target, "<?php echo 'ok';\n")?;
+    let bin = fake_program(temp.path(), "php")?;
+
+    let mut explicit = cargo_bin_cmd!("dev");
+    explicit
+        .args(["run", "--quiet", "--at"])
+        .arg(&target)
+        .env("PATH", &bin);
+    explicit.assert().success().stdout(format!(
+        "cwd=<{}>\narg0=<legacy_importer.php>\n",
+        target.parent().unwrap_or(&project).display()
+    ));
+
+    let mut hinted = cargo_bin_cmd!("dev");
+    hinted
+        .args(["run", "--quiet", "legacy", "importer", "--at"])
+        .arg(&project)
+        .env("PATH", &bin);
+    hinted.assert().success().stdout(format!(
+        "cwd=<{}>\narg0=<legacy_importer.php>\n",
+        target.parent().unwrap_or(&project).display()
+    ));
     Ok(())
 }

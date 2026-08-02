@@ -149,6 +149,13 @@ fn run_resolution(request: ResolveRequest) -> anyhow::Result<i32> {
         eprintln!("dev: {}", availability_message(&candidate.availability));
         return Ok(6);
     }
+    if remembered_after_project_change {
+        if let Err(error) =
+            dev_launcher::cache::refresh(&request.invocation, &roots, &index, candidate)
+        {
+            eprintln!("dev: warning: could not refresh remembered choice: {error}");
+        }
+    }
     if remember {
         if request.no_cache {
             eprintln!("dev: warning: --no-cache prevents remembering this choice");

@@ -126,12 +126,29 @@ impl FileIndex {
         };
         let excludes = compile_globs(&patterns.excludes).ok();
         let (entries, truncated) = collect_walk(&roots.scan_root, None, hard_cap);
+        let declared_manifests = entries
+            .iter()
+            .filter(|entry| {
+                entry.file_type == IndexedFileType::File
+                    && includes.is_match(&entry.relative_path)
+                    && !excludes
+                        .as_ref()
+                        .is_some_and(|patterns| patterns.is_match(&entry.relative_path))
+            })
+            .map(|entry| entry.relative_path.clone())
+            .collect::<Vec<_>>();
+        let member_directories = declared_manifests
+            .iter()
+            .filter_map(|path| path.parent().map(Path::to_path_buf))
+            .collect::<Vec<_>>();
         self.structural.extend(entries.into_iter().filter(|entry| {
-            entry.file_type == IndexedFileType::File
-                && includes.is_match(&entry.relative_path)
-                && !excludes
-                    .as_ref()
-                    .is_some_and(|patterns| patterns.is_match(&entry.relative_path))
+            declared_manifests.contains(&entry.relative_path)
+                || member_directories.iter().any(|directory| {
+                    entry
+                        .relative_path
+                        .strip_prefix(directory)
+                        .is_ok_and(|relative| relative.components().count() <= 3)
+                })
         }));
         if truncated {
             self.truncated.push(Truncation {
@@ -321,11 +338,69 @@ fn workspace_manifest_patterns(root: &Path) -> WorkspacePatterns {
             }
         }
     }
+    if let Ok(contents) = std::fs::read_to_string(root.join("go.work")) {
+        output.includes.extend(
+            go_work_uses(&contents)
+                .into_iter()
+                .map(|directory| append_manifest(&directory, "go.mod")),
+        );
+    }
     output.includes.sort();
     output.includes.dedup();
     output.excludes.sort();
     output.excludes.dedup();
     output
+}
+
+fn go_work_uses(contents: &str) -> Vec<String> {
+    let mut directories = Vec::new();
+    let mut in_block = false;
+    for source_line in contents.lines() {
+        let line = source_line
+            .split_once("//")
+            .map_or(source_line, |(before, _)| before)
+            .trim();
+        if line.is_empty() {
+            continue;
+        }
+        if in_block {
+            if line == ")" {
+                in_block = false;
+            } else if let Some(directory) = static_go_work_path(line) {
+                directories.push(directory);
+            }
+            continue;
+        }
+        let Some(rest) = line.strip_prefix("use") else {
+            continue;
+        };
+        if !rest.starts_with(char::is_whitespace) {
+            continue;
+        }
+        let rest = rest.trim();
+        if rest == "(" {
+            in_block = true;
+        } else if let Some(directory) = static_go_work_path(rest) {
+            directories.push(directory);
+        }
+    }
+    directories.sort();
+    directories.dedup();
+    directories
+}
+
+fn static_go_work_path(value: &str) -> Option<String> {
+    let value = value
+        .split_whitespace()
+        .next()?
+        .trim_matches(['"', '\u{60}'])
+        .trim_start_matches("./");
+    (!value.is_empty()
+        && !Path::new(value).is_absolute()
+        && !Path::new(value)
+            .components()
+            .any(|component| component == std::path::Component::ParentDir))
+    .then(|| value.to_owned())
 }
 
 fn toml_strings(value: Option<&toml::Value>) -> impl Iterator<Item = &str> {
@@ -409,5 +484,15 @@ mod tests {
             ]
         );
         Ok(())
+    }
+
+    #[test]
+    fn go_work_static_use_directives_are_parsed_without_execution() {
+        assert_eq!(
+            go_work_uses(
+                "go 1.26\nuse ./apps/api\nuse (\n  ./deep/services/worker\n  \"tools/job\"\n)\n"
+            ),
+            ["apps/api", "deep/services/worker", "tools/job"]
+        );
     }
 }

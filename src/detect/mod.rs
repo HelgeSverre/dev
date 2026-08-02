@@ -1,13 +1,21 @@
+mod artisan;
 mod cargo;
+mod composer;
+mod go;
 mod node;
+mod php_file;
 
 use crate::candidate::Candidate;
 use crate::diagnostic::Diagnostic;
 use crate::intent::Invocation;
 use crate::scan::{FileIndex, RootInfo};
 
+pub use artisan::ArtisanDetector;
 pub use cargo::CargoDetector;
+pub use composer::ComposerDetector;
+pub use go::GoDetector;
 pub use node::NodeDetector;
+pub use php_file::PhpFileDetector;
 
 /// Read-only context shared by all detectors.
 #[derive(Debug)]
@@ -37,10 +45,17 @@ pub trait Detector: Send + Sync {
     fn detect(&self, context: &ScanCtx<'_>) -> Detection;
 }
 
-/// Run the static M1 detector registry.
+/// Run the static detector registry.
 #[must_use]
 pub fn detect_all(context: &ScanCtx<'_>) -> Detection {
-    let detectors: [&dyn Detector; 2] = [&NodeDetector, &CargoDetector];
+    let detectors: [&dyn Detector; 6] = [
+        &NodeDetector,
+        &CargoDetector,
+        &ComposerDetector,
+        &ArtisanDetector,
+        &GoDetector,
+        &PhpFileDetector,
+    ];
     let mut output = Detection::default();
     for detector in detectors {
         output.append(detector.detect(context));

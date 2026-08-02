@@ -20,6 +20,7 @@ pub use shape::ShapeSnapshot;
 use serde_os::StoredOsString;
 
 const CACHE_SCHEMA: u32 = 1;
+const DETECTOR_SCHEMA: u32 = 2;
 const MATCHER_SCHEMA: u32 = 1;
 const MAX_ENTRIES: usize = 500;
 const MAX_AGE: Duration = Duration::from_secs(90 * 24 * 60 * 60);
@@ -32,6 +33,8 @@ pub struct CacheEntry {
     pub command_fingerprint: String,
     pub shape: ShapeSnapshot,
     pub cache_schema: u32,
+    #[serde(default)]
+    pub detector_schema: u32,
     pub matcher_schema: u32,
     pub chosen_at_millis: u64,
     pub last_used_at_millis: u64,
@@ -50,6 +53,7 @@ impl CacheEntry {
     #[must_use]
     pub fn is_shape_valid(&self) -> bool {
         self.cache_schema == CACHE_SCHEMA
+            && self.detector_schema == DETECTOR_SCHEMA
             && self.matcher_schema == MATCHER_SCHEMA
             && self.shape.is_current()
     }
@@ -214,6 +218,7 @@ pub fn remember(
         command_fingerprint: candidate.id.as_str().to_owned(),
         shape: ShapeSnapshot::capture(roots, index, candidate, &invocation.target)?,
         cache_schema: CACHE_SCHEMA,
+        detector_schema: DETECTOR_SCHEMA,
         matcher_schema: MATCHER_SCHEMA,
         chosen_at_millis: now,
         last_used_at_millis: now,
@@ -222,6 +227,32 @@ pub fn remember(
     lock::update_store(|store| {
         store.entries.retain(|existing| existing.key != key);
         store.entries.push(entry);
+        prune(store);
+    })
+}
+
+pub fn refresh(
+    invocation: &Invocation,
+    roots: &RootInfo,
+    index: &FileIndex,
+    candidate: &Candidate,
+) -> Result<(), CacheError> {
+    let key = cache_key(invocation, roots);
+    let command = StoredCommand::from_candidate(candidate);
+    let shape = ShapeSnapshot::capture(roots, index, candidate, &invocation.target)?;
+    let now = now_millis();
+    lock::update_store(|store| {
+        if let Some(entry) = store.entries.iter_mut().find(|entry| entry.key == key) {
+            entry.action_key.clone_from(&candidate.action_key);
+            entry.candidate_id.clone_from(&candidate.id);
+            entry.command_fingerprint = candidate.id.as_str().to_owned();
+            entry.shape = shape;
+            entry.cache_schema = CACHE_SCHEMA;
+            entry.detector_schema = DETECTOR_SCHEMA;
+            entry.matcher_schema = MATCHER_SCHEMA;
+            entry.last_used_at_millis = now;
+            entry.command = command;
+        }
         prune(store);
     })
 }
