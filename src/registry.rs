@@ -7,12 +7,14 @@ use std::time::Duration;
 use serde::Serialize;
 
 use crate::detect::{
-    ArtisanDetector, CargoDetector, CargoWorkspaceContributor, ComposerDetector, DartDetector,
-    Detector, DockerDetector, DotnetDetector, DotnetWorkspaceContributor, GoDetector,
+    ArtisanDetector, CargoDetector, CargoWorkspaceContributor, CmakeDetector, ComposerDetector,
+    DartDetector, Detector, DockerDetector, DotnetDetector, DotnetWorkspaceContributor, GoDetector,
     GoWorkspaceContributor, GradleDetector, GradleWorkspaceContributor, JakeDetector, JustDetector,
-    MakeDetector, MavenDetector, MavenWorkspaceContributor, MiseDetector, NodeDetector,
-    NodeTestBinder, NodeWorkspaceContributor, PhpFileDetector, PythonFileDetector, SemaDetector,
-    ShellDetector, SwiftDetector, TargetBinder, TargetRunner, TaskfileDetector, ZigDetector,
+    LiraDetector, MakeDetector, MavenDetector, MavenWorkspaceContributor, MiseDetector,
+    NimDetector, NodeDetector, NodeTestBinder, NodeWorkspaceContributor, OdinDetector,
+    PhpFileDetector, PythonFileDetector, PythonPrjDetector, RescriptDetector, SemaDetector,
+    ShellDetector, SwiftDetector, TargetBinder, TargetRunner, TaskfileDetector, WrenDetector,
+    ZigDetector,
 };
 use crate::scan::DiscoveryFiles;
 
@@ -103,6 +105,13 @@ pub const PYTHON_FILE: DetectorId = DetectorId::new("python-file");
 pub const SHELL: DetectorId = DetectorId::new("shell");
 pub const MAKE: DetectorId = DetectorId::new("make");
 pub const DOCKER: DetectorId = DetectorId::new("docker");
+pub const CMAKE: DetectorId = DetectorId::new("cmake");
+pub const RESCRIPT: DetectorId = DetectorId::new("rescript");
+pub const ODIN: DetectorId = DetectorId::new("odin");
+pub const NIM: DetectorId = DetectorId::new("nim");
+pub const PYTHON_PRJ: DetectorId = DetectorId::new("python-prj");
+pub const WREN: DetectorId = DetectorId::new("wren");
+pub const LIRA: DetectorId = DetectorId::new("lira");
 
 pub const NODE_SOURCE: CandidateSourceId = CandidateSourceId::new("node");
 pub const VITE_SOURCE: CandidateSourceId = CandidateSourceId::new("vite");
@@ -129,6 +138,13 @@ pub const PYTHON_FILE_SOURCE: CandidateSourceId = CandidateSourceId::new("python
 pub const SHELL_SOURCE: CandidateSourceId = CandidateSourceId::new("shell");
 pub const MAKE_SOURCE: CandidateSourceId = CandidateSourceId::new("make");
 pub const DOCKER_SOURCE: CandidateSourceId = CandidateSourceId::new("docker");
+pub const CMAKE_SOURCE: CandidateSourceId = CandidateSourceId::new("cmake");
+pub const RESCRIPT_SOURCE: CandidateSourceId = CandidateSourceId::new("rescript");
+pub const ODIN_SOURCE: CandidateSourceId = CandidateSourceId::new("odin");
+pub const NIM_SOURCE: CandidateSourceId = CandidateSourceId::new("nim");
+pub const PYTHON_PRJ_SOURCE: CandidateSourceId = CandidateSourceId::new("python-prj");
+pub const WREN_SOURCE: CandidateSourceId = CandidateSourceId::new("wren");
+pub const LIRA_SOURCE: CandidateSourceId = CandidateSourceId::new("lira");
 
 pub const NODE_TOOL: ToolId = ToolId::new("node");
 pub const NPM_TOOL: ToolId = ToolId::new("npm");
@@ -156,6 +172,15 @@ pub const PYTHON3_TOOL: ToolId = ToolId::new("python3");
 pub const PYTHON_TOOL: ToolId = ToolId::new("python");
 pub const MAKE_TOOL: ToolId = ToolId::new("make");
 pub const DOCKER_TOOL: ToolId = ToolId::new("docker");
+pub const CMAKE_TOOL: ToolId = ToolId::new("cmake");
+pub const CTEST_TOOL: ToolId = ToolId::new("ctest");
+pub const RESCRIPT_TOOL: ToolId = ToolId::new("rescript");
+pub const ODIN_TOOL: ToolId = ToolId::new("odin");
+pub const NIM_TOOL: ToolId = ToolId::new("nim");
+pub const NIMBLE_TOOL: ToolId = ToolId::new("nimble");
+pub const UV_TOOL: ToolId = ToolId::new("uv");
+pub const WREN_TOOL: ToolId = ToolId::new("wren_cli");
+pub const LIRA_TOOL: ToolId = ToolId::new("lira");
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub struct CandidateSourceRegistration {
@@ -390,6 +415,15 @@ const PYTHON3_PROGRAM: ToolRegistration = command_tool(PYTHON3_TOOL, "python3", 
 const PYTHON_PROGRAM: ToolRegistration = command_tool(PYTHON_TOOL, "python", &["--version"]);
 const MAKE_PROGRAM: ToolRegistration = command_tool(MAKE_TOOL, "make", &["--version"]);
 const DOCKER_PROGRAM: ToolRegistration = command_tool(DOCKER_TOOL, "docker", &["--version"]);
+const CMAKE_PROGRAM: ToolRegistration = command_tool(CMAKE_TOOL, "cmake", &["--version"]);
+const CTEST_PROGRAM: ToolRegistration = command_tool(CTEST_TOOL, "ctest", &["--version"]);
+const RESCRIPT_PROGRAM: ToolRegistration = command_tool(RESCRIPT_TOOL, "rescript", &["--version"]);
+const ODIN_PROGRAM: ToolRegistration = command_tool(ODIN_TOOL, "odin", &["version"]);
+const NIM_PROGRAM: ToolRegistration = command_tool(NIM_TOOL, "nim", &["--version"]);
+const NIMBLE_PROGRAM: ToolRegistration = command_tool(NIMBLE_TOOL, "nimble", &["--version"]);
+const UV_PROGRAM: ToolRegistration = command_tool(UV_TOOL, "uv", &["--version"]);
+const WREN_PROGRAM: ToolRegistration = command_tool(WREN_TOOL, "wren_cli", &["--version"]);
+const LIRA_PROGRAM: ToolRegistration = command_tool(LIRA_TOOL, "lira", &["--version"]);
 
 const ROOTS: &[&str] = &[
     "bin", "cmd", "examples", "scripts", "spec", "test", "tests", "tools",
@@ -1082,6 +1116,153 @@ static REGISTRATIONS: &[DetectorRegistration] = &[
         target_binders: &[],
         target_runners: &[],
     },
+    DetectorRegistration {
+        id: CMAKE,
+        candidate_sources: &[CandidateSourceRegistration {
+            id: CMAKE_SOURCE,
+            metadata_priority: 2,
+            default_tags: &["cmake", "c++", "cpp", "c"],
+        }],
+        synonyms: &["cmake", "c++", "cpp", "c", "ctest"],
+        markers: &[ProjectMarker {
+            pattern: MarkerPattern::Exact("CMakeLists.txt"),
+            root_role: RootRole::Package,
+        }],
+        tools: &[CMAKE_PROGRAM, CTEST_PROGRAM],
+        conventional_roots: ROOTS,
+        cache_environment: &[],
+        candidate_schema: 1,
+        detector: &CmakeDetector,
+        workspace: None,
+        target_binders: &[],
+        target_runners: &[],
+    },
+    DetectorRegistration {
+        id: RESCRIPT,
+        candidate_sources: &[CandidateSourceRegistration {
+            id: RESCRIPT_SOURCE,
+            metadata_priority: 2,
+            default_tags: &["rescript", "re", "ml", "ocaml"],
+        }],
+        synonyms: &["rescript", "re", "bs", "bucklescript", "ocaml"],
+        markers: &[ProjectMarker {
+            pattern: MarkerPattern::Exact("rescript.json"),
+            root_role: RootRole::Package,
+        }],
+        tools: &[RESCRIPT_PROGRAM],
+        conventional_roots: ROOTS,
+        cache_environment: &[],
+        candidate_schema: 1,
+        detector: &RescriptDetector,
+        workspace: None,
+        target_binders: &[],
+        target_runners: &[],
+    },
+    DetectorRegistration {
+        id: ODIN,
+        candidate_sources: &[CandidateSourceRegistration {
+            id: ODIN_SOURCE,
+            metadata_priority: 1,
+            default_tags: &["odin"],
+        }],
+        synonyms: &["odin"],
+        markers: &[ProjectMarker {
+            pattern: MarkerPattern::Extension("odin"),
+            root_role: RootRole::Package,
+        }],
+        tools: &[ODIN_PROGRAM],
+        conventional_roots: ROOTS,
+        cache_environment: &[],
+        candidate_schema: 1,
+        detector: &OdinDetector,
+        workspace: None,
+        target_binders: &[],
+        target_runners: &[&OdinDetector],
+    },
+    DetectorRegistration {
+        id: NIM,
+        candidate_sources: &[CandidateSourceRegistration {
+            id: NIM_SOURCE,
+            metadata_priority: 2,
+            default_tags: &["nim", "nimble"],
+        }],
+        synonyms: &["nim", "nimble"],
+        markers: &[ProjectMarker {
+            pattern: MarkerPattern::Extension("nimble"),
+            root_role: RootRole::Package,
+        }],
+        tools: &[NIM_PROGRAM, NIMBLE_PROGRAM],
+        conventional_roots: ROOTS,
+        cache_environment: &[],
+        candidate_schema: 1,
+        detector: &NimDetector,
+        workspace: None,
+        target_binders: &[],
+        target_runners: &[&NimDetector],
+    },
+    DetectorRegistration {
+        id: PYTHON_PRJ,
+        candidate_sources: &[CandidateSourceRegistration {
+            id: PYTHON_PRJ_SOURCE,
+            metadata_priority: 2,
+            default_tags: &["python", "py", "uv"],
+        }],
+        synonyms: &["python", "py", "uv", "pytest", "pyproject"],
+        markers: &[ProjectMarker {
+            pattern: MarkerPattern::Exact("pyproject.toml"),
+            root_role: RootRole::Package,
+        }],
+        tools: &[UV_PROGRAM, PYTHON3_PROGRAM, PYTHON_PROGRAM],
+        conventional_roots: ROOTS,
+        cache_environment: &["VIRTUAL_ENV", "UV_INSTALL_DIR", "PYTHONPATH"],
+        candidate_schema: 1,
+        detector: &PythonPrjDetector,
+        workspace: None,
+        target_binders: &[],
+        target_runners: &[],
+    },
+    DetectorRegistration {
+        id: WREN,
+        candidate_sources: &[CandidateSourceRegistration {
+            id: WREN_SOURCE,
+            metadata_priority: 1,
+            default_tags: &["wren"],
+        }],
+        synonyms: &["wren"],
+        markers: &[ProjectMarker {
+            pattern: MarkerPattern::Extension("wren"),
+            root_role: RootRole::Package,
+        }],
+        tools: &[WREN_PROGRAM],
+        conventional_roots: ROOTS,
+        cache_environment: &[],
+        candidate_schema: 1,
+        detector: &WrenDetector,
+        workspace: None,
+        target_binders: &[],
+        target_runners: &[&WrenDetector],
+    },
+    DetectorRegistration {
+        id: LIRA,
+        candidate_sources: &[CandidateSourceRegistration {
+            id: LIRA_SOURCE,
+            metadata_priority: 1,
+            default_tags: &["lira", "li"],
+        }],
+        synonyms: &["lira", "li"],
+        markers: &[ProjectMarker {
+            pattern: MarkerPattern::Extension("li"),
+            root_role: RootRole::Package,
+        }],
+        tools: &[LIRA_PROGRAM],
+        conventional_roots: ROOTS,
+        cache_environment: &[],
+        candidate_schema: 1,
+        detector: &LiraDetector,
+        workspace: None,
+        target_binders: &[],
+        target_runners: &[&LiraDetector],
+    },
 ];
 
 #[must_use]
@@ -1391,7 +1572,7 @@ mod tests {
     #[test]
     fn registry_is_internally_consistent() -> anyhow::Result<()> {
         validate()?;
-        assert_eq!(tools().len(), 26);
+        assert_eq!(tools().len(), 35);
         assert_eq!(
             registrations()
                 .iter()
@@ -1414,6 +1595,8 @@ mod tests {
                 "MAVEN_WRAPPER_ALWAYS_DOWNLOAD",
                 "MAVEN_WRAPPER_ALWAYS_UNPACK",
                 "MISE_ENV",
+                "PYTHONPATH",
+                "UV_INSTALL_DIR",
                 "VIRTUAL_ENV",
                 "_JAVA_OPTIONS"
             ]
