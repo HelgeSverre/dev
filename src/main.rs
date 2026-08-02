@@ -194,7 +194,7 @@ fn run_resolution(request: ResolveRequest) -> anyhow::Result<i32> {
             eprintln!("dev: warning: could not refresh remembered choice: {error}");
         }
     }
-    if remember {
+    if remember && !print_only {
         if request.no_cache {
             eprintln!("dev: warning: --no-cache prevents remembering this choice");
         } else if let Err(error) =

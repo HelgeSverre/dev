@@ -6,7 +6,9 @@ use crate::candidate::{
     Candidate, CandidateOrigin, CommandLayer, Evidence, EvidenceKind, SelectionPolicy,
 };
 use crate::query::rank::compare_hinted;
-use crate::query::{match_candidate, normalize_query, MatchClass, MatchStrategy, QueryMatch};
+use crate::query::{
+    match_candidate, normalize_query, MatchClass, MatchStrategy, QueryMatch, SearchField,
+};
 use crate::score::{AUTO_FLOOR, CLEAR_WINNER_MARGIN};
 
 const IDENTITY_QUALITY_MARGIN: u16 = 40;
@@ -298,6 +300,7 @@ fn resolve_hinted(
 fn has_exact_scope_match(query: &QueryMatch) -> bool {
     query.terms.iter().any(|term| {
         term.class == MatchClass::Scope
+            && term.field == SearchField::Scope
             && matches!(
                 term.strategy,
                 MatchStrategy::ExactSegment | MatchStrategy::ExactCompact
@@ -483,6 +486,37 @@ mod tests {
             result.candidates[0].query.highest_class,
             Some(MatchClass::Scope)
         );
+    }
+
+    #[test]
+    fn automatic_candidate_does_not_run_from_working_directory_only() {
+        let candidate = available("dev", 95, SelectionPolicy::Automatic);
+        let result = resolve(vec![candidate], &["tmp".to_owned()], 1, false);
+        assert_eq!(result.status, ResolutionStatus::Ambiguous);
+        assert_eq!(
+            result.candidates[0].query.terms[0].field,
+            SearchField::WorkingDirectory
+        );
+    }
+
+    #[test]
+    fn automatic_candidate_does_not_run_from_detector_name_only() {
+        let candidate = available("dev", 95, SelectionPolicy::Automatic);
+        let result = resolve(vec![candidate], &["node".to_owned()], 1, false);
+        assert_eq!(result.status, ResolutionStatus::Ambiguous);
+        assert_eq!(
+            result.candidates[0].query.terms[0].field,
+            SearchField::Detector
+        );
+    }
+
+    #[test]
+    fn declared_exact_scope_can_select_a_clear_automatic_candidate() {
+        let mut candidate = available("dev", 95, SelectionPolicy::Automatic);
+        candidate.search.scopes.push("web".to_owned());
+        let result = resolve(vec![candidate], &["web".to_owned()], 1, false);
+        assert_eq!(result.status, ResolutionStatus::Resolved);
+        assert_eq!(result.reason, ResolutionReason::ScopedStructuralWinner);
     }
 
     #[test]

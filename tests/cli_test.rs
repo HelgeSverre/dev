@@ -79,6 +79,89 @@ fn remember_with_picker(
 }
 
 #[test]
+fn dry_run_ctrl_r_prints_without_remembering() -> anyhow::Result<()> {
+    use std::process::Command;
+    use std::time::Duration;
+
+    use expectrl::{Eof, Expect, Session};
+
+    let temp = tempfile::tempdir()?;
+    let project = temp.path().join("dry-run-picker");
+    let state = temp.path().join("state");
+    fs::create_dir(&project)?;
+    fs::write(
+        project.join("package.json"),
+        r#"{"scripts":{"dev":"first","start":"second"}}"#,
+    )?;
+    let bin = fake_program(temp.path(), "npm")?;
+    let mut command = Command::new(env!("CARGO_BIN_EXE_dev"));
+    command
+        .args(["run", "--quiet", "--pick", "--dry-run", "--at"])
+        .arg(&project)
+        .env("PATH", &bin)
+        .env("XDG_STATE_HOME", &state)
+        .env("TERM", "xterm-256color");
+    let mut session = Session::spawn(command).context("spawning dry-run picker in a PTY")?;
+    session.set_expect_timeout(Some(Duration::from_secs(5)));
+    session
+        .expect("\u{1b}[?1049h")
+        .map_err(anyhow::Error::from)
+        .context("waiting for picker alternate screen")?;
+    session
+        .send("\u{12}")
+        .map_err(anyhow::Error::from)
+        .context("sending Ctrl-R")?;
+    session
+        .expect(Eof)
+        .map_err(anyhow::Error::from)
+        .context("waiting for dry-run output")?;
+
+    let mut list = cargo_bin_cmd!("dev");
+    list.args(["cache", "list"]).env("XDG_STATE_HOME", &state);
+    list.assert().success().stdout("");
+    Ok(())
+}
+
+#[test]
+fn declared_command_with_missing_runtime_remains_visible_and_refuses() -> anyhow::Result<()> {
+    let temp = tempfile::tempdir()?;
+    let project = temp.path().join("missing-runtime");
+    let empty_path = temp.path().join("empty-bin");
+    fs::create_dir(&project)?;
+    fs::create_dir(&empty_path)?;
+    fs::write(
+        project.join("package.json"),
+        r#"{"scripts":{"dev":"vite"}}"#,
+    )?;
+
+    let mut command = cargo_bin_cmd!("dev");
+    let output = command
+        .args(["run", "--json", "--at"])
+        .arg(&project)
+        .env("PATH", &empty_path)
+        .output()?;
+    assert_eq!(output.status.code(), Some(5));
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout)?;
+    let dev = json["candidates"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .find(|candidate| {
+            candidate["action_key"]
+                .as_str()
+                .is_some_and(|key| key.ends_with(":script:dev"))
+        })
+        .ok_or_else(|| anyhow::anyhow!("missing declared dev candidate"))?;
+    assert_eq!(dev["availability"]["status"], "missing_program");
+    assert_eq!(dev["availability"]["program"]["display"], "npm");
+    assert_eq!(
+        json["resolution"]["selected_candidate_id"],
+        serde_json::Value::Null
+    );
+    Ok(())
+}
+
+#[test]
 fn completions_can_detect_and_install_the_current_shell() -> anyhow::Result<()> {
     let temporary = tempfile::tempdir()?;
     let config = temporary.path().join("config");
