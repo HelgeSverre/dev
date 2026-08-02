@@ -1076,13 +1076,15 @@ literal relative paths that remain inside the package.
 
 - Run: `sema <entrypoint>`.
 - Build: `sema build <entrypoint>`.
-- Test: `sema test` from a declared package root.
-- Hinted standalone sources use `sema <file>`, `sema build <file>`, or `sema
-  test <file>` according to intent.
+- Test: execute conventional `tests.sema` and `*.test.sema` suites as `sema
+  <file>`.
+- Hinted standalone sources use `sema <file>` or `sema build <file>` according
+  to intent. A standalone source is a Test candidate only when its filename is
+  a conventional test name, and it still executes as `sema <file>`.
 
-The ordinary Test candidate MUST NOT add `--doctests` or infer any other Sema
-test mode. `sema --version` is the registered doctor probe. Package-manager
-commands are never inserted before execution.
+There is no inferred `sema test` or doctest mode. `sema --version` is the
+registered doctor probe. Package-manager commands are never inserted before
+execution.
 
 ### 10.13 Just
 
@@ -1122,6 +1124,10 @@ Run names are `run`, `dev`, `start`, `serve`, and `watch`; Build names are
 `verify`. Canonical recipes are `Automatic`. Other public recipes are Run
 `ExplicitHint` actions. A zero-arity default recipe may also be an Automatic Run
 candidate when its name is not canonically Build or Test.
+
+Compound names containing an intent segment, such as `build-release`,
+`test:integration`, or `check_fast`, are `ExplicitHint` candidates for that
+intent. They do not become unhinted defaults.
 
 Just recipes use `CommandLayer::ProjectFacade`. A canonical recipe therefore
 dominates lower-level same-scope defaults under section 9.7 while leaving those

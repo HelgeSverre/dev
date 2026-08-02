@@ -14,6 +14,12 @@ pub(super) fn policy<'a>(
     {
         return Some((SelectionPolicy::Automatic, points));
     }
+    if names
+        .iter()
+        .any(|name| compound_name_matches_intent(intent, name))
+    {
+        return Some((SelectionPolicy::ExplicitHint, 15));
+    }
     match intent {
         Intent::Run => {
             let canonical_other = names.iter().any(|name| {
@@ -27,6 +33,17 @@ pub(super) fn policy<'a>(
             }
         }
         Intent::Build | Intent::Test => None,
+    }
+}
+
+fn compound_name_matches_intent(intent: Intent, name: &str) -> bool {
+    let mut segments = name
+        .split(['.', ':', '-', '_'])
+        .filter(|segment| !segment.is_empty());
+    match intent {
+        Intent::Run => false,
+        Intent::Build => segments.any(|segment| matches!(segment, "build" | "compile" | "bundle")),
+        Intent::Test => segments.any(|segment| matches!(segment, "test" | "check" | "verify")),
     }
 }
 
@@ -83,5 +100,14 @@ mod tests {
             policy(Intent::Run, ["build"], true),
             Some((SelectionPolicy::ExplicitHint, 15))
         );
+        assert_eq!(
+            policy(Intent::Build, ["build-all"], false),
+            Some((SelectionPolicy::ExplicitHint, 15))
+        );
+        assert_eq!(
+            policy(Intent::Test, ["test:integration"], false),
+            Some((SelectionPolicy::ExplicitHint, 15))
+        );
+        assert_eq!(policy(Intent::Build, ["test-all"], false), None);
     }
 }

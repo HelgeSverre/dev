@@ -1382,7 +1382,7 @@ fn jake_imported_task_executes_with_root_file_and_namespace() -> anyhow::Result<
     fs::create_dir_all(project.join("tasks"))?;
     fs::write(
         project.join("Jakefile"),
-        "@import \"tasks/checks.jake\" as checks\n\ntask deploy environment:\n    echo deploy\n",
+        "@import \"tasks/checks.jake\" as checks\n\ntask deploy environment:\n    echo deploy\n\ntask build-all:\n    echo build\n",
     )?;
     fs::write(
         project.join("tasks/checks.jake"),
@@ -1398,6 +1398,17 @@ fn jake_imported_task_executes_with_root_file_and_namespace() -> anyhow::Result<
         .env("PATH", &bin);
     command.assert().success().stdout(format!(
         "cwd=<{}>\narg0=<-f>\narg1=<{}>\narg2=<checks.test>\narg3=<-->\narg4=<--filter>\narg5=<database>\n",
+        project.display(),
+        project.join("Jakefile").display()
+    ));
+
+    let mut compound = cargo_bin_cmd!("dev");
+    compound
+        .args(["build", "build-all", "--quiet", "--at"])
+        .arg(&project)
+        .env("PATH", &bin);
+    compound.assert().success().stdout(format!(
+        "cwd=<{}>\narg0=<-f>\narg1=<{}>\narg2=<build-all>\n",
         project.display(),
         project.join("Jakefile").display()
     ));
