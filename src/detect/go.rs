@@ -5,12 +5,86 @@ use std::path::{Path, PathBuf};
 use crate::candidate::{Candidate, Evidence, EvidenceKind, SearchDocument, SelectionPolicy};
 use crate::diagnostic::Diagnostic;
 use crate::intent::Intent;
-use crate::registry::{GO, GO_SOURCE};
+use crate::registry::{WorkspaceContribution, WorkspaceContributor, GO, GO_SOURCE};
 use crate::scan::IndexedFileType;
 
 use super::{Detection, Detector, ScanCtx};
 
 pub struct GoDetector;
+pub struct GoWorkspaceContributor;
+
+impl WorkspaceContributor for GoWorkspaceContributor {
+    fn is_workspace(&self, root: &Path) -> bool {
+        root.join("go.work").is_file()
+    }
+
+    fn scan_contribution(&self, root: &Path) -> WorkspaceContribution {
+        let mut includes = std::fs::read_to_string(root.join("go.work"))
+            .ok()
+            .map(|contents| go_work_uses(&contents))
+            .unwrap_or_default()
+            .into_iter()
+            .map(|directory| format!("{directory}/go.mod"))
+            .collect::<Vec<_>>();
+        includes.sort();
+        includes.dedup();
+        WorkspaceContribution {
+            includes,
+            excludes: Vec::new(),
+        }
+    }
+}
+
+fn go_work_uses(contents: &str) -> Vec<String> {
+    let mut directories = Vec::new();
+    let mut in_block = false;
+    for source_line in contents.lines() {
+        let line = source_line
+            .split_once("//")
+            .map_or(source_line, |(before, _)| before)
+            .trim();
+        if line.is_empty() {
+            continue;
+        }
+        if in_block {
+            if line == ")" {
+                in_block = false;
+            } else if let Some(directory) = static_go_work_path(line) {
+                directories.push(directory);
+            }
+            continue;
+        }
+        let Some(rest) = line.strip_prefix("use") else {
+            continue;
+        };
+        if !rest.starts_with(char::is_whitespace) {
+            continue;
+        }
+        let rest = rest.trim();
+        if rest == "(" {
+            in_block = true;
+        } else if let Some(directory) = static_go_work_path(rest) {
+            directories.push(directory);
+        }
+    }
+    directories.sort();
+    directories.dedup();
+    directories
+}
+
+fn static_go_work_path(value: &str) -> Option<String> {
+    let value = value
+        .split_whitespace()
+        .next()?
+        .trim_matches(['"', '\u{60}'])
+        .trim_start_matches("./");
+    (!value.is_empty()
+        && !Path::new(value).is_absolute()
+        && !Path::new(value)
+            .components()
+            .any(|component| component == std::path::Component::ParentDir))
+    .then(|| value.to_owned())
+}
 
 #[derive(Clone, Debug)]
 struct GoModule {

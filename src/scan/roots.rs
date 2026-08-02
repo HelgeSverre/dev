@@ -1,27 +1,7 @@
 use std::path::{Path, PathBuf};
 
-use serde_json::Value as JsonValue;
-use toml::Value as TomlValue;
-
 use crate::intent::Target;
-
-const PACKAGE_MARKERS: &[&str] = &[
-    "package.json",
-    "Cargo.toml",
-    "composer.json",
-    "go.mod",
-    "build.zig",
-    "Package.swift",
-    "pubspec.yaml",
-    "GNUmakefile",
-    "makefile",
-    "Makefile",
-    "compose.yaml",
-    "compose.yml",
-    "docker-compose.yaml",
-    "docker-compose.yml",
-    "Dockerfile",
-];
+use crate::registry::{MarkerPattern, RootRole};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RootInfo {
@@ -42,7 +22,11 @@ pub fn resolve_roots(target: &Target) -> RootInfo {
 
     let package_root = ancestors
         .iter()
-        .find(|directory| has_any_marker(directory, PACKAGE_MARKERS))
+        .find(|directory| {
+            has_registered_marker(directory, |role| {
+                matches!(role, RootRole::Package | RootRole::Classified)
+            })
+        })
         .cloned();
     let workspace_root = ancestors
         .iter()
@@ -70,8 +54,12 @@ pub fn resolve_roots(target: &Target) -> RootInfo {
 
 fn bounded_ancestors(anchor: &Path) -> Vec<PathBuf> {
     let home = directories::BaseDirs::new().map(|directories| directories.home_dir().to_path_buf());
+    let temporary_root = std::env::temp_dir();
     let mut ancestors = Vec::new();
     for directory in anchor.ancestors() {
+        if directory == temporary_root && directory != anchor {
+            break;
+        }
         ancestors.push(directory.to_path_buf());
         if directory.join(".git").exists()
             || home.as_deref() == Some(directory)
@@ -83,28 +71,33 @@ fn bounded_ancestors(anchor: &Path) -> Vec<PathBuf> {
     ancestors
 }
 
-fn has_any_marker(directory: &Path, markers: &[&str]) -> bool {
-    markers
+fn has_registered_marker(directory: &Path, role: impl Fn(RootRole) -> bool) -> bool {
+    let entries = std::fs::read_dir(directory)
+        .ok()
+        .into_iter()
+        .flatten()
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .collect::<Vec<_>>();
+    crate::registry::markers()
         .iter()
-        .any(|marker| directory.join(marker).is_file())
+        .filter(|marker| role(marker.root_role))
+        .any(|marker| match marker.pattern {
+            MarkerPattern::Exact(name) => directory.join(name).is_file(),
+            MarkerPattern::AsciiCaseInsensitiveBasename(_) | MarkerPattern::Extension(_) => {
+                entries.iter().any(|path| marker.pattern.matches(path))
+            }
+        })
 }
 
 fn is_workspace(directory: &Path) -> bool {
-    if directory.join("pnpm-workspace.yaml").is_file() || directory.join("go.work").is_file() {
+    if has_registered_marker(directory, |role| role == RootRole::Workspace) {
         return true;
     }
-    if let Ok(contents) = std::fs::read_to_string(directory.join("package.json")) {
-        if serde_json::from_str::<JsonValue>(&contents)
-            .ok()
-            .is_some_and(|manifest| manifest.get("workspaces").is_some())
-        {
-            return true;
-        }
-    }
-    std::fs::read_to_string(directory.join("Cargo.toml"))
-        .ok()
-        .and_then(|contents| toml::from_str::<TomlValue>(&contents).ok())
-        .is_some_and(|manifest| manifest.get("workspace").is_some())
+    crate::registry::registrations()
+        .iter()
+        .filter_map(|registration| registration.workspace)
+        .any(|workspace| workspace.is_workspace(directory))
 }
 
 #[cfg(test)]
@@ -125,6 +118,27 @@ mod tests {
         assert_eq!(roots.package_root, Some(temp.path().join("apps/web")));
         assert_eq!(roots.workspace_root.as_deref(), Some(temp.path()));
         assert_eq!(roots.scan_root, temp.path());
+        Ok(())
+    }
+
+    #[test]
+    fn registered_task_and_extension_markers_drive_roots() -> anyhow::Result<()> {
+        let task = tempfile::tempdir()?;
+        std::fs::create_dir_all(task.path().join("nested"))?;
+        std::fs::write(task.path().join("Taskfile.yml"), "tasks: {}\n")?;
+        let task_roots = resolve_roots(&Target::Directory(task.path().join("nested")));
+        assert_eq!(task_roots.package_root.as_deref(), Some(task.path()));
+
+        let dotnet = tempfile::tempdir()?;
+        std::fs::create_dir_all(dotnet.path().join("src/App"))?;
+        std::fs::write(dotnet.path().join("App.sln"), "")?;
+        std::fs::write(dotnet.path().join("src/App/App.csproj"), "<Project />")?;
+        let dotnet_roots = resolve_roots(&Target::Directory(dotnet.path().join("src/App")));
+        assert_eq!(
+            dotnet_roots.package_root.as_deref(),
+            Some(dotnet.path().join("src/App").as_path())
+        );
+        assert_eq!(dotnet_roots.workspace_root.as_deref(), Some(dotnet.path()));
         Ok(())
     }
 }

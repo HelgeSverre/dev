@@ -823,9 +823,9 @@ The initial registry is static. Registration order MUST NOT influence output.
 | `docker` | `docker` | Compose files, `Dockerfile` | run, build |
 | `shell` | `shell` | shebangs, executable files | run |
 
-Full Python project support, JVM tools, .NET, CMake, Bazel, Nix, and plugin
-detectors are deferred. If broad public adoption is a v1 goal, Python project
-support SHOULD move ahead of Swift, Zig, and Flutter.
+Full Python project support, CMake, Bazel, Nix, and plugin detectors are
+deferred. Gradle, Maven, and .NET follow the static expansion contract in
+section 10.19.
 
 ### 10.2 Shared detector rules
 
@@ -2176,6 +2176,11 @@ Create at least 50 tiny, real-shaped repositories covering:
 - Taskfile spelling precedence, internal/required-var tasks, and includes;
 - mise TOML task forms, aliases, hidden tasks, config layering, and includes;
 - Sema package entrypoints, ordinary tests, and standalone source files;
+- Gradle Groovy/Kotlin markers, literal settings/task declarations, and cached
+  versus uncached wrappers;
+- Maven modules, packaging, known declared plugins, and cached versus uncached
+  wrappers;
+- `.sln`, `.slnx`, `.slnf`, and .NET project build/test/run selection;
 - Make comments, wrapper targets, and syntax the scanner intentionally ignores;
 - all four Compose filenames and Compose beside a native Vite app;
 - shell shebang variants, missing executable bit, and extensionless executables;

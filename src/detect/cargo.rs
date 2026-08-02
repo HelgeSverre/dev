@@ -9,12 +9,67 @@ use crate::candidate::{
 };
 use crate::diagnostic::Diagnostic;
 use crate::intent::Intent;
-use crate::registry::{CARGO, CARGO_SOURCE};
+use crate::registry::{WorkspaceContribution, WorkspaceContributor, CARGO, CARGO_SOURCE};
 use crate::scan::IndexedFileType;
 
 use super::{Detection, Detector, ScanCtx};
 
 pub struct CargoDetector;
+pub struct CargoWorkspaceContributor;
+
+impl WorkspaceContributor for CargoWorkspaceContributor {
+    fn is_workspace(&self, root: &Path) -> bool {
+        std::fs::read_to_string(root.join("Cargo.toml"))
+            .ok()
+            .and_then(|contents| toml::from_str::<toml::Value>(&contents).ok())
+            .is_some_and(|manifest| manifest.get("workspace").is_some())
+    }
+
+    fn scan_contribution(&self, root: &Path) -> WorkspaceContribution {
+        let Some(workspace) = std::fs::read_to_string(root.join("Cargo.toml"))
+            .ok()
+            .and_then(|contents| toml::from_str::<toml::Value>(&contents).ok())
+            .and_then(|manifest| manifest.get("workspace").cloned())
+        else {
+            return WorkspaceContribution::default();
+        };
+        let mut contribution = WorkspaceContribution {
+            includes: workspace
+                .get("members")
+                .and_then(toml::Value::as_array)
+                .into_iter()
+                .flatten()
+                .filter_map(toml::Value::as_str)
+                .chain(
+                    workspace
+                        .get("default-members")
+                        .and_then(toml::Value::as_array)
+                        .into_iter()
+                        .flatten()
+                        .filter_map(toml::Value::as_str),
+                )
+                .map(|pattern| append_manifest(pattern, "Cargo.toml"))
+                .collect(),
+            excludes: workspace
+                .get("exclude")
+                .and_then(toml::Value::as_array)
+                .into_iter()
+                .flatten()
+                .filter_map(toml::Value::as_str)
+                .map(|pattern| append_manifest(pattern, "Cargo.toml"))
+                .collect(),
+        };
+        contribution.includes.sort();
+        contribution.includes.dedup();
+        contribution.excludes.sort();
+        contribution.excludes.dedup();
+        contribution
+    }
+}
+
+fn append_manifest(pattern: &str, manifest: &str) -> String {
+    format!("{}/{manifest}", pattern.trim_end_matches(['/', '\\']))
+}
 
 #[derive(Clone, Debug, Deserialize)]
 struct CargoManifest {

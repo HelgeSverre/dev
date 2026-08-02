@@ -7,38 +7,8 @@ use serde::{Deserialize, Serialize};
 use crate::cache::CacheError;
 use crate::candidate::{Availability, Candidate};
 use crate::intent::Target;
+use crate::registry::MarkerPattern;
 use crate::scan::{FileIndex, RootInfo};
-
-const WATCHED_PROJECT_NAMES: &[&str] = &[
-    ".git",
-    "package.json",
-    "pnpm-workspace.yaml",
-    "pnpm-lock.yaml",
-    "yarn.lock",
-    "package-lock.json",
-    "bun.lock",
-    "bun.lockb",
-    "Cargo.toml",
-    "Cargo.lock",
-    "composer.json",
-    "composer.lock",
-    "go.mod",
-    "go.sum",
-    "go.work",
-    "build.zig",
-    "Package.swift",
-    "Package.resolved",
-    "pubspec.yaml",
-    "pubspec.lock",
-    "Makefile",
-    "makefile",
-    "GNUmakefile",
-    "compose.yaml",
-    "compose.yml",
-    "docker-compose.yaml",
-    "docker-compose.yml",
-    "Dockerfile",
-];
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct ShapeSnapshot {
@@ -116,7 +86,8 @@ impl ShapeSnapshot {
             Some(candidate.cwd.clone()),
         ];
         for root in marker_roots.into_iter().flatten() {
-            watched.extend(WATCHED_PROJECT_NAMES.iter().map(|name| root.join(name)));
+            watched.insert(root.join(".git"));
+            watched.extend(registered_marker_paths(&root));
         }
         if let Availability::Available { resolved_program } = &candidate.availability {
             if resolved_program.starts_with(&roots.scan_root) {
@@ -145,6 +116,30 @@ impl ShapeSnapshot {
                 .iter()
                 .all(|metadata| PathMetadata::capture(metadata.path.clone()) == *metadata)
     }
+}
+
+fn registered_marker_paths(root: &Path) -> Vec<PathBuf> {
+    let entries = std::fs::read_dir(root)
+        .ok()
+        .into_iter()
+        .flatten()
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .collect::<Vec<_>>();
+    let mut paths = crate::registry::markers()
+        .iter()
+        .flat_map(|marker| match marker.pattern {
+            MarkerPattern::Exact(name) => vec![root.join(name)],
+            MarkerPattern::AsciiCaseInsensitiveBasename(_) | MarkerPattern::Extension(_) => entries
+                .iter()
+                .filter(|path| marker.pattern.matches(path))
+                .cloned()
+                .collect(),
+        })
+        .collect::<Vec<_>>();
+    paths.sort();
+    paths.dedup();
+    paths
 }
 
 impl PathMetadata {
@@ -229,6 +224,21 @@ mod tests {
         assert!(snapshot.is_current());
 
         std::fs::write(temp.path().join("package.json"), "{}")?;
+        assert!(!snapshot.is_current());
+        Ok(())
+    }
+
+    #[test]
+    fn adding_registered_extension_marker_invalidates_snapshot() -> anyhow::Result<()> {
+        let temp = tempfile::tempdir()?;
+        std::fs::create_dir(temp.path().join(".git"))?;
+        let target = Target::Directory(temp.path().to_path_buf());
+        let roots = resolve_roots(&target);
+        let index = FileIndex::build(&roots, ScanOptions::default());
+        let snapshot = ShapeSnapshot::capture(&roots, &index, &candidate(temp.path()), &target)?;
+        assert!(snapshot.is_current());
+
+        std::fs::write(temp.path().join("App.csproj"), "<Project />")?;
         assert!(!snapshot.is_current());
         Ok(())
     }

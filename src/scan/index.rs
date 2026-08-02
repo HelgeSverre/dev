@@ -310,167 +310,19 @@ struct WorkspacePatterns {
 
 fn workspace_manifest_patterns(root: &Path) -> WorkspacePatterns {
     let mut output = WorkspacePatterns::default();
-    if let Ok(contents) = std::fs::read_to_string(root.join("Cargo.toml")) {
-        if let Ok(manifest) = toml::from_str::<toml::Value>(&contents) {
-            if let Some(workspace) = manifest.get("workspace") {
-                output.includes.extend(
-                    toml_strings(workspace.get("members"))
-                        .map(|pattern| append_manifest(pattern, "Cargo.toml")),
-                );
-                output.includes.extend(
-                    toml_strings(workspace.get("default-members"))
-                        .map(|pattern| append_manifest(pattern, "Cargo.toml")),
-                );
-                output.excludes.extend(
-                    toml_strings(workspace.get("exclude"))
-                        .map(|pattern| append_manifest(pattern, "Cargo.toml")),
-                );
-            }
-        }
-    }
-    let node = node_workspace_manifest_patterns(root);
-    output.includes.extend(node.includes);
-    output.excludes.extend(node.excludes);
-    if let Ok(contents) = std::fs::read_to_string(root.join("go.work")) {
-        output.includes.extend(
-            go_work_uses(&contents)
-                .into_iter()
-                .map(|directory| append_manifest(&directory, "go.mod")),
-        );
+    for workspace in crate::registry::registrations()
+        .iter()
+        .filter_map(|registration| registration.workspace)
+    {
+        let contribution = workspace.scan_contribution(root);
+        output.includes.extend(contribution.includes);
+        output.excludes.extend(contribution.excludes);
     }
     output.includes.sort();
     output.includes.dedup();
     output.excludes.sort();
     output.excludes.dedup();
     output
-}
-
-fn node_workspace_manifest_patterns(root: &Path) -> WorkspacePatterns {
-    let mut output = WorkspacePatterns::default();
-    if let Ok(contents) = std::fs::read_to_string(root.join("package.json")) {
-        if let Ok(manifest) = serde_json::from_str::<serde_json::Value>(&contents) {
-            let workspaces = manifest.get("workspaces");
-            let values = workspaces
-                .and_then(serde_json::Value::as_array)
-                .or_else(|| workspaces?.get("packages")?.as_array());
-            if let Some(values) = values {
-                output.includes.extend(values.iter().filter_map(|value| {
-                    value
-                        .as_str()
-                        .map(|pattern| append_manifest(pattern, "package.json"))
-                }));
-            }
-        }
-    }
-    if let Ok(contents) = std::fs::read_to_string(root.join("pnpm-workspace.yaml")) {
-        if let Ok(manifest) = serde_yaml::from_str::<serde_yaml::Value>(&contents) {
-            if let Some(packages) = manifest
-                .get("packages")
-                .and_then(serde_yaml::Value::as_sequence)
-            {
-                for pattern in packages.iter().filter_map(serde_yaml::Value::as_str) {
-                    if let Some(excluded) = pattern.strip_prefix('!') {
-                        output
-                            .excludes
-                            .push(append_manifest(excluded, "package.json"));
-                    } else {
-                        output
-                            .includes
-                            .push(append_manifest(pattern, "package.json"));
-                    }
-                }
-            }
-        }
-    }
-    output.includes.sort();
-    output.includes.dedup();
-    output.excludes.sort();
-    output.excludes.dedup();
-    output
-}
-
-#[must_use]
-pub(crate) fn has_declared_node_workspace(root: &Path) -> bool {
-    !node_workspace_manifest_patterns(root).includes.is_empty()
-}
-
-#[must_use]
-pub(crate) fn is_declared_node_workspace_manifest(root: &Path, relative_manifest: &Path) -> bool {
-    matches_workspace_patterns(node_workspace_manifest_patterns(root), relative_manifest)
-}
-
-fn matches_workspace_patterns(patterns: WorkspacePatterns, relative_manifest: &Path) -> bool {
-    let Ok(includes) = compile_globs(&patterns.includes) else {
-        return false;
-    };
-    let excludes = compile_globs(&patterns.excludes).ok();
-    includes.is_match(relative_manifest)
-        && !excludes
-            .as_ref()
-            .is_some_and(|patterns| patterns.is_match(relative_manifest))
-}
-
-fn go_work_uses(contents: &str) -> Vec<String> {
-    let mut directories = Vec::new();
-    let mut in_block = false;
-    for source_line in contents.lines() {
-        let line = source_line
-            .split_once("//")
-            .map_or(source_line, |(before, _)| before)
-            .trim();
-        if line.is_empty() {
-            continue;
-        }
-        if in_block {
-            if line == ")" {
-                in_block = false;
-            } else if let Some(directory) = static_go_work_path(line) {
-                directories.push(directory);
-            }
-            continue;
-        }
-        let Some(rest) = line.strip_prefix("use") else {
-            continue;
-        };
-        if !rest.starts_with(char::is_whitespace) {
-            continue;
-        }
-        let rest = rest.trim();
-        if rest == "(" {
-            in_block = true;
-        } else if let Some(directory) = static_go_work_path(rest) {
-            directories.push(directory);
-        }
-    }
-    directories.sort();
-    directories.dedup();
-    directories
-}
-
-fn static_go_work_path(value: &str) -> Option<String> {
-    let value = value
-        .split_whitespace()
-        .next()?
-        .trim_matches(['"', '\u{60}'])
-        .trim_start_matches("./");
-    (!value.is_empty()
-        && !Path::new(value).is_absolute()
-        && !Path::new(value)
-            .components()
-            .any(|component| component == std::path::Component::ParentDir))
-    .then(|| value.to_owned())
-}
-
-fn toml_strings(value: Option<&toml::Value>) -> impl Iterator<Item = &str> {
-    value
-        .and_then(toml::Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter_map(toml::Value::as_str)
-}
-
-fn append_manifest(pattern: &str, manifest: &str) -> String {
-    format!("{}/{manifest}", pattern.trim_end_matches(['/', '\\']))
 }
 
 fn compile_globs(patterns: &[String]) -> Result<globset::GlobSet, globset::Error> {
@@ -563,13 +415,24 @@ mod tests {
     }
 
     #[test]
-    fn go_work_static_use_directives_are_parsed_without_execution() {
+    fn go_work_static_use_directives_are_parsed_without_execution() -> anyhow::Result<()> {
+        let temp = tempfile::tempdir()?;
+        std::fs::write(
+            temp.path().join("go.work"),
+            "go 1.26\nuse ./apps/api\nuse (\n  ./deep/services/worker\n  \"tools/job\"\n)\n",
+        )?;
         assert_eq!(
-            go_work_uses(
-                "go 1.26\nuse ./apps/api\nuse (\n  ./deep/services/worker\n  \"tools/job\"\n)\n"
-            ),
-            ["apps/api", "deep/services/worker", "tools/job"]
+            crate::registry::workspace(crate::registry::GO)
+                .expect("Go workspace contributor")
+                .scan_contribution(temp.path())
+                .includes,
+            [
+                "apps/api/go.mod",
+                "deep/services/worker/go.mod",
+                "tools/job/go.mod"
+            ]
         );
+        Ok(())
     }
 
     #[test]

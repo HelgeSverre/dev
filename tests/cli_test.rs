@@ -1490,6 +1490,126 @@ fn sema_package_uses_entrypoint_and_plain_test_command() -> anyhow::Result<()> {
 }
 
 #[test]
+fn gradle_uses_global_tool_until_declared_wrapper_distribution_is_cached() -> anyhow::Result<()> {
+    let temp = tempfile::tempdir()?;
+    let project = temp.path().join("gradle-project");
+    let cache = temp.path().join("gradle-home");
+    fs::create_dir_all(project.join("gradle/wrapper"))?;
+    fs::write(
+        project.join("build.gradle.kts"),
+        "plugins { application }\ntasks.register(\"verify\")\n",
+    )?;
+    fs::write(
+        project.join("gradle/wrapper/gradle-wrapper.properties"),
+        "distributionUrl=https\\://services.gradle.org/distributions/gradle-9.1-bin.zip\n",
+    )?;
+    let bin = fake_program(temp.path(), "gradle")?;
+    write_executable(
+        &project.join("gradlew"),
+        "#!/bin/sh\nprintf 'wrapper=<yes>\\ncwd=<%s>\\narg0=<%s>\\n' \"$PWD\" \"$1\"\n",
+    )?;
+
+    let mut global = cargo_bin_cmd!("dev");
+    global
+        .args(["build", "--quiet", "--at"])
+        .arg(&project)
+        .env("PATH", &bin)
+        .env("GRADLE_USER_HOME", &cache);
+    global
+        .assert()
+        .success()
+        .stdout(format!("cwd=<{}>\narg0=<build>\n", project.display()));
+
+    fs::create_dir_all(cache.join("wrapper/dists/gradle-9.1-bin/hash/gradle-9.1/bin"))?;
+    fs::write(
+        cache.join("wrapper/dists/gradle-9.1-bin/hash/gradle-9.1/bin/gradle"),
+        "cached",
+    )?;
+    let mut wrapper = cargo_bin_cmd!("dev");
+    wrapper
+        .args(["build", "--quiet", "--at"])
+        .arg(&project)
+        .env("PATH", &bin)
+        .env("GRADLE_USER_HOME", &cache);
+    wrapper.assert().success().stdout(format!(
+        "wrapper=<yes>\ncwd=<{}>\narg0=<build>\n",
+        project.display()
+    ));
+    Ok(())
+}
+
+#[test]
+fn maven_known_plugin_and_lifecycle_use_static_pom_data() -> anyhow::Result<()> {
+    let temp = tempfile::tempdir()?;
+    let project = temp.path().join("maven-project");
+    fs::create_dir(&project)?;
+    fs::write(
+        project.join("pom.xml"),
+        r#"<project><artifactId>web</artifactId><packaging>jar</packaging><build><plugins><plugin><artifactId>spring-boot-maven-plugin</artifactId></plugin></plugins></build></project>"#,
+    )?;
+    let bin = fake_program(temp.path(), "mvn")?;
+
+    let mut run = cargo_bin_cmd!("dev");
+    run.args(["run", "--quiet", "--at"])
+        .arg(&project)
+        .env("PATH", &bin);
+    run.assert().success().stdout(format!(
+        "cwd=<{}>\narg0=<spring-boot:run>\n",
+        project.display()
+    ));
+
+    let mut test = cargo_bin_cmd!("dev");
+    test.args(["test", "--quiet", "--at"])
+        .arg(&project)
+        .env("PATH", &bin);
+    test.assert()
+        .success()
+        .stdout(format!("cwd=<{}>\narg0=<test>\n", project.display()));
+    Ok(())
+}
+
+#[test]
+fn dotnet_solution_tests_and_runnable_project_use_exact_cli_forms() -> anyhow::Result<()> {
+    let temp = tempfile::tempdir()?;
+    let project = temp.path().join("dotnet-project");
+    fs::create_dir_all(project.join("src/Web"))?;
+    fs::create_dir_all(project.join("tests/Web.Tests"))?;
+    fs::write(
+        project.join("App.sln"),
+        "Project(\"{type}\") = \"Web\", \"src\\Web\\Web.csproj\", \"{one}\"\nProject(\"{type}\") = \"Web.Tests\", \"tests\\Web.Tests\\Web.Tests.csproj\", \"{two}\"\n",
+    )?;
+    fs::write(
+        project.join("src/Web/Web.csproj"),
+        r#"<Project Sdk="Microsoft.NET.Sdk.Web"><PropertyGroup><OutputType>Exe</OutputType></PropertyGroup></Project>"#,
+    )?;
+    fs::write(
+        project.join("tests/Web.Tests/Web.Tests.csproj"),
+        r#"<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><IsTestProject>true</IsTestProject></PropertyGroup></Project>"#,
+    )?;
+    let bin = fake_program(temp.path(), "dotnet")?;
+
+    let mut test = cargo_bin_cmd!("dev");
+    test.args(["test", "--quiet", "--at"])
+        .arg(&project)
+        .env("PATH", &bin);
+    test.assert().success().stdout(format!(
+        "cwd=<{}>\narg0=<test>\narg1=<App.sln>\n",
+        project.display()
+    ));
+
+    let mut run = cargo_bin_cmd!("dev");
+    run.args(["run", "--quiet", "--at"])
+        .arg(&project)
+        .args(["--", "--urls", "http://localhost:5000"])
+        .env("PATH", &bin);
+    run.assert().success().stdout(format!(
+        "cwd=<{}>\narg0=<run>\narg1=<--project>\narg2=<src/Web/Web.csproj>\narg3=<-->\narg4=<--urls>\narg5=<http://localhost:5000>\n",
+        project.display()
+    ));
+    Ok(())
+}
+
+#[test]
 fn malformed_composer_manifest_is_diagnostic_not_a_command() -> anyhow::Result<()> {
     let temp = tempfile::tempdir()?;
     let project = temp.path().join("malformed-composer");

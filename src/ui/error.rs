@@ -126,29 +126,14 @@ fn no_candidates(
 }
 
 fn manifest_names(index: &FileIndex) -> Vec<String> {
-    const MARKERS: &[&str] = &[
-        "package.json",
-        "Cargo.toml",
-        "composer.json",
-        "go.mod",
-        "go.work",
-        "build.zig",
-        "Package.swift",
-        "pubspec.yaml",
-        "GNUmakefile",
-        "makefile",
-        "Makefile",
-        "compose.yaml",
-        "compose.yml",
-        "docker-compose.yaml",
-        "docker-compose.yml",
-        "Dockerfile",
-    ];
     let mut names = index
         .all_entries()
-        .filter_map(|entry| entry.relative_path.file_name()?.to_str())
-        .filter(|name| MARKERS.contains(name))
-        .map(str::to_owned)
+        .filter(|entry| {
+            crate::registry::markers()
+                .iter()
+                .any(|marker| marker.pattern.matches(&entry.relative_path))
+        })
+        .filter_map(|entry| entry.relative_path.file_name()?.to_str().map(str::to_owned))
         .collect::<Vec<_>>();
     names.sort();
     names.dedup();

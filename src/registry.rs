@@ -7,10 +7,12 @@ use std::time::Duration;
 use serde::Serialize;
 
 use crate::detect::{
-    ArtisanDetector, CargoDetector, ComposerDetector, DartDetector, Detector, DockerDetector,
-    GoDetector, JakeDetector, JustDetector, MakeDetector, MiseDetector, NodeDetector,
-    NodeTestBinder, PhpFileDetector, PythonFileDetector, SemaDetector, ShellDetector,
-    SwiftDetector, TargetBinder, TargetRunner, TaskfileDetector, ZigDetector,
+    ArtisanDetector, CargoDetector, CargoWorkspaceContributor, ComposerDetector, DartDetector,
+    Detector, DockerDetector, DotnetDetector, DotnetWorkspaceContributor, GoDetector,
+    GoWorkspaceContributor, GradleDetector, GradleWorkspaceContributor, JakeDetector, JustDetector,
+    MakeDetector, MavenDetector, MavenWorkspaceContributor, MiseDetector, NodeDetector,
+    NodeTestBinder, NodeWorkspaceContributor, PhpFileDetector, PythonFileDetector, SemaDetector,
+    ShellDetector, SwiftDetector, TargetBinder, TargetRunner, TaskfileDetector, ZigDetector,
 };
 
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Serialize)]
@@ -84,6 +86,9 @@ pub const CARGO: DetectorId = DetectorId::new("cargo");
 pub const COMPOSER: DetectorId = DetectorId::new("composer");
 pub const ARTISAN: DetectorId = DetectorId::new("artisan");
 pub const GO: DetectorId = DetectorId::new("go");
+pub const GRADLE: DetectorId = DetectorId::new("gradle");
+pub const MAVEN: DetectorId = DetectorId::new("maven");
+pub const DOTNET: DetectorId = DetectorId::new("dotnet");
 pub const JAKE: DetectorId = DetectorId::new("jake");
 pub const JUST: DetectorId = DetectorId::new("just");
 pub const TASKFILE: DetectorId = DetectorId::new("taskfile");
@@ -105,6 +110,9 @@ pub const CARGO_SOURCE: CandidateSourceId = CandidateSourceId::new("cargo");
 pub const COMPOSER_SOURCE: CandidateSourceId = CandidateSourceId::new("composer");
 pub const ARTISAN_SOURCE: CandidateSourceId = CandidateSourceId::new("artisan");
 pub const GO_SOURCE: CandidateSourceId = CandidateSourceId::new("go");
+pub const GRADLE_SOURCE: CandidateSourceId = CandidateSourceId::new("gradle");
+pub const MAVEN_SOURCE: CandidateSourceId = CandidateSourceId::new("maven");
+pub const DOTNET_SOURCE: CandidateSourceId = CandidateSourceId::new("dotnet");
 pub const JAKE_SOURCE: CandidateSourceId = CandidateSourceId::new("jake");
 pub const JUST_SOURCE: CandidateSourceId = CandidateSourceId::new("just");
 pub const TASKFILE_SOURCE: CandidateSourceId = CandidateSourceId::new("taskfile");
@@ -130,6 +138,9 @@ pub const RUSTC_TOOL: ToolId = ToolId::new("rustc");
 pub const COMPOSER_TOOL: ToolId = ToolId::new("composer");
 pub const PHP_TOOL: ToolId = ToolId::new("php");
 pub const GO_TOOL: ToolId = ToolId::new("go");
+pub const GRADLE_TOOL: ToolId = ToolId::new("gradle");
+pub const MAVEN_TOOL: ToolId = ToolId::new("mvn");
+pub const DOTNET_TOOL: ToolId = ToolId::new("dotnet");
 pub const JAKE_TOOL: ToolId = ToolId::new("jake");
 pub const JUST_TOOL: ToolId = ToolId::new("just");
 pub const TASK_TOOL: ToolId = ToolId::new("task");
@@ -230,8 +241,20 @@ pub struct DetectorRegistration {
     pub conventional_roots: &'static [&'static str],
     pub candidate_schema: u32,
     pub detector: &'static dyn Detector,
+    pub workspace: Option<&'static dyn WorkspaceContributor>,
     pub target_binders: &'static [&'static dyn TargetBinder],
     pub target_runners: &'static [&'static dyn TargetRunner],
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct WorkspaceContribution {
+    pub includes: Vec<String>,
+    pub excludes: Vec<String>,
+}
+
+pub trait WorkspaceContributor: Send + Sync {
+    fn is_workspace(&self, root: &Path) -> bool;
+    fn scan_contribution(&self, root: &Path) -> WorkspaceContribution;
 }
 
 impl fmt::Debug for DetectorRegistration {
@@ -245,6 +268,7 @@ impl fmt::Debug for DetectorRegistration {
             .field("tools", &self.tools)
             .field("conventional_roots", &self.conventional_roots)
             .field("candidate_schema", &self.candidate_schema)
+            .field("workspace", &self.workspace.is_some())
             .finish_non_exhaustive()
     }
 }
@@ -276,6 +300,9 @@ const RUSTC_PROGRAM: ToolRegistration = command_tool(RUSTC_TOOL, "rustc", &["--v
 const COMPOSER_PROGRAM: ToolRegistration = command_tool(COMPOSER_TOOL, "composer", &["--version"]);
 const PHP_PROGRAM: ToolRegistration = command_tool(PHP_TOOL, "php", &["--version"]);
 const GO_PROGRAM: ToolRegistration = command_tool(GO_TOOL, "go", &["version"]);
+const GRADLE_PROGRAM: ToolRegistration = command_tool(GRADLE_TOOL, "gradle", &["--version"]);
+const MAVEN_PROGRAM: ToolRegistration = command_tool(MAVEN_TOOL, "mvn", &["--version"]);
+const DOTNET_PROGRAM: ToolRegistration = command_tool(DOTNET_TOOL, "dotnet", &["--version"]);
 const JAKE_PROGRAM: ToolRegistration = command_tool(JAKE_TOOL, "jake", &["--version"]);
 const JUST_PROGRAM: ToolRegistration = command_tool(JUST_TOOL, "just", &["--version"]);
 const TASK_PROGRAM: ToolRegistration = command_tool(TASK_TOOL, "task", &["--version"]);
@@ -369,6 +396,7 @@ static REGISTRATIONS: &[DetectorRegistration] = &[
         conventional_roots: ROOTS,
         candidate_schema: 1,
         detector: &NodeDetector,
+        workspace: Some(&NodeWorkspaceContributor),
         target_binders: &[&NodeTestBinder],
         target_runners: &[],
     },
@@ -394,6 +422,7 @@ static REGISTRATIONS: &[DetectorRegistration] = &[
         conventional_roots: ROOTS,
         candidate_schema: 1,
         detector: &CargoDetector,
+        workspace: Some(&CargoWorkspaceContributor),
         target_binders: &[],
         target_runners: &[],
     },
@@ -419,6 +448,7 @@ static REGISTRATIONS: &[DetectorRegistration] = &[
         conventional_roots: ROOTS,
         candidate_schema: 1,
         detector: &ComposerDetector,
+        workspace: None,
         target_binders: &[],
         target_runners: &[],
     },
@@ -438,6 +468,7 @@ static REGISTRATIONS: &[DetectorRegistration] = &[
         conventional_roots: ROOTS,
         candidate_schema: 1,
         detector: &ArtisanDetector,
+        workspace: None,
         target_binders: &[],
         target_runners: &[],
     },
@@ -467,6 +498,103 @@ static REGISTRATIONS: &[DetectorRegistration] = &[
         conventional_roots: ROOTS,
         candidate_schema: 1,
         detector: &GoDetector,
+        workspace: Some(&GoWorkspaceContributor),
+        target_binders: &[],
+        target_runners: &[],
+    },
+    DetectorRegistration {
+        id: GRADLE,
+        candidate_sources: &[CandidateSourceRegistration {
+            id: GRADLE_SOURCE,
+            metadata_priority: 2,
+            default_tags: &["gradle", "jvm", "java", "kotlin"],
+        }],
+        synonyms: &["gradle", "jvm", "java", "kotlin", "groovy"],
+        markers: &[
+            ProjectMarker {
+                pattern: MarkerPattern::Exact("settings.gradle"),
+                root_role: RootRole::Workspace,
+            },
+            ProjectMarker {
+                pattern: MarkerPattern::Exact("settings.gradle.kts"),
+                root_role: RootRole::Workspace,
+            },
+            ProjectMarker {
+                pattern: MarkerPattern::Exact("build.gradle"),
+                root_role: RootRole::Package,
+            },
+            ProjectMarker {
+                pattern: MarkerPattern::Exact("build.gradle.kts"),
+                root_role: RootRole::Package,
+            },
+        ],
+        tools: &[GRADLE_PROGRAM],
+        conventional_roots: ROOTS,
+        candidate_schema: 1,
+        detector: &GradleDetector,
+        workspace: Some(&GradleWorkspaceContributor),
+        target_binders: &[],
+        target_runners: &[],
+    },
+    DetectorRegistration {
+        id: MAVEN,
+        candidate_sources: &[CandidateSourceRegistration {
+            id: MAVEN_SOURCE,
+            metadata_priority: 2,
+            default_tags: &["maven", "jvm", "java"],
+        }],
+        synonyms: &["maven", "mvn", "jvm", "java"],
+        markers: &[ProjectMarker {
+            pattern: MarkerPattern::Exact("pom.xml"),
+            root_role: RootRole::Package,
+        }],
+        tools: &[MAVEN_PROGRAM],
+        conventional_roots: ROOTS,
+        candidate_schema: 1,
+        detector: &MavenDetector,
+        workspace: Some(&MavenWorkspaceContributor),
+        target_binders: &[],
+        target_runners: &[],
+    },
+    DetectorRegistration {
+        id: DOTNET,
+        candidate_sources: &[CandidateSourceRegistration {
+            id: DOTNET_SOURCE,
+            metadata_priority: 2,
+            default_tags: &["dotnet", "csharp", "fsharp", "visual-basic"],
+        }],
+        synonyms: &["dotnet", ".net", "csharp", "c#", "fsharp", "f#", "msbuild"],
+        markers: &[
+            ProjectMarker {
+                pattern: MarkerPattern::Extension("sln"),
+                root_role: RootRole::Workspace,
+            },
+            ProjectMarker {
+                pattern: MarkerPattern::Extension("slnx"),
+                root_role: RootRole::Workspace,
+            },
+            ProjectMarker {
+                pattern: MarkerPattern::Extension("slnf"),
+                root_role: RootRole::Workspace,
+            },
+            ProjectMarker {
+                pattern: MarkerPattern::Extension("csproj"),
+                root_role: RootRole::Package,
+            },
+            ProjectMarker {
+                pattern: MarkerPattern::Extension("fsproj"),
+                root_role: RootRole::Package,
+            },
+            ProjectMarker {
+                pattern: MarkerPattern::Extension("vbproj"),
+                root_role: RootRole::Package,
+            },
+        ],
+        tools: &[DOTNET_PROGRAM],
+        conventional_roots: ROOTS,
+        candidate_schema: 1,
+        detector: &DotnetDetector,
+        workspace: Some(&DotnetWorkspaceContributor),
         target_binders: &[],
         target_runners: &[],
     },
@@ -483,6 +611,7 @@ static REGISTRATIONS: &[DetectorRegistration] = &[
         conventional_roots: ROOTS,
         candidate_schema: 1,
         detector: &PhpFileDetector,
+        workspace: None,
         target_binders: &[],
         target_runners: &[&PhpFileDetector],
     },
@@ -508,6 +637,7 @@ static REGISTRATIONS: &[DetectorRegistration] = &[
         conventional_roots: ROOTS,
         candidate_schema: 1,
         detector: &ZigDetector,
+        workspace: None,
         target_binders: &[],
         target_runners: &[&ZigDetector],
     },
@@ -533,6 +663,7 @@ static REGISTRATIONS: &[DetectorRegistration] = &[
         conventional_roots: ROOTS,
         candidate_schema: 1,
         detector: &SwiftDetector,
+        workspace: None,
         target_binders: &[],
         target_runners: &[],
     },
@@ -565,6 +696,7 @@ static REGISTRATIONS: &[DetectorRegistration] = &[
         conventional_roots: ROOTS,
         candidate_schema: 1,
         detector: &DartDetector,
+        workspace: None,
         target_binders: &[],
         target_runners: &[&DartDetector],
     },
@@ -581,6 +713,7 @@ static REGISTRATIONS: &[DetectorRegistration] = &[
         conventional_roots: ROOTS,
         candidate_schema: 1,
         detector: &PythonFileDetector,
+        workspace: None,
         target_binders: &[],
         target_runners: &[&PythonFileDetector],
     },
@@ -606,6 +739,7 @@ static REGISTRATIONS: &[DetectorRegistration] = &[
         conventional_roots: ROOTS,
         candidate_schema: 1,
         detector: &JustDetector,
+        workspace: None,
         target_binders: &[],
         target_runners: &[],
     },
@@ -625,6 +759,7 @@ static REGISTRATIONS: &[DetectorRegistration] = &[
         conventional_roots: ROOTS,
         candidate_schema: 1,
         detector: &JakeDetector,
+        workspace: None,
         target_binders: &[],
         target_runners: &[],
     },
@@ -674,6 +809,7 @@ static REGISTRATIONS: &[DetectorRegistration] = &[
         conventional_roots: ROOTS,
         candidate_schema: 1,
         detector: &TaskfileDetector,
+        workspace: None,
         target_binders: &[],
         target_runners: &[],
     },
@@ -699,6 +835,7 @@ static REGISTRATIONS: &[DetectorRegistration] = &[
         conventional_roots: ROOTS,
         candidate_schema: 1,
         detector: &MiseDetector,
+        workspace: None,
         target_binders: &[],
         target_runners: &[],
     },
@@ -728,6 +865,7 @@ static REGISTRATIONS: &[DetectorRegistration] = &[
         conventional_roots: ROOTS,
         candidate_schema: 1,
         detector: &SemaDetector,
+        workspace: None,
         target_binders: &[],
         target_runners: &[],
     },
@@ -744,6 +882,7 @@ static REGISTRATIONS: &[DetectorRegistration] = &[
         conventional_roots: ROOTS,
         candidate_schema: 1,
         detector: &ShellDetector,
+        workspace: None,
         target_binders: &[],
         target_runners: &[&ShellDetector],
     },
@@ -773,6 +912,7 @@ static REGISTRATIONS: &[DetectorRegistration] = &[
         conventional_roots: ROOTS,
         candidate_schema: 1,
         detector: &MakeDetector,
+        workspace: None,
         target_binders: &[],
         target_runners: &[],
     },
@@ -810,6 +950,7 @@ static REGISTRATIONS: &[DetectorRegistration] = &[
         conventional_roots: ROOTS,
         candidate_schema: 1,
         detector: &DockerDetector,
+        workspace: None,
         target_binders: &[],
         target_runners: &[],
     },
@@ -825,6 +966,35 @@ pub fn registration(id: DetectorId) -> Option<&'static DetectorRegistration> {
     registrations()
         .iter()
         .find(|registration| registration.id == id)
+}
+
+#[must_use]
+pub fn workspace(id: DetectorId) -> Option<&'static dyn WorkspaceContributor> {
+    registration(id).and_then(|registration| registration.workspace)
+}
+
+#[must_use]
+pub fn workspace_contains_manifest(id: DetectorId, root: &Path, relative: &Path) -> bool {
+    let Some(workspace) = workspace(id) else {
+        return false;
+    };
+    let contribution = workspace.scan_contribution(root);
+    let Ok(includes) = compile_workspace_globs(&contribution.includes) else {
+        return false;
+    };
+    let excludes = compile_workspace_globs(&contribution.excludes).ok();
+    includes.is_match(relative)
+        && !excludes
+            .as_ref()
+            .is_some_and(|patterns| patterns.is_match(relative))
+}
+
+fn compile_workspace_globs(patterns: &[String]) -> Result<globset::GlobSet, globset::Error> {
+    let mut builder = globset::GlobSetBuilder::new();
+    for pattern in patterns {
+        builder.add(globset::Glob::new(pattern)?);
+    }
+    builder.build()
 }
 
 #[must_use]
@@ -941,6 +1111,7 @@ pub fn fingerprint() -> &'static str {
             for root in registration.conventional_roots {
                 hash_text(&mut hasher, root);
             }
+            hasher.update(&[u8::from(registration.workspace.is_some())]);
         }
         hasher.finalize().to_hex().to_string()
     })
@@ -961,6 +1132,11 @@ pub enum RegistryError {
     ConflictingTool(ToolId),
     #[error("detector `{0}` has candidate schema zero")]
     ZeroCandidateSchema(DetectorId),
+    #[error("detector `{detector}` has invalid exact marker `{marker}`")]
+    InvalidExactMarker {
+        detector: DetectorId,
+        marker: &'static str,
+    },
 }
 
 pub fn validate() -> Result<(), RegistryError> {
@@ -973,6 +1149,16 @@ pub fn validate() -> Result<(), RegistryError> {
         }
         if registration.candidate_schema == 0 {
             return Err(RegistryError::ZeroCandidateSchema(registration.id));
+        }
+        for marker in registration.markers {
+            if let MarkerPattern::Exact(name) = marker.pattern {
+                if name.is_empty() || name.contains(['/', '\\']) {
+                    return Err(RegistryError::InvalidExactMarker {
+                        detector: registration.id,
+                        marker: name,
+                    });
+                }
+            }
         }
         for source in registration.candidate_sources {
             if !source_ids.insert(source.id) {
@@ -997,7 +1183,14 @@ mod tests {
     #[test]
     fn registry_is_internally_consistent() -> anyhow::Result<()> {
         validate()?;
-        assert_eq!(tools().len(), 23);
+        assert_eq!(tools().len(), 26);
+        assert_eq!(
+            registrations()
+                .iter()
+                .filter(|registration| registration.workspace.is_some())
+                .count(),
+            6
+        );
         assert!(source_by_name("vite").is_some());
         assert!(source_by_name("unknown").is_none());
         Ok(())

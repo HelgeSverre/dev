@@ -10,13 +10,72 @@ use crate::candidate::{
 };
 use crate::diagnostic::Diagnostic;
 use crate::intent::Intent;
-use crate::registry::{NEXT_SOURCE, NODE, NODE_SOURCE, VITE_SOURCE};
+use crate::registry::{
+    WorkspaceContribution, WorkspaceContributor, NEXT_SOURCE, NODE, NODE_SOURCE, VITE_SOURCE,
+};
 use crate::scan::{IndexEntry, IndexedFileType};
 
 use super::{Detection, Detector, ScanCtx, TargetBinder};
 
 pub struct NodeDetector;
+pub struct NodeWorkspaceContributor;
 pub(crate) struct NodeTestBinder;
+
+impl WorkspaceContributor for NodeWorkspaceContributor {
+    fn is_workspace(&self, root: &Path) -> bool {
+        !self.scan_contribution(root).includes.is_empty()
+    }
+
+    fn scan_contribution(&self, root: &Path) -> WorkspaceContribution {
+        let mut contribution = WorkspaceContribution::default();
+        if let Ok(contents) = std::fs::read_to_string(root.join("package.json")) {
+            if let Ok(manifest) = serde_json::from_str::<serde_json::Value>(&contents) {
+                let workspaces = manifest.get("workspaces");
+                let values = workspaces
+                    .and_then(serde_json::Value::as_array)
+                    .or_else(|| workspaces?.get("packages")?.as_array());
+                if let Some(values) = values {
+                    contribution
+                        .includes
+                        .extend(values.iter().filter_map(|value| {
+                            value
+                                .as_str()
+                                .map(|pattern| append_workspace_manifest(pattern, "package.json"))
+                        }));
+                }
+            }
+        }
+        if let Ok(contents) = std::fs::read_to_string(root.join("pnpm-workspace.yaml")) {
+            if let Ok(manifest) = serde_yaml::from_str::<serde_yaml::Value>(&contents) {
+                if let Some(packages) = manifest
+                    .get("packages")
+                    .and_then(serde_yaml::Value::as_sequence)
+                {
+                    for pattern in packages.iter().filter_map(serde_yaml::Value::as_str) {
+                        if let Some(excluded) = pattern.strip_prefix('!') {
+                            contribution
+                                .excludes
+                                .push(append_workspace_manifest(excluded, "package.json"));
+                        } else {
+                            contribution
+                                .includes
+                                .push(append_workspace_manifest(pattern, "package.json"));
+                        }
+                    }
+                }
+            }
+        }
+        contribution.includes.sort();
+        contribution.includes.dedup();
+        contribution.excludes.sort();
+        contribution.excludes.dedup();
+        contribution
+    }
+}
+
+fn append_workspace_manifest(pattern: &str, manifest: &str) -> String {
+    format!("{}/{manifest}", pattern.trim_end_matches(['/', '\\']))
+}
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -271,11 +330,9 @@ impl Detector for NodeDetector {
 }
 
 fn package_manifests(context: &ScanCtx<'_>) -> Vec<PathBuf> {
-    let node_workspace_root = context
-        .roots
-        .workspace_root
-        .as_ref()
-        .filter(|root| crate::scan::index::has_declared_node_workspace(root));
+    let node_workspace_root = context.roots.workspace_root.as_ref().filter(|root| {
+        crate::registry::workspace(NODE).is_some_and(|workspace| workspace.is_workspace(root))
+    });
     let mut paths = context
         .index
         .all_entries()
@@ -301,10 +358,7 @@ fn package_manifests(context: &ScanCtx<'_>) -> Vec<PathBuf> {
             absolute_manifest
                 .strip_prefix(workspace_root)
                 .is_ok_and(|relative| {
-                    crate::scan::index::is_declared_node_workspace_manifest(
-                        workspace_root,
-                        relative,
-                    )
+                    crate::registry::workspace_contains_manifest(NODE, workspace_root, relative)
                 })
         })
         .map(|entry| entry.relative_path.clone())
@@ -500,9 +554,10 @@ fn package_manager(
         .ok()
         .map(Path::to_path_buf);
     let manager_root = if directory != scan_root
-        && crate::scan::index::has_declared_node_workspace(scan_root)
+        && crate::registry::workspace(NODE)
+            .is_some_and(|workspace| workspace.is_workspace(scan_root))
         && !manifest_relative.as_deref().is_some_and(|relative| {
-            crate::scan::index::is_declared_node_workspace_manifest(scan_root, relative)
+            crate::registry::workspace_contains_manifest(NODE, scan_root, relative)
         }) {
         directory
     } else {
@@ -578,7 +633,7 @@ fn workspace_member(
     }
     let absolute_manifest = context.roots.scan_root.join(manifest_path);
     let relative_manifest = absolute_manifest.strip_prefix(root).ok()?;
-    if !crate::scan::index::is_declared_node_workspace_manifest(root, relative_manifest) {
+    if !crate::registry::workspace_contains_manifest(NODE, root, relative_manifest) {
         return None;
     }
     let relative_path = package_directory.strip_prefix(root).ok()?.to_path_buf();
