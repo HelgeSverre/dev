@@ -83,7 +83,7 @@ fn copy_directory(source: &Path, destination: &Path) -> anyhow::Result<()> {
 }
 
 fn render_corpus(fixtures: &[(String, PathBuf)]) -> anyhow::Result<String> {
-    let mut output = format!("schema=1 repositories={}\n", fixtures.len());
+    let mut output = format!("schema=2 repositories={}\n", fixtures.len());
     for (name, fixture) in fixtures {
         for intent in [Intent::Run, Intent::Build, Intent::Test] {
             render_case(&mut output, name, fixture, intent)?;
@@ -196,15 +196,18 @@ fn render_resolution(
             .join(",");
         writeln!(
             output,
-            "candidate action={} detector={} origin={:?} policy={:?} base={} total={} distance={} cwd={} program={:?} args=[{}] availability=available",
+            "candidate action={} detector={} source={} layer={:?} origin={:?} policy={:?} base={} total={} distance={} cwd={} scope={} program={:?} args=[{}] availability=available",
             candidate.action_key,
             candidate.detector,
+            candidate.source,
+            candidate.layer,
             candidate.origin,
             candidate.selection,
             candidate.base_points,
             candidate.structural_points,
             candidate.anchor_distance,
             relative_path(&candidate.cwd, fixture),
+            relative_path(&candidate.scope_root, fixture),
             normalize_text(&candidate.program.to_string_lossy(), fixture),
             args
         )?;

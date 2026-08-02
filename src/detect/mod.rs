@@ -58,8 +58,6 @@ impl Detection {
 
 /// A deterministic, data-only project command detector.
 pub trait Detector: Send + Sync {
-    fn name(&self) -> &'static str;
-    fn synonyms(&self) -> &'static [&'static str];
     fn detect(&self, context: &ScanCtx<'_>) -> Detection;
 }
 
@@ -82,11 +80,12 @@ fn detect_with_registry(context: &ScanCtx<'_>, detectors: &[&dyn Detector]) -> D
     output.candidates.sort_by(|left, right| {
         left.action_key
             .cmp(&right.action_key)
-            .then_with(|| left.detector.cmp(right.detector))
+            .then_with(|| left.detector.cmp(&right.detector))
+            .then_with(|| left.source.cmp(&right.source))
     });
     output.diagnostics.sort_by(|left, right| {
         left.detector
-            .cmp(right.detector)
+            .cmp(&right.detector)
             .then_with(|| left.source.cmp(&right.source))
             .then_with(|| left.message.cmp(&right.message))
     });

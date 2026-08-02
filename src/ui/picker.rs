@@ -431,6 +431,7 @@ mod tests {
 
     use crate::candidate::{Availability, Candidate, SearchDocument, SelectionPolicy};
     use crate::intent::Intent;
+    use crate::registry::{NODE, NODE_SOURCE};
     use crate::resolve::{RankedCandidate, ResolutionReason, ResolutionStatus};
 
     use super::*;
@@ -441,7 +442,8 @@ mod tests {
             .map(|name| {
                 let mut candidate = Candidate::new(
                     name,
-                    "node",
+                    NODE,
+                    NODE_SOURCE,
                     Intent::Run,
                     name,
                     "true",

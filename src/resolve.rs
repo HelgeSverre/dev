@@ -2,7 +2,9 @@ use std::cmp::Ordering;
 
 use serde::{Deserialize, Serialize};
 
-use crate::candidate::{Candidate, SelectionPolicy};
+use crate::candidate::{
+    Candidate, CandidateOrigin, CommandLayer, Evidence, EvidenceKind, SelectionPolicy,
+};
 use crate::query::rank::compare_hinted;
 use crate::query::{match_candidate, normalize_query, MatchClass, MatchStrategy, QueryMatch};
 use crate::score::{AUTO_FLOOR, CLEAR_WINNER_MARGIN};
@@ -77,9 +79,88 @@ pub fn resolve(
         };
     }
     if hints.is_empty() {
-        resolve_unhinted(candidates, force_pick)
+        resolve_unhinted(apply_facade_dominance(candidates), force_pick)
     } else {
         resolve_hinted(candidates, hints, chaos, force_pick)
+    }
+}
+
+fn apply_facade_dominance(mut candidates: Vec<Candidate>) -> Vec<Candidate> {
+    let dominant = candidates
+        .iter()
+        .filter(|candidate| {
+            candidate.availability.is_available()
+                && candidate.selection == SelectionPolicy::Automatic
+                && candidate.origin == CandidateOrigin::Declared
+                && candidate.layer != CommandLayer::DirectTarget
+                && canonical_identity(candidate.intent, &candidate.action_name)
+        })
+        .map(|candidate| {
+            (
+                candidate.scope_root.clone(),
+                candidate.intent,
+                layer_precedence(candidate.layer),
+                candidate.layer,
+            )
+        })
+        .fold(
+            std::collections::BTreeMap::new(),
+            |mut dominant, (scope, intent, precedence, layer)| {
+                dominant
+                    .entry((scope, intent))
+                    .and_modify(|current: &mut (u8, CommandLayer)| {
+                        if precedence > current.0 {
+                            *current = (precedence, layer);
+                        }
+                    })
+                    .or_insert((precedence, layer));
+                dominant
+            },
+        );
+
+    for candidate in &mut candidates {
+        let Some((precedence, layer)) =
+            dominant.get(&(candidate.scope_root.clone(), candidate.intent))
+        else {
+            continue;
+        };
+        if candidate.selection == SelectionPolicy::Automatic
+            && candidate.layer != CommandLayer::DirectTarget
+            && layer_precedence(candidate.layer) < *precedence
+        {
+            candidate.selection = SelectionPolicy::ExplicitHint;
+            candidate.evidence.push(Evidence {
+                kind: EvidenceKind::Rule,
+                reason: format!("demoted by canonical same-scope {layer:?} project interface"),
+                points: 0,
+                source: None,
+            });
+        }
+    }
+    candidates
+}
+
+const fn layer_precedence(layer: CommandLayer) -> u8 {
+    match layer {
+        CommandLayer::ProjectFacade => 3,
+        CommandLayer::EcosystemTask => 2,
+        CommandLayer::ToolDefault => 1,
+        CommandLayer::DirectTarget => 0,
+    }
+}
+
+fn canonical_identity(intent: crate::intent::Intent, action: &str) -> bool {
+    match intent {
+        crate::intent::Intent::Run => {
+            matches!(action, "run" | "dev" | "start" | "serve" | "watch")
+        }
+        crate::intent::Intent::Build => {
+            matches!(
+                action,
+                "build" | "all" | "compile" | "bundle" | "assemble" | "package"
+            )
+        }
+        crate::intent::Intent::Test => matches!(action, "test" | "check" | "verify"),
     }
 }
 
@@ -289,13 +370,15 @@ mod tests {
 
     use crate::candidate::{Availability, SearchDocument};
     use crate::intent::Intent;
+    use crate::registry::{NODE, NODE_SOURCE};
 
     use super::*;
 
     fn available(name: &str, points: i32, policy: SelectionPolicy) -> Candidate {
         let mut candidate = Candidate::new(
             format!("test:{name}"),
-            "node",
+            NODE,
+            NODE_SOURCE,
             Intent::Run,
             name,
             "true",
@@ -314,6 +397,31 @@ mod tests {
         };
         candidate.structural_points = points;
         candidate
+    }
+
+    #[test]
+    fn canonical_project_facade_demotes_lower_same_scope_layers() {
+        let mut facade = available("test", 80, SelectionPolicy::Automatic);
+        facade.intent = Intent::Test;
+        facade.layer = CommandLayer::ProjectFacade;
+        let mut ecosystem = available("test:unit", 95, SelectionPolicy::Automatic);
+        ecosystem.intent = Intent::Test;
+        ecosystem.action_name = "test".to_owned();
+        ecosystem.layer = CommandLayer::EcosystemTask;
+
+        let resolution = resolve(vec![ecosystem, facade], &[], 0, false);
+
+        assert_eq!(resolution.status, ResolutionStatus::Resolved);
+        assert_eq!(
+            resolution
+                .selected_candidate()
+                .map(|candidate| candidate.layer),
+            Some(CommandLayer::ProjectFacade)
+        );
+        assert!(resolution.candidates.iter().any(|ranked| {
+            ranked.candidate.layer == CommandLayer::EcosystemTask
+                && ranked.candidate.selection == SelectionPolicy::ExplicitHint
+        }));
     }
 
     #[test]

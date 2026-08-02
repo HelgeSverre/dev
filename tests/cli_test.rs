@@ -178,7 +178,7 @@ fn cargo_json_is_deterministic_and_describes_the_known_command() -> anyhow::Resu
     assert_eq!(first, second);
 
     let json: serde_json::Value = serde_json::from_slice(&first)?;
-    assert_eq!(json["schema_version"], 1);
+    assert_eq!(json["schema_version"], 2);
     assert_eq!(json["resolution"]["status"], "resolved");
     assert_eq!(json["candidates"][0]["program"]["display"], "cargo");
     assert_eq!(json["candidates"][0]["args"][0]["display"], "run");
@@ -1028,7 +1028,7 @@ fn corrupt_cache_is_recovered_during_a_locked_write() -> anyhow::Result<()> {
 
     let recovered: serde_json::Value =
         serde_json::from_slice(&fs::read(cache_directory.join("choices.json"))?)?;
-    assert_eq!(recovered["schema_version"], 1);
+    assert_eq!(recovered["schema_version"], 2);
     assert_eq!(recovered["entries"].as_array().map(Vec::len), Some(0));
     assert!(fs::read_dir(cache_directory)?
         .filter_map(Result::ok)

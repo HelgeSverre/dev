@@ -257,11 +257,27 @@ fn surfaces(candidate: &Candidate) -> Vec<Surface> {
         weight: 65,
     }));
     values.push(Surface {
-        value: candidate.detector.to_owned(),
+        value: candidate.source.as_str().to_owned(),
         field: SearchField::Detector,
         class: MatchClass::Scope,
         weight: 60,
     });
+    if candidate.source.as_str() != candidate.detector.as_str() {
+        values.push(Surface {
+            value: candidate.detector.as_str().to_owned(),
+            field: SearchField::Detector,
+            class: MatchClass::Scope,
+            weight: 60,
+        });
+    }
+    if let Some(registration) = crate::registry::registration(candidate.detector) {
+        values.extend(registration.synonyms.iter().map(|value| Surface {
+            value: (*value).to_owned(),
+            field: SearchField::Detector,
+            class: MatchClass::Scope,
+            weight: 60,
+        }));
+    }
     values.extend(candidate.search.tags.iter().cloned().map(|value| Surface {
         value,
         field: SearchField::Tag,
@@ -453,6 +469,7 @@ mod tests {
 
     use crate::candidate::{Candidate, SearchDocument, SelectionPolicy};
     use crate::intent::Intent;
+    use crate::registry::{NODE, NODE_SOURCE};
 
     use super::*;
     use crate::query::normalize_query;
@@ -460,7 +477,8 @@ mod tests {
     fn named_candidate(name: &str) -> Candidate {
         let mut candidate = Candidate::new(
             "node:script",
-            "node",
+            NODE,
+            NODE_SOURCE,
             Intent::Run,
             name,
             "npm",
@@ -567,7 +585,8 @@ mod tests {
         );
         let mut candidate = Candidate::new(
             "target-index",
-            "target-index",
+            NODE,
+            NODE_SOURCE,
             Intent::Run,
             &stem,
             "target-index",

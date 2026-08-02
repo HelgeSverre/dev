@@ -5,12 +5,13 @@ use std::path::{Path, PathBuf};
 use serde::Deserialize;
 
 use crate::candidate::{
-    Availability, Candidate, CandidateOrigin, Evidence, EvidenceKind, Lifecycle, SearchDocument,
-    SelectionPolicy,
+    Availability, Candidate, CandidateOrigin, CommandLayer, Evidence, EvidenceKind, Lifecycle,
+    SearchDocument, SelectionPolicy,
 };
 use crate::diagnostic::Diagnostic;
 use crate::intent::{Intent, Target};
 use crate::query::{match_candidate, normalize_query, MatchClass};
+use crate::registry::{DART, DART_SOURCE, FLUTTER_SOURCE};
 use crate::scan::{IndexEntry, IndexedFileType};
 
 use super::target::{explicitly_anchored, target_scope};
@@ -36,14 +37,6 @@ struct DartProject {
 }
 
 impl Detector for DartDetector {
-    fn name(&self) -> &'static str {
-        "dart"
-    }
-
-    fn synonyms(&self) -> &'static [&'static str] {
-        &["dart", "flutter", "pub"]
-    }
-
     fn detect(&self, context: &ScanCtx<'_>) -> Detection {
         let (projects, diagnostics) = projects(context);
         let mut output = Detection {
@@ -79,6 +72,7 @@ impl TargetRunner for DartDetector {
         } else {
             CandidateOrigin::Synthetic
         };
+        candidate.layer = CommandLayer::DirectTarget;
         Some(candidate)
     }
 }
@@ -105,11 +99,7 @@ fn projects(context: &ScanCtx<'_>) -> (Vec<DartProject>, Vec<Diagnostic>) {
         let contents = match context.index.manifests.read(&absolute) {
             Ok(contents) => contents,
             Err(error) => {
-                diagnostics.push(Diagnostic::warning(
-                    "dart",
-                    error.to_string(),
-                    Some(absolute),
-                ));
+                diagnostics.push(Diagnostic::warning(DART, error.to_string(), Some(absolute)));
                 continue;
             }
         };
@@ -117,7 +107,7 @@ fn projects(context: &ScanCtx<'_>) -> (Vec<DartProject>, Vec<Diagnostic>) {
             Ok(manifest) => manifest,
             Err(error) => {
                 diagnostics.push(Diagnostic::warning(
-                    "dart",
+                    DART,
                     format!("invalid pubspec.yaml: {error}"),
                     Some(absolute),
                 ));
@@ -304,7 +294,7 @@ fn flutter_test_candidate(project: &DartProject, target: Option<&Path>) -> Candi
 
 fn base_project_candidate(
     project: &DartProject,
-    detector: &'static str,
+    source_name: &'static str,
     intent: Intent,
     action: &str,
     args: Vec<OsString>,
@@ -312,19 +302,25 @@ fn base_project_candidate(
     selection: SelectionPolicy,
 ) -> Candidate {
     let scope = project_scope(project);
+    let source = if source_name == "flutter" {
+        FLUTTER_SOURCE
+    } else {
+        DART_SOURCE
+    };
     let mut candidate = Candidate::new(
-        format!("{detector}:{scope}:{action}"),
-        detector,
+        format!("{source_name}:{scope}:{action}"),
+        DART,
+        source,
         intent,
         action,
-        detector,
+        source_name,
         args,
         project.directory.clone(),
         base_points,
         selection,
     );
-    candidate.label = format!("{detector} {action}");
-    candidate.description = format!("{detector} project command");
+    candidate.label = format!("{source_name} {action}");
+    candidate.description = format!("{source_name} project command");
     candidate.evidence.push(Evidence {
         kind: EvidenceKind::Manifest,
         reason: format!(
@@ -467,7 +463,8 @@ fn standalone_without_pubspec(target: &Path, explicit: bool) -> Candidate {
     );
     let mut candidate = Candidate::new(
         format!("dart:file:{}", normalized_target_suffix(target)),
-        "dart",
+        DART,
+        DART_SOURCE,
         Intent::Run,
         &identity,
         "dart",
@@ -485,6 +482,7 @@ fn standalone_without_pubspec(target: &Path, explicit: bool) -> Candidate {
     } else {
         CandidateOrigin::Synthetic
     };
+    candidate.layer = CommandLayer::DirectTarget;
     candidate.label = format!("Dart file {}", target.display());
     candidate.description = "Standalone Dart source target".to_owned();
     candidate.evidence.push(Evidence {

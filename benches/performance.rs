@@ -9,6 +9,7 @@ use dev_launcher::cache::CacheLookup;
 use dev_launcher::candidate::{Candidate, SearchDocument, SelectionPolicy};
 use dev_launcher::intent::{Intent, Invocation, Target};
 use dev_launcher::query::{match_candidate, normalize_query};
+use dev_launcher::registry::{NODE, NODE_SOURCE};
 use dev_launcher::scan::{resolve_roots, FileIndex, ScanOptions};
 
 const FILE_COUNT: usize = 10_000;
@@ -107,7 +108,8 @@ fn benchmark_remembered_hit(root: &Path) -> anyhow::Result<Measurement> {
     let index = FileIndex::build(&roots, ScanOptions::default());
     let mut candidate = Candidate::new(
         "bench:remembered",
-        "node",
+        NODE,
+        NODE_SOURCE,
         Intent::Run,
         "dev",
         "sh",
@@ -227,7 +229,8 @@ fn query_candidate(index: usize, count: usize) -> Candidate {
     let identity = format!("participant-{index}");
     let mut candidate = Candidate::new(
         format!("bench:query:{index}"),
-        "node",
+        NODE,
+        NODE_SOURCE,
         Intent::Run,
         &identity,
         "tool",

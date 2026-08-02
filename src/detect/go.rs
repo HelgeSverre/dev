@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use crate::candidate::{Candidate, Evidence, EvidenceKind, SearchDocument, SelectionPolicy};
 use crate::diagnostic::Diagnostic;
 use crate::intent::Intent;
+use crate::registry::{GO, GO_SOURCE};
 use crate::scan::IndexedFileType;
 
 use super::{Detection, Detector, ScanCtx};
@@ -20,14 +21,6 @@ struct GoModule {
 }
 
 impl Detector for GoDetector {
-    fn name(&self) -> &'static str {
-        "go"
-    }
-
-    fn synonyms(&self) -> &'static [&'static str] {
-        &["go", "golang"]
-    }
-
     fn detect(&self, context: &ScanCtx<'_>) -> Detection {
         let (mut modules, mut diagnostics) = modules(context);
         modules.sort_by(|left, right| {
@@ -108,7 +101,7 @@ fn modules(context: &ScanCtx<'_>) -> (Vec<GoModule>, Vec<Diagnostic>) {
         let contents = match context.index.manifests.read(&absolute) {
             Ok(contents) => contents,
             Err(error) => {
-                diagnostics.push(Diagnostic::warning("go", error.to_string(), Some(absolute)));
+                diagnostics.push(Diagnostic::warning(GO, error.to_string(), Some(absolute)));
                 continue;
             }
         };
@@ -122,7 +115,7 @@ fn modules(context: &ScanCtx<'_>) -> (Vec<GoModule>, Vec<Diagnostic>) {
             .to_path_buf();
         let module_path = parse_module_path(&contents).unwrap_or_else(|| {
             diagnostics.push(Diagnostic::warning(
-                "go",
+                GO,
                 "go.mod has no static module directive; using the directory as scope",
                 Some(absolute.clone()),
             ));
@@ -175,7 +168,7 @@ fn package_directories(
             let contents = match context.index.manifests.read(&absolute) {
                 Ok(contents) => contents,
                 Err(error) => {
-                    diagnostics.push(Diagnostic::warning("go", error.to_string(), Some(absolute)));
+                    diagnostics.push(Diagnostic::warning(GO, error.to_string(), Some(absolute)));
                     continue;
                 }
             };
@@ -212,7 +205,8 @@ fn main_candidate(
             module.module_path,
             stable_path_suffix(package_directory)
         ),
-        "go",
+        GO,
+        GO_SOURCE,
         intent,
         &identity,
         "go",
@@ -312,7 +306,8 @@ fn test_candidate(module: &GoModule, local_package: Option<PathBuf>) -> Candidat
                 .as_deref()
                 .map_or_else(|| "all".to_owned(), stable_path_suffix)
         ),
-        "go",
+        GO,
+        GO_SOURCE,
         Intent::Test,
         &identity,
         "go",

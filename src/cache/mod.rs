@@ -9,7 +9,8 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use serde::{Deserialize, Serialize};
 
 use crate::candidate::{
-    Candidate, CandidateId, CandidateOrigin, Lifecycle, PassthroughStyle, SelectionPolicy,
+    Candidate, CandidateId, CandidateOrigin, CommandLayer, Lifecycle, PassthroughStyle,
+    SelectionPolicy,
 };
 use crate::intent::{Invocation, Target};
 use crate::scan::{FileIndex, RootInfo};
@@ -19,8 +20,7 @@ pub use shape::ShapeSnapshot;
 
 use serde_os::StoredOsString;
 
-const CACHE_SCHEMA: u32 = 1;
-const DETECTOR_SCHEMA: u32 = 5;
+const CACHE_SCHEMA: u32 = 2;
 const MATCHER_SCHEMA: u32 = 1;
 const MAX_ENTRIES: usize = 500;
 const MAX_AGE: Duration = Duration::from_secs(90 * 24 * 60 * 60);
@@ -36,7 +36,7 @@ pub struct CacheEntry {
     pub shape: ShapeSnapshot,
     pub cache_schema: u32,
     #[serde(default)]
-    pub detector_schema: u32,
+    pub registry_fingerprint: String,
     pub matcher_schema: u32,
     pub chosen_at_millis: u64,
     pub last_used_at_millis: u64,
@@ -55,7 +55,7 @@ impl CacheEntry {
     #[must_use]
     pub fn is_shape_valid(&self) -> bool {
         self.cache_schema == CACHE_SCHEMA
-            && self.detector_schema == DETECTOR_SCHEMA
+            && self.registry_fingerprint == crate::registry::fingerprint()
             && self.matcher_schema == MATCHER_SCHEMA
             && self.shape.is_current()
     }
@@ -89,16 +89,22 @@ struct ChoiceStore {
 struct StoredCommand {
     action_key: String,
     detector: String,
+    #[serde(default)]
+    source: String,
     intent: crate::intent::Intent,
     action_name: String,
     program: StoredOsString,
     args: Vec<StoredOsString>,
     #[serde(with = "serde_os::path")]
     cwd: PathBuf,
+    #[serde(default, with = "serde_os::path")]
+    scope_root: PathBuf,
     env: Vec<StoredEnvironment>,
     passthrough: PassthroughStyle,
     lifecycle: Lifecycle,
     origin: CandidateOrigin,
+    #[serde(default)]
+    layer: CommandLayer,
     selection: SelectionPolicy,
     base_points: i32,
     label: String,
@@ -115,12 +121,14 @@ impl StoredCommand {
     fn from_candidate(candidate: &Candidate) -> Self {
         Self {
             action_key: candidate.action_key.clone(),
-            detector: candidate.detector.to_owned(),
+            detector: candidate.detector.as_str().to_owned(),
+            source: candidate.source.as_str().to_owned(),
             intent: candidate.intent,
             action_name: candidate.action_name.clone(),
             program: StoredOsString(candidate.program.clone()),
             args: candidate.args.iter().cloned().map(StoredOsString).collect(),
             cwd: candidate.cwd.clone(),
+            scope_root: candidate.scope_root.clone(),
             env: candidate
                 .env
                 .iter()
@@ -132,6 +140,7 @@ impl StoredCommand {
             passthrough: candidate.passthrough,
             lifecycle: candidate.lifecycle,
             origin: candidate.origin,
+            layer: candidate.layer,
             selection: candidate.selection,
             base_points: candidate.base_points,
             label: candidate.label.clone(),
@@ -140,10 +149,14 @@ impl StoredCommand {
     }
 
     fn to_candidate(&self) -> Option<Candidate> {
-        let detector = detector_name(&self.detector)?;
+        let (registration, source) = crate::registry::source_by_name(&self.source)?;
+        if registration.id.as_str() != self.detector {
+            return None;
+        }
         let mut candidate = Candidate::new(
             &self.action_key,
-            detector,
+            registration.id,
+            source.id,
             self.intent,
             &self.action_name,
             self.program.0.clone(),
@@ -163,6 +176,8 @@ impl StoredCommand {
         candidate.passthrough = self.passthrough;
         candidate.lifecycle = self.lifecycle;
         candidate.origin = self.origin;
+        candidate.layer = self.layer;
+        candidate.scope_root = self.scope_root.clone();
         candidate.label.clone_from(&self.label);
         candidate.description.clone_from(&self.description);
         candidate.refresh_id();
@@ -221,7 +236,7 @@ pub fn remember(
         command_fingerprint: candidate.id.as_str().to_owned(),
         shape: ShapeSnapshot::capture(roots, index, candidate, &invocation.target)?,
         cache_schema: CACHE_SCHEMA,
-        detector_schema: DETECTOR_SCHEMA,
+        registry_fingerprint: crate::registry::fingerprint().to_owned(),
         matcher_schema: MATCHER_SCHEMA,
         chosen_at_millis: now,
         last_used_at_millis: now,
@@ -252,7 +267,7 @@ pub fn refresh(
             entry.command_fingerprint = candidate.id.as_str().to_owned();
             entry.shape = shape;
             entry.cache_schema = CACHE_SCHEMA;
-            entry.detector_schema = DETECTOR_SCHEMA;
+            entry.registry_fingerprint = crate::registry::fingerprint().to_owned();
             entry.matcher_schema = MATCHER_SCHEMA;
             entry.last_used_at_millis = now;
             entry.command = command;
@@ -379,28 +394,6 @@ fn now_millis() -> u64 {
     u64::try_from(millis).unwrap_or(u64::MAX)
 }
 
-fn detector_name(name: &str) -> Option<&'static str> {
-    match name {
-        "node" => Some("node"),
-        "vite" => Some("vite"),
-        "next" => Some("next"),
-        "cargo" => Some("cargo"),
-        "composer" => Some("composer"),
-        "artisan" => Some("artisan"),
-        "php-file" => Some("php-file"),
-        "go" => Some("go"),
-        "zig" => Some("zig"),
-        "swift" => Some("swift"),
-        "flutter" => Some("flutter"),
-        "dart" => Some("dart"),
-        "python-file" => Some("python-file"),
-        "make" => Some("make"),
-        "docker" => Some("docker"),
-        "shell" => Some("shell"),
-        _ => None,
-    }
-}
-
 #[cfg(all(test, unix))]
 mod tests {
     use std::collections::BTreeMap;
@@ -410,6 +403,7 @@ mod tests {
 
     use crate::candidate::{Candidate, SelectionPolicy};
     use crate::intent::Intent;
+    use crate::registry::{NODE, NODE_SOURCE};
 
     use super::StoredCommand;
 
@@ -417,7 +411,8 @@ mod tests {
     fn cached_commands_preserve_non_utf8_process_values() -> anyhow::Result<()> {
         let mut candidate = Candidate::new(
             "node:opaque",
-            "node",
+            NODE,
+            NODE_SOURCE,
             Intent::Run,
             "opaque",
             OsString::from_vec(vec![b'n', 0x80, b'm']),

@@ -170,6 +170,7 @@ mod tests {
 
     use crate::candidate::{Availability, Candidate, SelectionPolicy};
     use crate::intent::Intent;
+    use crate::registry::{SHELL, SHELL_SOURCE};
 
     use super::{execute, ExecutionOptions};
 
@@ -187,7 +188,8 @@ mod tests {
             std::env::var_os("DEV_EXEC_TEST_OUTPUT").expect("helper output path must be set");
         let mut candidate = Candidate::new(
             "test:exec-environment",
-            "shell",
+            SHELL,
+            SHELL_SOURCE,
             Intent::Run,
             "exec-environment",
             program.as_os_str(),

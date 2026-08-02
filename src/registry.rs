@@ -660,6 +660,11 @@ pub fn registration(id: DetectorId) -> Option<&'static DetectorRegistration> {
 }
 
 #[must_use]
+pub fn synonyms(id: DetectorId) -> &'static [&'static str] {
+    registration(id).map_or(&[], |registration| registration.synonyms)
+}
+
+#[must_use]
 pub fn source(
     id: CandidateSourceId,
 ) -> Option<(

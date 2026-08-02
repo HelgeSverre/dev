@@ -66,8 +66,11 @@ pub fn render(
         let _ = writeln!(output, "  cwd: {}", ranked.candidate.cwd.display());
         let _ = writeln!(
             output,
-            "  policy: {:?}; availability: {:?}",
-            ranked.candidate.selection, ranked.candidate.availability
+            "  source: {}; layer: {:?}; policy: {:?}; availability: {:?}",
+            ranked.candidate.source,
+            ranked.candidate.layer,
+            ranked.candidate.selection,
+            ranked.candidate.availability
         );
         if !ranked.query.terms.is_empty() {
             let _ = writeln!(

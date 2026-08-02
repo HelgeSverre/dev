@@ -2,10 +2,11 @@ use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
 use crate::candidate::{
-    Candidate, CandidateOrigin, Evidence, EvidenceKind, Lifecycle, PassthroughStyle,
+    Candidate, CandidateOrigin, CommandLayer, Evidence, EvidenceKind, Lifecycle, PassthroughStyle,
     SearchDocument, SelectionPolicy,
 };
 use crate::intent::Intent;
+use crate::registry::{ZIG, ZIG_SOURCE};
 use crate::scan::{IndexEntry, IndexedFileType};
 
 use super::target::{explicitly_anchored, target_scope};
@@ -14,14 +15,6 @@ use super::{Detection, Detector, ScanCtx, TargetRunner};
 pub struct ZigDetector;
 
 impl Detector for ZigDetector {
-    fn name(&self) -> &'static str {
-        "zig"
-    }
-
-    fn synonyms(&self) -> &'static [&'static str] {
-        &["zig"]
-    }
-
     fn detect(&self, context: &ScanCtx<'_>) -> Detection {
         let candidates = build_projects(context)
             .into_iter()
@@ -92,7 +85,8 @@ fn build_candidate(intent: Intent, build_file: &Path) -> Candidate {
     };
     let mut candidate = Candidate::new(
         format!("zig:{scope}:build:{action}"),
-        "zig",
+        ZIG,
+        ZIG_SOURCE,
         intent,
         action,
         "zig",
@@ -147,7 +141,8 @@ fn standalone_candidate(absolute: &Path, relative: &Path, explicit: bool) -> Can
             "zig:file:{}",
             relative.to_string_lossy().replace(['/', '\\'], ":")
         ),
-        "zig",
+        ZIG,
+        ZIG_SOURCE,
         Intent::Run,
         &stem,
         "zig",
@@ -166,6 +161,7 @@ fn standalone_candidate(absolute: &Path, relative: &Path, explicit: bool) -> Can
     } else {
         CandidateOrigin::Synthetic
     };
+    candidate.layer = CommandLayer::DirectTarget;
     candidate.label = format!("Zig file {}", relative.display());
     candidate.description = "Standalone Zig source target".to_owned();
     candidate.evidence.push(Evidence {

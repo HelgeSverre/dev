@@ -135,6 +135,7 @@ mod tests {
 
     use crate::candidate::{Candidate, SelectionPolicy};
     use crate::intent::Intent;
+    use crate::registry::{NODE, NODE_SOURCE};
 
     use super::*;
 
@@ -142,7 +143,8 @@ mod tests {
     fn posix_rendering_quotes_empty_and_single_quote_arguments() -> anyhow::Result<()> {
         let candidate = Candidate::new(
             "test",
-            "test",
+            NODE,
+            NODE_SOURCE,
             Intent::Run,
             "test",
             "tool",
@@ -160,7 +162,8 @@ mod tests {
     fn powershell_rendering_quotes_cwd_environment_and_arguments() -> anyhow::Result<()> {
         let mut candidate = Candidate::new(
             "test",
-            "test",
+            NODE,
+            NODE_SOURCE,
             Intent::Run,
             "test",
             "tool.exe",
@@ -187,7 +190,8 @@ mod tests {
 
         let mut candidate = Candidate::new(
             "test",
-            "test",
+            NODE,
+            NODE_SOURCE,
             Intent::Run,
             "test",
             OsString::from_vec(vec![b't', 0x80, b'o', b'o', b'l']),

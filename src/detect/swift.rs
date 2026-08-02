@@ -3,10 +3,11 @@ use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
 use crate::candidate::{
-    Candidate, Evidence, EvidenceKind, Lifecycle, SearchDocument, SelectionPolicy,
+    Candidate, CommandLayer, Evidence, EvidenceKind, Lifecycle, SearchDocument, SelectionPolicy,
 };
 use crate::diagnostic::{Diagnostic, Severity};
 use crate::intent::Intent;
+use crate::registry::{SWIFT, SWIFT_SOURCE};
 use crate::scan::IndexedFileType;
 
 use super::{Detection, Detector, ScanCtx};
@@ -22,14 +23,6 @@ struct SwiftProject {
 }
 
 impl Detector for SwiftDetector {
-    fn name(&self) -> &'static str {
-        "swift"
-    }
-
-    fn synonyms(&self) -> &'static [&'static str] {
-        &["swift", "spm", "xcode"]
-    }
-
     fn detect(&self, context: &ScanCtx<'_>) -> Detection {
         let projects = projects(context);
         let targets = executable_targets(context, &projects);
@@ -168,7 +161,8 @@ fn run_candidates(project: &SwiftProject, targets: &BTreeMap<String, PathBuf>) -
             }
             let mut candidate = Candidate::new(
                 format!("swift:{}:run:{target}", project.scope),
-                "swift",
+                SWIFT,
+                SWIFT_SOURCE,
                 Intent::Run,
                 target,
                 "swift",
@@ -178,6 +172,7 @@ fn run_candidates(project: &SwiftProject, targets: &BTreeMap<String, PathBuf>) -
                 SelectionPolicy::Automatic,
             );
             candidate.lifecycle = Lifecycle::Finite;
+            candidate.layer = CommandLayer::DirectTarget;
             candidate.label = format!("Swift executable {target}");
             candidate.description = "Conventional SwiftPM executable target".to_owned();
             add_project_evidence(&mut candidate, project, "run");
@@ -206,7 +201,8 @@ fn package_action(
 ) -> Candidate {
     let mut candidate = Candidate::new(
         format!("swift:{}:{action}", project.scope),
-        "swift",
+        SWIFT,
+        SWIFT_SOURCE,
         intent,
         action,
         "swift",
@@ -269,7 +265,7 @@ fn xcode_diagnostics(context: &ScanCtx<'_>) -> Vec<Diagnostic> {
     paths
         .iter()
         .map(|path| Diagnostic {
-            detector: "swift",
+            detector: SWIFT,
             severity: Severity::Info,
             message:
                 "Xcode project has no static scheme and destination data; no command was inferred"

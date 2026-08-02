@@ -9,6 +9,7 @@ use crate::candidate::{
 };
 use crate::diagnostic::Diagnostic;
 use crate::intent::Intent;
+use crate::registry::{DOCKER, DOCKER_SOURCE};
 use crate::scan::IndexedFileType;
 
 use super::{Detection, Detector, ScanCtx};
@@ -29,14 +30,6 @@ struct ComposeFile {
 }
 
 impl Detector for DockerDetector {
-    fn name(&self) -> &'static str {
-        "docker"
-    }
-
-    fn synonyms(&self) -> &'static [&'static str] {
-        &["docker", "compose", "container"]
-    }
-
     fn detect(&self, context: &ScanCtx<'_>) -> Detection {
         match context.invocation.intent {
             Intent::Run => compose_candidates(context),
@@ -56,7 +49,7 @@ fn compose_candidates(context: &ScanCtx<'_>) -> Detection {
             Ok(contents) => contents,
             Err(error) => {
                 output.diagnostics.push(Diagnostic::warning(
-                    "docker",
+                    DOCKER,
                     error.to_string(),
                     Some(manifest_path),
                 ));
@@ -67,7 +60,7 @@ fn compose_candidates(context: &ScanCtx<'_>) -> Detection {
             Ok(manifest) => manifest,
             Err(error) => {
                 output.diagnostics.push(Diagnostic::warning(
-                    "docker",
+                    DOCKER,
                     format!("invalid Compose YAML: {error}"),
                     Some(manifest_path),
                 ));
@@ -163,7 +156,8 @@ fn compose_up_candidate(
     let action = service.map_or("compose", String::as_str);
     let mut candidate = Candidate::new(
         action_key,
-        "docker",
+        DOCKER,
+        DOCKER_SOURCE,
         Intent::Run,
         action,
         "docker",
@@ -236,7 +230,8 @@ fn dockerfile_candidates(context: &ScanCtx<'_>) -> Vec<Candidate> {
             );
             let mut candidate = Candidate::new(
                 format!("docker:{}:build", normalized_parent(&entry.relative_path)),
-                "docker",
+                DOCKER,
+                DOCKER_SOURCE,
                 Intent::Build,
                 "build",
                 "docker",

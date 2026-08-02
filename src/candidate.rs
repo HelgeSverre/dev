@@ -6,6 +6,7 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 
 use crate::intent::Intent;
+use crate::registry::{CandidateSourceId, DetectorId};
 
 pub type Points = i32;
 
@@ -100,6 +101,19 @@ pub enum CandidateOrigin {
     Synthetic,
 }
 
+/// Semantic layer of a command relative to the project interface.
+#[derive(
+    Copy, Clone, Default, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Serialize, Deserialize,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum CommandLayer {
+    ProjectFacade,
+    EcosystemTask,
+    #[default]
+    ToolDefault,
+    DirectTarget,
+}
+
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Lifecycle {
@@ -162,7 +176,8 @@ pub struct SearchDocument {
 pub struct Candidate {
     pub id: CandidateId,
     pub action_key: String,
-    pub detector: &'static str,
+    pub detector: DetectorId,
+    pub source: CandidateSourceId,
     pub intent: Intent,
     pub action_name: String,
     pub program: OsString,
@@ -177,6 +192,7 @@ pub struct Candidate {
     pub passthrough: PassthroughStyle,
     pub lifecycle: Lifecycle,
     pub origin: CandidateOrigin,
+    pub layer: CommandLayer,
     pub selection: SelectionPolicy,
     pub availability: Availability,
     pub base_points: Points,
@@ -193,7 +209,8 @@ impl Candidate {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         action_key: impl Into<String>,
-        detector: &'static str,
+        detector: DetectorId,
+        source: CandidateSourceId,
         intent: Intent,
         action_name: impl Into<String>,
         program: impl Into<OsString>,
@@ -206,6 +223,7 @@ impl Candidate {
             id: CandidateId(String::new()),
             action_key: action_key.into(),
             detector,
+            source,
             intent,
             action_name: action_name.into(),
             program: program.into(),
@@ -216,6 +234,7 @@ impl Candidate {
             passthrough: PassthroughStyle::Append,
             lifecycle: Lifecycle::Finite,
             origin: CandidateOrigin::Declared,
+            layer: CommandLayer::ToolDefault,
             selection,
             availability: Availability::MissingProgram {
                 program: OsString::new(),

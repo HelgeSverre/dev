@@ -5,6 +5,7 @@ use dev_launcher::intent::Intent;
 use dev_launcher::query::{
     match_candidate, normalize_query, MatchClass, MatchStrategy, QueryMatch,
 };
+use dev_launcher::registry::source_by_name;
 use dev_launcher::resolve::{resolve, ResolutionStatus};
 
 fn candidate(
@@ -13,9 +14,12 @@ fn candidate(
     identity: &str,
     policy: SelectionPolicy,
 ) -> Candidate {
+    let (registration, source) = source_by_name(detector)
+        .unwrap_or_else(|| panic!("query fixture uses registered source `{detector}`"));
     let mut candidate = Candidate::new(
         key,
-        detector,
+        registration.id,
+        source.id,
         Intent::Run,
         identity,
         "tool",
@@ -196,7 +200,7 @@ fn negative_queries_never_turn_context_into_execution() {
     ] {
         let short = candidate(
             &format!("query:{identity}"),
-            "node",
+            "shell",
             identity,
             SelectionPolicy::Automatic,
         );

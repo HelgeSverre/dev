@@ -2,9 +2,11 @@ use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
 use crate::candidate::{
-    Candidate, CandidateOrigin, Evidence, EvidenceKind, Lifecycle, SearchDocument, SelectionPolicy,
+    Candidate, CandidateOrigin, CommandLayer, Evidence, EvidenceKind, Lifecycle, SearchDocument,
+    SelectionPolicy,
 };
 use crate::intent::Intent;
+use crate::registry::{SHELL, SHELL_SOURCE};
 use crate::scan::{IndexEntry, IndexedFileType};
 
 use super::script::{read_shebang, Shebang};
@@ -14,14 +16,6 @@ use super::{Detection, Detector, ScanCtx, TargetRunner};
 pub struct ShellDetector;
 
 impl Detector for ShellDetector {
-    fn name(&self) -> &'static str {
-        "shell"
-    }
-
-    fn synonyms(&self) -> &'static [&'static str] {
-        &["shell", "script", "sh"]
-    }
-
     fn detect(&self, context: &ScanCtx<'_>) -> Detection {
         let mut candidates = context
             .index
@@ -194,7 +188,8 @@ fn script_candidate(
             intent,
             relative_to_scan.to_string_lossy().replace(['/', '\\'], ":")
         ),
-        "shell",
+        SHELL,
+        SHELL_SOURCE,
         intent,
         &stem,
         program,
@@ -204,6 +199,7 @@ fn script_candidate(
         selection,
     );
     candidate.origin = origin;
+    candidate.layer = CommandLayer::DirectTarget;
     candidate.lifecycle = Lifecycle::Finite;
     candidate.label = format!("Script {}", relative_to_scan.display());
     candidate.description = format!("Script target using {runner_reason}");

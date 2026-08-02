@@ -3,9 +3,11 @@ use std::io::Read as _;
 use std::path::{Path, PathBuf};
 
 use crate::candidate::{
-    Candidate, CandidateOrigin, Evidence, EvidenceKind, SearchDocument, SelectionPolicy,
+    Candidate, CandidateOrigin, CommandLayer, Evidence, EvidenceKind, SearchDocument,
+    SelectionPolicy,
 };
 use crate::intent::Intent;
+use crate::registry::{PHP_FILE, PHP_FILE_SOURCE};
 use crate::scan::{IndexEntry, IndexedFileType};
 
 use super::target::{explicitly_anchored, target_scope};
@@ -14,14 +16,6 @@ use super::{Detection, Detector, ScanCtx, TargetRunner};
 pub struct PhpFileDetector;
 
 impl Detector for PhpFileDetector {
-    fn name(&self) -> &'static str {
-        "php-file"
-    }
-
-    fn synonyms(&self) -> &'static [&'static str] {
-        &["php"]
-    }
-
     fn detect(&self, _context: &ScanCtx<'_>) -> Detection {
         Detection::default()
     }
@@ -76,7 +70,8 @@ fn file_candidate(
             "php-file:{}",
             relative_to_scan.to_string_lossy().replace(['/', '\\'], ":")
         ),
-        "php-file",
+        PHP_FILE,
+        PHP_FILE_SOURCE,
         Intent::Run,
         &stem,
         program,
@@ -94,6 +89,7 @@ fn file_candidate(
     } else {
         CandidateOrigin::Synthetic
     };
+    candidate.layer = CommandLayer::DirectTarget;
     candidate.label = format!("PHP file {}", relative_to_scan.display());
     candidate.description = format!("Standalone PHP target using {runner_reason}");
     candidate.evidence.push(Evidence {

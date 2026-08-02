@@ -3,10 +3,11 @@ use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
 use crate::candidate::{
-    Candidate, Evidence, EvidenceKind, Lifecycle, SearchDocument, SelectionPolicy,
+    Candidate, CommandLayer, Evidence, EvidenceKind, Lifecycle, SearchDocument, SelectionPolicy,
 };
 use crate::diagnostic::Diagnostic;
 use crate::intent::Intent;
+use crate::registry::{MAKE, MAKE_SOURCE};
 use crate::scan::IndexedFileType;
 
 use super::{Detection, Detector, ScanCtx};
@@ -22,14 +23,6 @@ struct MakeTarget {
 }
 
 impl Detector for MakeDetector {
-    fn name(&self) -> &'static str {
-        "make"
-    }
-
-    fn synonyms(&self) -> &'static [&'static str] {
-        &["make", "makefile"]
-    }
-
     fn detect(&self, context: &ScanCtx<'_>) -> Detection {
         let mut output = Detection::default();
         for (manifest_path, relative_manifest, directory) in makefiles(context) {
@@ -37,7 +30,7 @@ impl Detector for MakeDetector {
                 Ok(contents) => contents,
                 Err(error) => {
                     output.diagnostics.push(Diagnostic::warning(
-                        "make",
+                        MAKE,
                         error.to_string(),
                         Some(manifest_path),
                     ));
@@ -45,15 +38,12 @@ impl Detector for MakeDetector {
                 }
             };
             let targets = parse_targets(&contents);
-            let first = targets.first().map(|target| target.name.as_str());
             output.candidates.extend(targets.iter().map(|target| {
                 target_candidate(
                     context.invocation.intent,
                     &directory,
                     &relative_manifest,
                     target,
-                    first,
-                    &targets,
                 )
             }));
         }
@@ -119,15 +109,8 @@ fn target_candidate(
     directory: &Path,
     relative_manifest: &Path,
     target: &MakeTarget,
-    first: Option<&str>,
-    all_targets: &[MakeTarget],
 ) -> Candidate {
-    let declared = all_targets
-        .iter()
-        .map(|target| target.name.as_str())
-        .collect::<BTreeSet<_>>();
-    let (selection, base_points, convention) =
-        target_policy(intent, &target.name, first, &declared);
+    let (selection, base_points, convention) = target_policy(intent, &target.name);
     let scope = directory.file_name().map_or_else(
         || "make-project".to_owned(),
         |name| name.to_string_lossy().into_owned(),
@@ -138,7 +121,8 @@ fn target_candidate(
             normalized_parent(relative_manifest),
             target.name
         ),
-        "make",
+        MAKE,
+        MAKE_SOURCE,
         intent,
         &target.name,
         "make",
@@ -153,6 +137,7 @@ fn target_candidate(
         } else {
             Lifecycle::Finite
         };
+    candidate.layer = CommandLayer::ProjectFacade;
     candidate.label = format!("Make target {}", target.name);
     candidate.description = target
         .help
@@ -195,12 +180,7 @@ fn normalized_parent(path: &Path) -> String {
         )
 }
 
-fn target_policy(
-    intent: Intent,
-    name: &str,
-    first: Option<&str>,
-    declared: &BTreeSet<&str>,
-) -> (SelectionPolicy, i32, String) {
+fn target_policy(intent: Intent, name: &str) -> (SelectionPolicy, i32, String) {
     let canonical = match intent {
         Intent::Run => matches!(name, "run" | "dev" | "serve" | "start"),
         Intent::Build => matches!(name, "build" | "all"),
@@ -216,17 +196,6 @@ fn target_policy(
             SelectionPolicy::Automatic,
             points,
             format!("`{name}` is a conventional {intent} target"),
-        );
-    }
-    if intent == Intent::Build
-        && !declared.contains("build")
-        && !declared.contains("all")
-        && first == Some(name)
-    {
-        return (
-            SelectionPolicy::Automatic,
-            75,
-            "literal first eligible target is Make's default goal".to_owned(),
         );
     }
     (

@@ -5,11 +5,12 @@ use std::path::{Path, PathBuf};
 use serde::Deserialize;
 
 use crate::candidate::{
-    Candidate, CandidateOrigin, Evidence, EvidenceKind, Lifecycle, PassthroughStyle,
+    Candidate, CandidateOrigin, CommandLayer, Evidence, EvidenceKind, Lifecycle, PassthroughStyle,
     SearchDocument, SelectionPolicy,
 };
 use crate::diagnostic::Diagnostic;
 use crate::intent::Intent;
+use crate::registry::{NEXT_SOURCE, NODE, NODE_SOURCE, VITE_SOURCE};
 use crate::scan::{IndexEntry, IndexedFileType};
 
 use super::{Detection, Detector, ScanCtx, TargetBinder};
@@ -187,24 +188,6 @@ impl PackageManager {
 }
 
 impl Detector for NodeDetector {
-    fn name(&self) -> &'static str {
-        "node"
-    }
-
-    fn synonyms(&self) -> &'static [&'static str] {
-        &[
-            "javascript",
-            "js",
-            "typescript",
-            "ts",
-            "node",
-            "npm",
-            "pnpm",
-            "yarn",
-            "bun",
-        ]
-    }
-
     fn detect(&self, context: &ScanCtx<'_>) -> Detection {
         let mut output = Detection::default();
         for manifest_path in package_manifests(context) {
@@ -213,7 +196,7 @@ impl Detector for NodeDetector {
                 Ok(contents) => contents,
                 Err(error) => {
                     output.diagnostics.push(Diagnostic::warning(
-                        self.name(),
+                        NODE,
                         error.to_string(),
                         Some(absolute_manifest),
                     ));
@@ -224,7 +207,7 @@ impl Detector for NodeDetector {
                 Ok(manifest) => manifest,
                 Err(error) => {
                     output.diagnostics.push(Diagnostic::warning(
-                        self.name(),
+                        NODE,
                         format!("invalid package.json: {error}"),
                         Some(absolute_manifest),
                     ));
@@ -238,7 +221,7 @@ impl Detector for NodeDetector {
             for (script, value) in &manifest.scripts {
                 if !value.is_string() {
                     output.diagnostics.push(Diagnostic::warning(
-                        self.name(),
+                        NODE,
                         format!("ignoring non-string package script `{script}`"),
                         Some(absolute_manifest.clone()),
                     ));
@@ -255,20 +238,20 @@ impl Detector for NodeDetector {
                 manager,
                 &manager_reason,
                 framework,
-                self.synonyms(),
+                crate::registry::synonyms(NODE),
             ));
             if context.invocation.intent == Intent::Run {
                 output.candidates.extend(bin_candidates(
                     &manifest,
                     &manifest_path,
                     &package_directory,
-                    self.synonyms(),
+                    crate::registry::synonyms(NODE),
                 ));
                 output.candidates.extend(conventional_file_candidates(
                     context,
                     &manifest_path,
                     &package_directory,
-                    self.synonyms(),
+                    crate::registry::synonyms(NODE),
                 ));
             }
             if let Some(framework) = framework {
@@ -279,7 +262,7 @@ impl Detector for NodeDetector {
                     &package_directory,
                     manager,
                     framework,
-                    self.synonyms(),
+                    crate::registry::synonyms(NODE),
                 ));
             }
         }
@@ -376,10 +359,15 @@ fn script_candidates(
                         | ("next", Intent::Build, "build")
                 )
             });
-            let detector_name = detector.unwrap_or("node");
+            let source = match detector {
+                Some("vite") => VITE_SOURCE,
+                Some("next") => NEXT_SOURCE,
+                _ => NODE_SOURCE,
+            };
             let mut candidate = Candidate::new(
                 format!("node:{}:script:{script}", action_scope),
-                detector_name,
+                NODE,
+                source,
                 context.invocation.intent,
                 script,
                 manager.program(),
@@ -392,6 +380,7 @@ fn script_candidates(
                 selection,
             );
             candidate.scope_root = package_directory.to_path_buf();
+            candidate.layer = CommandLayer::EcosystemTask;
             candidate.passthrough = manager.passthrough();
             candidate.lifecycle = if context.invocation.intent == Intent::Run {
                 Lifecycle::LongRunning
@@ -644,7 +633,8 @@ fn bin_candidates(
                     "node:{}:bin:{name}",
                     package_scope(manifest, package_directory)
                 ),
-                "node",
+                NODE,
+                NODE_SOURCE,
                 Intent::Run,
                 &name,
                 "node",
@@ -654,6 +644,7 @@ fn bin_candidates(
                 SelectionPolicy::ExplicitHint,
             );
             candidate.label = format!("Node binary `{name}`");
+            candidate.layer = CommandLayer::DirectTarget;
             candidate.description = "Explicit package.json bin entry".to_owned();
             candidate.evidence.push(Evidence {
                 kind: EvidenceKind::Manifest,
@@ -685,7 +676,8 @@ fn conventional_file_candidates(
         .map(|filename| {
             let mut candidate = Candidate::new(
                 format!("node:{}:file:{filename}", package_directory.display()),
-                "node",
+                NODE,
+                NODE_SOURCE,
                 Intent::Run,
                 filename,
                 "node",
@@ -699,6 +691,7 @@ fn conventional_file_candidates(
                 },
             );
             candidate.origin = CandidateOrigin::Conventional;
+            candidate.layer = CommandLayer::DirectTarget;
             candidate.lifecycle = Lifecycle::LongRunning;
             candidate.label = format!("Node file `{filename}`");
             candidate.description = "Conventional Node entry file".to_owned();
@@ -793,7 +786,12 @@ fn framework_fallbacks(
                     "{framework}:{}:{name}",
                     package_scope(manifest, package_directory)
                 ),
-                framework,
+                NODE,
+                if framework == "vite" {
+                    VITE_SOURCE
+                } else {
+                    NEXT_SOURCE
+                },
                 context.invocation.intent,
                 name,
                 manager.program(),
@@ -1057,7 +1055,8 @@ mod tests {
     fn pnpm_local_exec_disables_dependency_auto_install_preflight() {
         let mut candidate = Candidate::new(
             "vite:test",
-            "vite",
+            NODE,
+            VITE_SOURCE,
             Intent::Run,
             "dev",
             "pnpm",

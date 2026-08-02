@@ -3,11 +3,12 @@ use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
 
 use crate::candidate::{
-    Availability, Candidate, CandidateOrigin, Evidence, EvidenceKind, SearchDocument,
+    Availability, Candidate, CandidateOrigin, CommandLayer, Evidence, EvidenceKind, SearchDocument,
     SelectionPolicy,
 };
 use crate::intent::Intent;
 use crate::path::resolve_program;
+use crate::registry::{PYTHON_FILE, PYTHON_FILE_SOURCE};
 use crate::scan::{IndexEntry, IndexedFileType};
 
 use super::target::{explicitly_anchored, target_scope};
@@ -16,14 +17,6 @@ use super::{Detection, Detector, ScanCtx, TargetRunner};
 pub struct PythonFileDetector;
 
 impl Detector for PythonFileDetector {
-    fn name(&self) -> &'static str {
-        "python-file"
-    }
-
-    fn synonyms(&self) -> &'static [&'static str] {
-        &["python", "py"]
-    }
-
     fn detect(&self, _context: &ScanCtx<'_>) -> Detection {
         Detection::default()
     }
@@ -59,7 +52,8 @@ fn file_candidate(absolute: &Path, relative_to_scan: &Path, explicit: bool) -> C
             "python-file:{}",
             relative_to_scan.to_string_lossy().replace(['/', '\\'], ":")
         ),
-        "python-file",
+        PYTHON_FILE,
+        PYTHON_FILE_SOURCE,
         Intent::Run,
         &stem,
         program,
@@ -77,6 +71,7 @@ fn file_candidate(absolute: &Path, relative_to_scan: &Path, explicit: bool) -> C
     } else {
         CandidateOrigin::Synthetic
     };
+    candidate.layer = CommandLayer::DirectTarget;
     candidate.label = format!("Python file {}", relative_to_scan.display());
     candidate.description = format!("Standalone Python target using {runner_reason}");
     candidate.evidence.push(Evidence {

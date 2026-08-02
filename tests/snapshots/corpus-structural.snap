@@ -1,18 +1,18 @@
-schema=1 repositories=55
+schema=2 repositories=55
 
 ## 01-node-npm/run
 roots package=. workspace=- scan=.
 scan structural=1 targets=0 truncated=false
 resolution status=Resolved reason=UniqueAutomaticCandidate selected=node:node-npm:script:dev
-candidate action=node:node-npm:script:dev detector=node origin=Declared policy=Automatic base=95 total=120 distance=0 cwd=. program="npm" args=["run","dev"] availability=available
+candidate action=node:node-npm:script:dev detector=node source=node layer=EcosystemTask origin=Declared policy=Automatic base=95 total=120 distance=0 cwd=. scope=. program="npm" args=["run","dev"] availability=available
   evidence kind=Manifest points=0 source=package.json reason=package.json declares script `dev`
   evidence kind=Proximity points=30 source=. reason=same directory as target
   evidence kind=Rule points=-5 source=- reason=defaulted to npm because no package-manager marker was found
-candidate action=node:node-npm:script:build detector=node origin=Declared policy=ExplicitHint base=15 total=40 distance=0 cwd=. program="npm" args=["run","build"] availability=available
+candidate action=node:node-npm:script:build detector=node source=node layer=EcosystemTask origin=Declared policy=ExplicitHint base=15 total=40 distance=0 cwd=. scope=. program="npm" args=["run","build"] availability=available
   evidence kind=Manifest points=0 source=package.json reason=package.json declares script `build`
   evidence kind=Proximity points=30 source=. reason=same directory as target
   evidence kind=Rule points=-5 source=- reason=defaulted to npm because no package-manager marker was found
-candidate action=node:node-npm:script:test detector=node origin=Declared policy=ExplicitHint base=15 total=40 distance=0 cwd=. program="npm" args=["run","test"] availability=available
+candidate action=node:node-npm:script:test detector=node source=node layer=EcosystemTask origin=Declared policy=ExplicitHint base=15 total=40 distance=0 cwd=. scope=. program="npm" args=["run","test"] availability=available
   evidence kind=Manifest points=0 source=package.json reason=package.json declares script `test`
   evidence kind=Proximity points=30 source=. reason=same directory as target
   evidence kind=Rule points=-5 source=- reason=defaulted to npm because no package-manager marker was found
@@ -21,7 +21,7 @@ candidate action=node:node-npm:script:test detector=node origin=Declared policy=
 roots package=. workspace=- scan=.
 scan structural=1 targets=0 truncated=false
 resolution status=Resolved reason=UniqueAutomaticCandidate selected=node:node-npm:script:build
-candidate action=node:node-npm:script:build detector=node origin=Declared policy=Automatic base=95 total=120 distance=0 cwd=. program="npm" args=["run","build"] availability=available
+candidate action=node:node-npm:script:build detector=node source=node layer=EcosystemTask origin=Declared policy=Automatic base=95 total=120 distance=0 cwd=. scope=. program="npm" args=["run","build"] availability=available
   evidence kind=Manifest points=0 source=package.json reason=package.json declares script `build`
   evidence kind=Proximity points=30 source=. reason=same directory as target
   evidence kind=Rule points=-5 source=- reason=defaulted to npm because no package-manager marker was found
@@ -30,7 +30,7 @@ candidate action=node:node-npm:script:build detector=node origin=Declared policy
 roots package=. workspace=- scan=.
 scan structural=1 targets=0 truncated=false
 resolution status=Resolved reason=UniqueAutomaticCandidate selected=node:node-npm:script:test
-candidate action=node:node-npm:script:test detector=node origin=Declared policy=Automatic base=95 total=120 distance=0 cwd=. program="npm" args=["run","test"] availability=available
+candidate action=node:node-npm:script:test detector=node source=node layer=EcosystemTask origin=Declared policy=Automatic base=95 total=120 distance=0 cwd=. scope=. program="npm" args=["run","test"] availability=available
   evidence kind=Manifest points=0 source=package.json reason=package.json declares script `test`
   evidence kind=Proximity points=30 source=. reason=same directory as target
   evidence kind=Rule points=-5 source=- reason=defaulted to npm because no package-manager marker was found
@@ -39,15 +39,15 @@ candidate action=node:node-npm:script:test detector=node origin=Declared policy=
 roots package=. workspace=- scan=.
 scan structural=2 targets=0 truncated=false
 resolution status=Resolved reason=UniqueAutomaticCandidate selected=node:node-pnpm:script:dev
-candidate action=node:node-pnpm:script:dev detector=node origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. program="pnpm" args=["run","dev"] availability=available
+candidate action=node:node-pnpm:script:dev detector=node source=node layer=EcosystemTask origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. scope=. program="pnpm" args=["run","dev"] availability=available
   evidence kind=Manifest points=0 source=package.json reason=package.json declares script `dev`
   evidence kind=Proximity points=30 source=. reason=same directory as target
   evidence kind=Rule points=0 source=- reason=selected by <fixture>/pnpm-lock.yaml
-candidate action=node:node-pnpm:script:build detector=node origin=Declared policy=ExplicitHint base=15 total=45 distance=0 cwd=. program="pnpm" args=["run","build"] availability=available
+candidate action=node:node-pnpm:script:build detector=node source=node layer=EcosystemTask origin=Declared policy=ExplicitHint base=15 total=45 distance=0 cwd=. scope=. program="pnpm" args=["run","build"] availability=available
   evidence kind=Manifest points=0 source=package.json reason=package.json declares script `build`
   evidence kind=Proximity points=30 source=. reason=same directory as target
   evidence kind=Rule points=0 source=- reason=selected by <fixture>/pnpm-lock.yaml
-candidate action=node:node-pnpm:script:test detector=node origin=Declared policy=ExplicitHint base=15 total=45 distance=0 cwd=. program="pnpm" args=["run","test"] availability=available
+candidate action=node:node-pnpm:script:test detector=node source=node layer=EcosystemTask origin=Declared policy=ExplicitHint base=15 total=45 distance=0 cwd=. scope=. program="pnpm" args=["run","test"] availability=available
   evidence kind=Manifest points=0 source=package.json reason=package.json declares script `test`
   evidence kind=Proximity points=30 source=. reason=same directory as target
   evidence kind=Rule points=0 source=- reason=selected by <fixture>/pnpm-lock.yaml
@@ -56,7 +56,7 @@ candidate action=node:node-pnpm:script:test detector=node origin=Declared policy
 roots package=. workspace=- scan=.
 scan structural=2 targets=0 truncated=false
 resolution status=Resolved reason=UniqueAutomaticCandidate selected=node:node-pnpm:script:build
-candidate action=node:node-pnpm:script:build detector=node origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. program="pnpm" args=["run","build"] availability=available
+candidate action=node:node-pnpm:script:build detector=node source=node layer=EcosystemTask origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. scope=. program="pnpm" args=["run","build"] availability=available
   evidence kind=Manifest points=0 source=package.json reason=package.json declares script `build`
   evidence kind=Proximity points=30 source=. reason=same directory as target
   evidence kind=Rule points=0 source=- reason=selected by <fixture>/pnpm-lock.yaml
@@ -65,7 +65,7 @@ candidate action=node:node-pnpm:script:build detector=node origin=Declared polic
 roots package=. workspace=- scan=.
 scan structural=2 targets=0 truncated=false
 resolution status=Resolved reason=UniqueAutomaticCandidate selected=node:node-pnpm:script:test
-candidate action=node:node-pnpm:script:test detector=node origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. program="pnpm" args=["run","test"] availability=available
+candidate action=node:node-pnpm:script:test detector=node source=node layer=EcosystemTask origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. scope=. program="pnpm" args=["run","test"] availability=available
   evidence kind=Manifest points=0 source=package.json reason=package.json declares script `test`
   evidence kind=Proximity points=30 source=. reason=same directory as target
   evidence kind=Rule points=0 source=- reason=selected by <fixture>/pnpm-lock.yaml
@@ -74,15 +74,15 @@ candidate action=node:node-pnpm:script:test detector=node origin=Declared policy
 roots package=. workspace=- scan=.
 scan structural=2 targets=0 truncated=false
 resolution status=Resolved reason=UniqueAutomaticCandidate selected=node:node-yarn:script:dev
-candidate action=node:node-yarn:script:dev detector=node origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. program="yarn" args=["run","dev"] availability=available
+candidate action=node:node-yarn:script:dev detector=node source=node layer=EcosystemTask origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. scope=. program="yarn" args=["run","dev"] availability=available
   evidence kind=Manifest points=0 source=package.json reason=package.json declares script `dev`
   evidence kind=Proximity points=30 source=. reason=same directory as target
   evidence kind=Rule points=0 source=- reason=selected by <fixture>/yarn.lock
-candidate action=node:node-yarn:script:build detector=node origin=Declared policy=ExplicitHint base=15 total=45 distance=0 cwd=. program="yarn" args=["run","build"] availability=available
+candidate action=node:node-yarn:script:build detector=node source=node layer=EcosystemTask origin=Declared policy=ExplicitHint base=15 total=45 distance=0 cwd=. scope=. program="yarn" args=["run","build"] availability=available
   evidence kind=Manifest points=0 source=package.json reason=package.json declares script `build`
   evidence kind=Proximity points=30 source=. reason=same directory as target
   evidence kind=Rule points=0 source=- reason=selected by <fixture>/yarn.lock
-candidate action=node:node-yarn:script:test detector=node origin=Declared policy=ExplicitHint base=15 total=45 distance=0 cwd=. program="yarn" args=["run","test"] availability=available
+candidate action=node:node-yarn:script:test detector=node source=node layer=EcosystemTask origin=Declared policy=ExplicitHint base=15 total=45 distance=0 cwd=. scope=. program="yarn" args=["run","test"] availability=available
   evidence kind=Manifest points=0 source=package.json reason=package.json declares script `test`
   evidence kind=Proximity points=30 source=. reason=same directory as target
   evidence kind=Rule points=0 source=- reason=selected by <fixture>/yarn.lock
@@ -91,7 +91,7 @@ candidate action=node:node-yarn:script:test detector=node origin=Declared policy
 roots package=. workspace=- scan=.
 scan structural=2 targets=0 truncated=false
 resolution status=Resolved reason=UniqueAutomaticCandidate selected=node:node-yarn:script:build
-candidate action=node:node-yarn:script:build detector=node origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. program="yarn" args=["run","build"] availability=available
+candidate action=node:node-yarn:script:build detector=node source=node layer=EcosystemTask origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. scope=. program="yarn" args=["run","build"] availability=available
   evidence kind=Manifest points=0 source=package.json reason=package.json declares script `build`
   evidence kind=Proximity points=30 source=. reason=same directory as target
   evidence kind=Rule points=0 source=- reason=selected by <fixture>/yarn.lock
@@ -100,7 +100,7 @@ candidate action=node:node-yarn:script:build detector=node origin=Declared polic
 roots package=. workspace=- scan=.
 scan structural=2 targets=0 truncated=false
 resolution status=Resolved reason=UniqueAutomaticCandidate selected=node:node-yarn:script:test
-candidate action=node:node-yarn:script:test detector=node origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. program="yarn" args=["run","test"] availability=available
+candidate action=node:node-yarn:script:test detector=node source=node layer=EcosystemTask origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. scope=. program="yarn" args=["run","test"] availability=available
   evidence kind=Manifest points=0 source=package.json reason=package.json declares script `test`
   evidence kind=Proximity points=30 source=. reason=same directory as target
   evidence kind=Rule points=0 source=- reason=selected by <fixture>/yarn.lock
@@ -109,15 +109,15 @@ candidate action=node:node-yarn:script:test detector=node origin=Declared policy
 roots package=. workspace=- scan=.
 scan structural=2 targets=0 truncated=false
 resolution status=Resolved reason=UniqueAutomaticCandidate selected=node:node-bun:script:dev
-candidate action=node:node-bun:script:dev detector=node origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. program="bun" args=["run","dev"] availability=available
+candidate action=node:node-bun:script:dev detector=node source=node layer=EcosystemTask origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. scope=. program="bun" args=["run","dev"] availability=available
   evidence kind=Manifest points=0 source=package.json reason=package.json declares script `dev`
   evidence kind=Proximity points=30 source=. reason=same directory as target
   evidence kind=Rule points=0 source=- reason=selected by <fixture>/bun.lock
-candidate action=node:node-bun:script:build detector=node origin=Declared policy=ExplicitHint base=15 total=45 distance=0 cwd=. program="bun" args=["run","build"] availability=available
+candidate action=node:node-bun:script:build detector=node source=node layer=EcosystemTask origin=Declared policy=ExplicitHint base=15 total=45 distance=0 cwd=. scope=. program="bun" args=["run","build"] availability=available
   evidence kind=Manifest points=0 source=package.json reason=package.json declares script `build`
   evidence kind=Proximity points=30 source=. reason=same directory as target
   evidence kind=Rule points=0 source=- reason=selected by <fixture>/bun.lock
-candidate action=node:node-bun:script:test detector=node origin=Declared policy=ExplicitHint base=15 total=45 distance=0 cwd=. program="bun" args=["run","test"] availability=available
+candidate action=node:node-bun:script:test detector=node source=node layer=EcosystemTask origin=Declared policy=ExplicitHint base=15 total=45 distance=0 cwd=. scope=. program="bun" args=["run","test"] availability=available
   evidence kind=Manifest points=0 source=package.json reason=package.json declares script `test`
   evidence kind=Proximity points=30 source=. reason=same directory as target
   evidence kind=Rule points=0 source=- reason=selected by <fixture>/bun.lock
@@ -126,7 +126,7 @@ candidate action=node:node-bun:script:test detector=node origin=Declared policy=
 roots package=. workspace=- scan=.
 scan structural=2 targets=0 truncated=false
 resolution status=Resolved reason=UniqueAutomaticCandidate selected=node:node-bun:script:build
-candidate action=node:node-bun:script:build detector=node origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. program="bun" args=["run","build"] availability=available
+candidate action=node:node-bun:script:build detector=node source=node layer=EcosystemTask origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. scope=. program="bun" args=["run","build"] availability=available
   evidence kind=Manifest points=0 source=package.json reason=package.json declares script `build`
   evidence kind=Proximity points=30 source=. reason=same directory as target
   evidence kind=Rule points=0 source=- reason=selected by <fixture>/bun.lock
@@ -135,7 +135,7 @@ candidate action=node:node-bun:script:build detector=node origin=Declared policy
 roots package=. workspace=- scan=.
 scan structural=2 targets=0 truncated=false
 resolution status=Resolved reason=UniqueAutomaticCandidate selected=node:node-bun:script:test
-candidate action=node:node-bun:script:test detector=node origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. program="bun" args=["run","test"] availability=available
+candidate action=node:node-bun:script:test detector=node source=node layer=EcosystemTask origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. scope=. program="bun" args=["run","test"] availability=available
   evidence kind=Manifest points=0 source=package.json reason=package.json declares script `test`
   evidence kind=Proximity points=30 source=. reason=same directory as target
   evidence kind=Rule points=0 source=- reason=selected by <fixture>/bun.lock
@@ -144,16 +144,16 @@ candidate action=node:node-bun:script:test detector=node origin=Declared policy=
 roots package=. workspace=- scan=.
 scan structural=1 targets=0 truncated=false
 resolution status=Resolved reason=UniqueAutomaticCandidate selected=node:vite-canonical:script:dev
-candidate action=node:vite-canonical:script:dev detector=vite origin=Declared policy=Automatic base=95 total=130 distance=0 cwd=. program="npm" args=["run","dev"] availability=available
+candidate action=node:vite-canonical:script:dev detector=node source=vite layer=EcosystemTask origin=Declared policy=Automatic base=95 total=130 distance=0 cwd=. scope=. program="npm" args=["run","dev"] availability=available
   evidence kind=Manifest points=10 source=package.json reason=package declares vite
   evidence kind=Manifest points=0 source=package.json reason=package.json declares script `dev`
   evidence kind=Proximity points=30 source=. reason=same directory as target
   evidence kind=Rule points=-5 source=- reason=defaulted to npm because no package-manager marker was found
-candidate action=vite:vite-canonical:preview detector=vite origin=Declared policy=ExplicitHint base=25 total=65 distance=0 cwd=. program="npm" args=["exec","--offline","--","vite","preview"] availability=available
+candidate action=vite:vite-canonical:preview detector=node source=vite layer=ToolDefault origin=Declared policy=ExplicitHint base=25 total=65 distance=0 cwd=. scope=. program="npm" args=["exec","--offline","--","vite","preview"] availability=available
   evidence kind=Manifest points=10 source=package.json reason=package declares vite without a canonical `preview` script
   evidence kind=Proximity points=30 source=. reason=same directory as target
   evidence kind=Rule points=0 source=- reason=npm uses its local-only binary execution mode
-candidate action=node:vite-canonical:script:build detector=node origin=Declared policy=ExplicitHint base=15 total=40 distance=0 cwd=. program="npm" args=["run","build"] availability=available
+candidate action=node:vite-canonical:script:build detector=node source=node layer=EcosystemTask origin=Declared policy=ExplicitHint base=15 total=40 distance=0 cwd=. scope=. program="npm" args=["run","build"] availability=available
   evidence kind=Manifest points=0 source=package.json reason=package.json declares script `build`
   evidence kind=Proximity points=30 source=. reason=same directory as target
   evidence kind=Rule points=-5 source=- reason=defaulted to npm because no package-manager marker was found
@@ -162,7 +162,7 @@ candidate action=node:vite-canonical:script:build detector=node origin=Declared 
 roots package=. workspace=- scan=.
 scan structural=1 targets=0 truncated=false
 resolution status=Resolved reason=UniqueAutomaticCandidate selected=node:vite-canonical:script:build
-candidate action=node:vite-canonical:script:build detector=vite origin=Declared policy=Automatic base=95 total=130 distance=0 cwd=. program="npm" args=["run","build"] availability=available
+candidate action=node:vite-canonical:script:build detector=node source=vite layer=EcosystemTask origin=Declared policy=Automatic base=95 total=130 distance=0 cwd=. scope=. program="npm" args=["run","build"] availability=available
   evidence kind=Manifest points=10 source=package.json reason=package declares vite
   evidence kind=Manifest points=0 source=package.json reason=package.json declares script `build`
   evidence kind=Proximity points=30 source=. reason=same directory as target
@@ -177,15 +177,15 @@ resolution status=NoCandidates reason=NoCandidates selected=-
 roots package=. workspace=- scan=.
 scan structural=1 targets=0 truncated=false
 resolution status=Resolved reason=UniqueAutomaticCandidate selected=vite:vite-no-canonical:dev
-candidate action=vite:vite-no-canonical:dev detector=vite origin=Declared policy=Automatic base=80 total=120 distance=0 cwd=. program="npm" args=["exec","--offline","--","vite"] availability=available
+candidate action=vite:vite-no-canonical:dev detector=node source=vite layer=ToolDefault origin=Declared policy=Automatic base=80 total=120 distance=0 cwd=. scope=. program="npm" args=["exec","--offline","--","vite"] availability=available
   evidence kind=Manifest points=10 source=package.json reason=package declares vite without a canonical `dev` script
   evidence kind=Proximity points=30 source=. reason=same directory as target
   evidence kind=Rule points=0 source=- reason=npm uses its local-only binary execution mode
-candidate action=vite:vite-no-canonical:preview detector=vite origin=Declared policy=ExplicitHint base=25 total=65 distance=0 cwd=. program="npm" args=["exec","--offline","--","vite","preview"] availability=available
+candidate action=vite:vite-no-canonical:preview detector=node source=vite layer=ToolDefault origin=Declared policy=ExplicitHint base=25 total=65 distance=0 cwd=. scope=. program="npm" args=["exec","--offline","--","vite","preview"] availability=available
   evidence kind=Manifest points=10 source=package.json reason=package declares vite without a canonical `preview` script
   evidence kind=Proximity points=30 source=. reason=same directory as target
   evidence kind=Rule points=0 source=- reason=npm uses its local-only binary execution mode
-candidate action=node:vite-no-canonical:script:preview-site detector=node origin=Declared policy=ExplicitHint base=15 total=40 distance=0 cwd=. program="npm" args=["run","preview-site"] availability=available
+candidate action=node:vite-no-canonical:script:preview-site detector=node source=node layer=EcosystemTask origin=Declared policy=ExplicitHint base=15 total=40 distance=0 cwd=. scope=. program="npm" args=["run","preview-site"] availability=available
   evidence kind=Manifest points=0 source=package.json reason=package.json declares script `preview-site`
   evidence kind=Proximity points=30 source=. reason=same directory as target
   evidence kind=Rule points=-5 source=- reason=defaulted to npm because no package-manager marker was found
@@ -194,7 +194,7 @@ candidate action=node:vite-no-canonical:script:preview-site detector=node origin
 roots package=. workspace=- scan=.
 scan structural=1 targets=0 truncated=false
 resolution status=Resolved reason=UniqueAutomaticCandidate selected=vite:vite-no-canonical:build
-candidate action=vite:vite-no-canonical:build detector=vite origin=Declared policy=Automatic base=80 total=120 distance=0 cwd=. program="npm" args=["exec","--offline","--","vite","build"] availability=available
+candidate action=vite:vite-no-canonical:build detector=node source=vite layer=ToolDefault origin=Declared policy=Automatic base=80 total=120 distance=0 cwd=. scope=. program="npm" args=["exec","--offline","--","vite","build"] availability=available
   evidence kind=Manifest points=10 source=package.json reason=package declares vite without a canonical `build` script
   evidence kind=Proximity points=30 source=. reason=same directory as target
   evidence kind=Rule points=0 source=- reason=npm uses its local-only binary execution mode
@@ -208,17 +208,17 @@ resolution status=NoCandidates reason=NoCandidates selected=-
 roots package=. workspace=- scan=.
 scan structural=1 targets=0 truncated=false
 resolution status=Resolved reason=UniqueAutomaticCandidate selected=node:next-canonical:script:dev
-candidate action=node:next-canonical:script:dev detector=next origin=Declared policy=Automatic base=95 total=130 distance=0 cwd=. program="npm" args=["run","dev"] availability=available
+candidate action=node:next-canonical:script:dev detector=node source=next layer=EcosystemTask origin=Declared policy=Automatic base=95 total=130 distance=0 cwd=. scope=. program="npm" args=["run","dev"] availability=available
   evidence kind=Manifest points=10 source=package.json reason=package declares next
   evidence kind=Manifest points=0 source=package.json reason=package.json declares script `dev`
   evidence kind=Proximity points=30 source=. reason=same directory as target
   evidence kind=Rule points=-5 source=- reason=defaulted to npm because no package-manager marker was found
-candidate action=node:next-canonical:script:start detector=next origin=Declared policy=ExplicitHint base=55 total=90 distance=0 cwd=. program="npm" args=["run","start"] availability=available
+candidate action=node:next-canonical:script:start detector=node source=next layer=EcosystemTask origin=Declared policy=ExplicitHint base=55 total=90 distance=0 cwd=. scope=. program="npm" args=["run","start"] availability=available
   evidence kind=Manifest points=10 source=package.json reason=package declares next
   evidence kind=Manifest points=0 source=package.json reason=package.json declares script `start`
   evidence kind=Proximity points=30 source=. reason=same directory as target
   evidence kind=Rule points=-5 source=- reason=defaulted to npm because no package-manager marker was found
-candidate action=node:next-canonical:script:build detector=node origin=Declared policy=ExplicitHint base=15 total=40 distance=0 cwd=. program="npm" args=["run","build"] availability=available
+candidate action=node:next-canonical:script:build detector=node source=node layer=EcosystemTask origin=Declared policy=ExplicitHint base=15 total=40 distance=0 cwd=. scope=. program="npm" args=["run","build"] availability=available
   evidence kind=Manifest points=0 source=package.json reason=package.json declares script `build`
   evidence kind=Proximity points=30 source=. reason=same directory as target
   evidence kind=Rule points=-5 source=- reason=defaulted to npm because no package-manager marker was found
@@ -227,7 +227,7 @@ candidate action=node:next-canonical:script:build detector=node origin=Declared 
 roots package=. workspace=- scan=.
 scan structural=1 targets=0 truncated=false
 resolution status=Resolved reason=UniqueAutomaticCandidate selected=node:next-canonical:script:build
-candidate action=node:next-canonical:script:build detector=next origin=Declared policy=Automatic base=95 total=130 distance=0 cwd=. program="npm" args=["run","build"] availability=available
+candidate action=node:next-canonical:script:build detector=node source=next layer=EcosystemTask origin=Declared policy=Automatic base=95 total=130 distance=0 cwd=. scope=. program="npm" args=["run","build"] availability=available
   evidence kind=Manifest points=10 source=package.json reason=package declares next
   evidence kind=Manifest points=0 source=package.json reason=package.json declares script `build`
   evidence kind=Proximity points=30 source=. reason=same directory as target
@@ -242,15 +242,15 @@ resolution status=NoCandidates reason=NoCandidates selected=-
 roots package=. workspace=- scan=.
 scan structural=1 targets=0 truncated=false
 resolution status=Resolved reason=UniqueAutomaticCandidate selected=next:next-no-canonical:dev
-candidate action=next:next-no-canonical:dev detector=next origin=Declared policy=Automatic base=80 total=120 distance=0 cwd=. program="npm" args=["exec","--offline","--","next","dev"] availability=available
+candidate action=next:next-no-canonical:dev detector=node source=next layer=ToolDefault origin=Declared policy=Automatic base=80 total=120 distance=0 cwd=. scope=. program="npm" args=["exec","--offline","--","next","dev"] availability=available
   evidence kind=Manifest points=10 source=package.json reason=package declares next without a canonical `dev` script
   evidence kind=Proximity points=30 source=. reason=same directory as target
   evidence kind=Rule points=0 source=- reason=npm uses its local-only binary execution mode
-candidate action=next:next-no-canonical:start detector=next origin=Declared policy=ExplicitHint base=25 total=65 distance=0 cwd=. program="npm" args=["exec","--offline","--","next","start"] availability=available
+candidate action=next:next-no-canonical:start detector=node source=next layer=ToolDefault origin=Declared policy=ExplicitHint base=25 total=65 distance=0 cwd=. scope=. program="npm" args=["exec","--offline","--","next","start"] availability=available
   evidence kind=Manifest points=10 source=package.json reason=package declares next without a canonical `start` script
   evidence kind=Proximity points=30 source=. reason=same directory as target
   evidence kind=Rule points=0 source=- reason=npm uses its local-only binary execution mode
-candidate action=node:next-no-canonical:script:preview-site detector=node origin=Declared policy=ExplicitHint base=15 total=40 distance=0 cwd=. program="npm" args=["run","preview-site"] availability=available
+candidate action=node:next-no-canonical:script:preview-site detector=node source=node layer=EcosystemTask origin=Declared policy=ExplicitHint base=15 total=40 distance=0 cwd=. scope=. program="npm" args=["run","preview-site"] availability=available
   evidence kind=Manifest points=0 source=package.json reason=package.json declares script `preview-site`
   evidence kind=Proximity points=30 source=. reason=same directory as target
   evidence kind=Rule points=-5 source=- reason=defaulted to npm because no package-manager marker was found
@@ -259,7 +259,7 @@ candidate action=node:next-no-canonical:script:preview-site detector=node origin
 roots package=. workspace=- scan=.
 scan structural=1 targets=0 truncated=false
 resolution status=Resolved reason=UniqueAutomaticCandidate selected=next:next-no-canonical:build
-candidate action=next:next-no-canonical:build detector=next origin=Declared policy=Automatic base=80 total=120 distance=0 cwd=. program="npm" args=["exec","--offline","--","next","build"] availability=available
+candidate action=next:next-no-canonical:build detector=node source=next layer=ToolDefault origin=Declared policy=Automatic base=80 total=120 distance=0 cwd=. scope=. program="npm" args=["exec","--offline","--","next","build"] availability=available
   evidence kind=Manifest points=10 source=package.json reason=package declares next without a canonical `build` script
   evidence kind=Proximity points=30 source=. reason=same directory as target
   evidence kind=Rule points=0 source=- reason=npm uses its local-only binary execution mode
@@ -273,12 +273,12 @@ resolution status=NoCandidates reason=NoCandidates selected=-
 roots package=. workspace=. scan=.
 scan structural=4 targets=0 truncated=false
 resolution status=Resolved reason=UniqueAutomaticCandidate selected=node:@acme/web:script:dev
-candidate action=node:@acme/web:script:dev detector=node origin=Declared policy=Automatic base=95 total=98 distance=2 cwd=. program="npm" args=["run","dev","--workspace","@acme/web"] availability=available
+candidate action=node:@acme/web:script:dev detector=node source=node layer=EcosystemTask origin=Declared policy=Automatic base=95 total=98 distance=2 cwd=. scope=apps/web program="npm" args=["run","dev","--workspace","@acme/web"] availability=available
   evidence kind=Manifest points=0 source=apps/web/package.json reason=package.json declares script `dev`
   evidence kind=Proximity points=8 source=apps/web reason=2 directory edges from target
   evidence kind=Rule points=-5 source=- reason=defaulted to npm because no package-manager marker was found
   evidence kind=Rule points=0 source=apps/web/package.json reason=workspace member `@acme/web` at `apps/web` selected with npm --workspace
-candidate action=node:@acme/web:script:test detector=node origin=Declared policy=ExplicitHint base=15 total=18 distance=2 cwd=. program="npm" args=["run","test","--workspace","@acme/web"] availability=available
+candidate action=node:@acme/web:script:test detector=node source=node layer=EcosystemTask origin=Declared policy=ExplicitHint base=15 total=18 distance=2 cwd=. scope=apps/web program="npm" args=["run","test","--workspace","@acme/web"] availability=available
   evidence kind=Manifest points=0 source=apps/web/package.json reason=package.json declares script `test`
   evidence kind=Proximity points=8 source=apps/web reason=2 directory edges from target
   evidence kind=Rule points=-5 source=- reason=defaulted to npm because no package-manager marker was found
@@ -293,7 +293,7 @@ resolution status=NoCandidates reason=NoCandidates selected=-
 roots package=. workspace=. scan=.
 scan structural=4 targets=0 truncated=false
 resolution status=Resolved reason=UniqueAutomaticCandidate selected=node:@acme/web:script:test
-candidate action=node:@acme/web:script:test detector=node origin=Declared policy=Automatic base=95 total=98 distance=2 cwd=. program="npm" args=["run","test","--workspace","@acme/web"] availability=available
+candidate action=node:@acme/web:script:test detector=node source=node layer=EcosystemTask origin=Declared policy=Automatic base=95 total=98 distance=2 cwd=. scope=apps/web program="npm" args=["run","test","--workspace","@acme/web"] availability=available
   evidence kind=Manifest points=0 source=apps/web/package.json reason=package.json declares script `test`
   evidence kind=Proximity points=8 source=apps/web reason=2 directory edges from target
   evidence kind=Rule points=-5 source=- reason=defaulted to npm because no package-manager marker was found
@@ -303,12 +303,12 @@ candidate action=node:@acme/web:script:test detector=node origin=Declared policy
 roots package=. workspace=. scan=.
 scan structural=4 targets=0 truncated=false
 resolution status=Resolved reason=UniqueAutomaticCandidate selected=node:apps:web:script:dev
-candidate action=node:apps:web:script:dev detector=node origin=Declared policy=Automatic base=95 total=98 distance=2 cwd=. program="npm" args=["run","dev","--workspace","./apps/web"] availability=available
+candidate action=node:apps:web:script:dev detector=node source=node layer=EcosystemTask origin=Declared policy=Automatic base=95 total=98 distance=2 cwd=. scope=apps/web program="npm" args=["run","dev","--workspace","./apps/web"] availability=available
   evidence kind=Manifest points=0 source=apps/web/package.json reason=package.json declares script `dev`
   evidence kind=Proximity points=8 source=apps/web reason=2 directory edges from target
   evidence kind=Rule points=-5 source=- reason=defaulted to npm because no package-manager marker was found
   evidence kind=Rule points=0 source=apps/web/package.json reason=unnamed workspace member `apps/web` selected with npm --workspace
-candidate action=node:apps:web:script:build detector=node origin=Declared policy=ExplicitHint base=15 total=18 distance=2 cwd=. program="npm" args=["run","build","--workspace","./apps/web"] availability=available
+candidate action=node:apps:web:script:build detector=node source=node layer=EcosystemTask origin=Declared policy=ExplicitHint base=15 total=18 distance=2 cwd=. scope=apps/web program="npm" args=["run","build","--workspace","./apps/web"] availability=available
   evidence kind=Manifest points=0 source=apps/web/package.json reason=package.json declares script `build`
   evidence kind=Proximity points=8 source=apps/web reason=2 directory edges from target
   evidence kind=Rule points=-5 source=- reason=defaulted to npm because no package-manager marker was found
@@ -318,7 +318,7 @@ candidate action=node:apps:web:script:build detector=node origin=Declared policy
 roots package=. workspace=. scan=.
 scan structural=4 targets=0 truncated=false
 resolution status=Resolved reason=UniqueAutomaticCandidate selected=node:apps:web:script:build
-candidate action=node:apps:web:script:build detector=node origin=Declared policy=Automatic base=95 total=98 distance=2 cwd=. program="npm" args=["run","build","--workspace","./apps/web"] availability=available
+candidate action=node:apps:web:script:build detector=node source=node layer=EcosystemTask origin=Declared policy=Automatic base=95 total=98 distance=2 cwd=. scope=apps/web program="npm" args=["run","build","--workspace","./apps/web"] availability=available
   evidence kind=Manifest points=0 source=apps/web/package.json reason=package.json declares script `build`
   evidence kind=Proximity points=8 source=apps/web reason=2 directory edges from target
   evidence kind=Rule points=-5 source=- reason=defaulted to npm because no package-manager marker was found
@@ -333,7 +333,7 @@ resolution status=NoCandidates reason=NoCandidates selected=-
 roots package=. workspace=. scan=.
 scan structural=8 targets=0 truncated=false
 resolution status=Resolved reason=UniqueAutomaticCandidate selected=node:web:script:dev
-candidate action=node:web:script:dev detector=node origin=Declared policy=Automatic base=95 total=103 distance=2 cwd=. program="pnpm" args=["--filter","web","run","dev"] availability=available
+candidate action=node:web:script:dev detector=node source=node layer=EcosystemTask origin=Declared policy=Automatic base=95 total=103 distance=2 cwd=. scope=apps/web program="pnpm" args=["--filter","web","run","dev"] availability=available
   evidence kind=Manifest points=0 source=apps/web/package.json reason=package.json declares script `dev`
   evidence kind=Proximity points=8 source=apps/web reason=2 directory edges from target
   evidence kind=Rule points=0 source=- reason=selected by <fixture>/pnpm-lock.yaml
@@ -353,7 +353,7 @@ resolution status=NoCandidates reason=NoCandidates selected=-
 roots package=. workspace=- scan=.
 scan structural=3 targets=0 truncated=false
 resolution status=Resolved reason=UniqueAutomaticCandidate selected=cargo:cargo-single:bin:cargo-single
-candidate action=cargo:cargo-single:bin:cargo-single detector=cargo origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. program="cargo" args=["run"] availability=available
+candidate action=cargo:cargo-single:bin:cargo-single detector=cargo source=cargo layer=DirectTarget origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. scope=. program="cargo" args=["run"] availability=available
   evidence kind=Manifest points=0 source=Cargo.toml reason=Cargo package `cargo-single` exposes bin `cargo-single`
   evidence kind=Proximity points=30 source=. reason=same directory as target
 
@@ -361,7 +361,7 @@ candidate action=cargo:cargo-single:bin:cargo-single detector=cargo origin=Decla
 roots package=. workspace=- scan=.
 scan structural=3 targets=0 truncated=false
 resolution status=Resolved reason=UniqueAutomaticCandidate selected=cargo:cargo-single:build
-candidate action=cargo:cargo-single:build detector=cargo origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. program="cargo" args=["build"] availability=available
+candidate action=cargo:cargo-single:build detector=cargo source=cargo layer=ToolDefault origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. scope=. program="cargo" args=["build"] availability=available
   evidence kind=Manifest points=0 source=Cargo.toml reason=Cargo.toml declares package `cargo-single`
   evidence kind=Proximity points=30 source=. reason=same directory as target
 
@@ -369,7 +369,7 @@ candidate action=cargo:cargo-single:build detector=cargo origin=Declared policy=
 roots package=. workspace=- scan=.
 scan structural=3 targets=0 truncated=false
 resolution status=Resolved reason=UniqueAutomaticCandidate selected=cargo:cargo-single:test
-candidate action=cargo:cargo-single:test detector=cargo origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. program="cargo" args=["test"] availability=available
+candidate action=cargo:cargo-single:test detector=cargo source=cargo layer=ToolDefault origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. scope=. program="cargo" args=["test"] availability=available
   evidence kind=Manifest points=0 source=Cargo.toml reason=Cargo.toml declares package `cargo-single`
   evidence kind=Proximity points=30 source=. reason=same directory as target
 
@@ -377,11 +377,11 @@ candidate action=cargo:cargo-single:test detector=cargo origin=Declared policy=A
 roots package=. workspace=- scan=.
 scan structural=5 targets=0 truncated=false
 resolution status=Resolved reason=ClearStructuralWinner selected=cargo:cargo-default-run:bin:server
-candidate action=cargo:cargo-default-run:bin:server detector=cargo origin=Declared policy=Automatic base=95 total=135 distance=0 cwd=. program="cargo" args=["run","--bin","server"] availability=available
+candidate action=cargo:cargo-default-run:bin:server detector=cargo source=cargo layer=DirectTarget origin=Declared policy=Automatic base=95 total=135 distance=0 cwd=. scope=. program="cargo" args=["run","--bin","server"] availability=available
   evidence kind=Manifest points=0 source=Cargo.toml reason=Cargo package `cargo-default-run` exposes bin `server`
   evidence kind=Proximity points=30 source=. reason=same directory as target
   evidence kind=Rule points=10 source=Cargo.toml reason=matches package.default-run
-candidate action=cargo:cargo-default-run:bin:worker detector=cargo origin=Declared policy=Automatic base=75 total=105 distance=0 cwd=. program="cargo" args=["run","--bin","worker"] availability=available
+candidate action=cargo:cargo-default-run:bin:worker detector=cargo source=cargo layer=DirectTarget origin=Declared policy=Automatic base=75 total=105 distance=0 cwd=. scope=. program="cargo" args=["run","--bin","worker"] availability=available
   evidence kind=Manifest points=0 source=Cargo.toml reason=Cargo package `cargo-default-run` exposes bin `worker`
   evidence kind=Proximity points=30 source=. reason=same directory as target
 
@@ -389,7 +389,7 @@ candidate action=cargo:cargo-default-run:bin:worker detector=cargo origin=Declar
 roots package=. workspace=- scan=.
 scan structural=5 targets=0 truncated=false
 resolution status=Resolved reason=UniqueAutomaticCandidate selected=cargo:cargo-default-run:build
-candidate action=cargo:cargo-default-run:build detector=cargo origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. program="cargo" args=["build"] availability=available
+candidate action=cargo:cargo-default-run:build detector=cargo source=cargo layer=ToolDefault origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. scope=. program="cargo" args=["build"] availability=available
   evidence kind=Manifest points=0 source=Cargo.toml reason=Cargo.toml declares package `cargo-default-run`
   evidence kind=Proximity points=30 source=. reason=same directory as target
 
@@ -397,7 +397,7 @@ candidate action=cargo:cargo-default-run:build detector=cargo origin=Declared po
 roots package=. workspace=- scan=.
 scan structural=5 targets=0 truncated=false
 resolution status=Resolved reason=UniqueAutomaticCandidate selected=cargo:cargo-default-run:test
-candidate action=cargo:cargo-default-run:test detector=cargo origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. program="cargo" args=["test"] availability=available
+candidate action=cargo:cargo-default-run:test detector=cargo source=cargo layer=ToolDefault origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. scope=. program="cargo" args=["test"] availability=available
   evidence kind=Manifest points=0 source=Cargo.toml reason=Cargo.toml declares package `cargo-default-run`
   evidence kind=Proximity points=30 source=. reason=same directory as target
 
@@ -405,7 +405,7 @@ candidate action=cargo:cargo-default-run:test detector=cargo origin=Declared pol
 roots package=. workspace=- scan=.
 scan structural=4 targets=0 truncated=false
 resolution status=Resolved reason=UniqueAutomaticCandidate selected=cargo:cargo-implicit-bin:bin:tool
-candidate action=cargo:cargo-implicit-bin:bin:tool detector=cargo origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. program="cargo" args=["run"] availability=available
+candidate action=cargo:cargo-implicit-bin:bin:tool detector=cargo source=cargo layer=DirectTarget origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. scope=. program="cargo" args=["run"] availability=available
   evidence kind=Manifest points=0 source=Cargo.toml reason=Cargo package `cargo-implicit-bin` exposes bin `tool`
   evidence kind=Proximity points=30 source=. reason=same directory as target
 
@@ -413,7 +413,7 @@ candidate action=cargo:cargo-implicit-bin:bin:tool detector=cargo origin=Declare
 roots package=. workspace=- scan=.
 scan structural=4 targets=0 truncated=false
 resolution status=Resolved reason=UniqueAutomaticCandidate selected=cargo:cargo-implicit-bin:build
-candidate action=cargo:cargo-implicit-bin:build detector=cargo origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. program="cargo" args=["build"] availability=available
+candidate action=cargo:cargo-implicit-bin:build detector=cargo source=cargo layer=ToolDefault origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. scope=. program="cargo" args=["build"] availability=available
   evidence kind=Manifest points=0 source=Cargo.toml reason=Cargo.toml declares package `cargo-implicit-bin`
   evidence kind=Proximity points=30 source=. reason=same directory as target
 
@@ -421,7 +421,7 @@ candidate action=cargo:cargo-implicit-bin:build detector=cargo origin=Declared p
 roots package=. workspace=- scan=.
 scan structural=4 targets=0 truncated=false
 resolution status=Resolved reason=UniqueAutomaticCandidate selected=cargo:cargo-implicit-bin:test
-candidate action=cargo:cargo-implicit-bin:test detector=cargo origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. program="cargo" args=["test"] availability=available
+candidate action=cargo:cargo-implicit-bin:test detector=cargo source=cargo layer=ToolDefault origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. scope=. program="cargo" args=["test"] availability=available
   evidence kind=Manifest points=0 source=Cargo.toml reason=Cargo.toml declares package `cargo-implicit-bin`
   evidence kind=Proximity points=30 source=. reason=same directory as target
 
@@ -429,10 +429,10 @@ candidate action=cargo:cargo-implicit-bin:test detector=cargo origin=Declared po
 roots package=. workspace=- scan=.
 scan structural=4 targets=0 truncated=false
 resolution status=Ambiguous reason=CloseCandidates selected=-
-candidate action=cargo:cargo-multi-bin:bin:api detector=cargo origin=Declared policy=Automatic base=75 total=105 distance=0 cwd=. program="cargo" args=["run","--bin","api"] availability=available
+candidate action=cargo:cargo-multi-bin:bin:api detector=cargo source=cargo layer=DirectTarget origin=Declared policy=Automatic base=75 total=105 distance=0 cwd=. scope=. program="cargo" args=["run","--bin","api"] availability=available
   evidence kind=Manifest points=0 source=Cargo.toml reason=Cargo package `cargo-multi-bin` exposes bin `api`
   evidence kind=Proximity points=30 source=. reason=same directory as target
-candidate action=cargo:cargo-multi-bin:bin:worker detector=cargo origin=Declared policy=Automatic base=75 total=105 distance=0 cwd=. program="cargo" args=["run","--bin","worker"] availability=available
+candidate action=cargo:cargo-multi-bin:bin:worker detector=cargo source=cargo layer=DirectTarget origin=Declared policy=Automatic base=75 total=105 distance=0 cwd=. scope=. program="cargo" args=["run","--bin","worker"] availability=available
   evidence kind=Manifest points=0 source=Cargo.toml reason=Cargo package `cargo-multi-bin` exposes bin `worker`
   evidence kind=Proximity points=30 source=. reason=same directory as target
 
@@ -440,7 +440,7 @@ candidate action=cargo:cargo-multi-bin:bin:worker detector=cargo origin=Declared
 roots package=. workspace=- scan=.
 scan structural=4 targets=0 truncated=false
 resolution status=Resolved reason=UniqueAutomaticCandidate selected=cargo:cargo-multi-bin:build
-candidate action=cargo:cargo-multi-bin:build detector=cargo origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. program="cargo" args=["build"] availability=available
+candidate action=cargo:cargo-multi-bin:build detector=cargo source=cargo layer=ToolDefault origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. scope=. program="cargo" args=["build"] availability=available
   evidence kind=Manifest points=0 source=Cargo.toml reason=Cargo.toml declares package `cargo-multi-bin`
   evidence kind=Proximity points=30 source=. reason=same directory as target
 
@@ -448,7 +448,7 @@ candidate action=cargo:cargo-multi-bin:build detector=cargo origin=Declared poli
 roots package=. workspace=- scan=.
 scan structural=4 targets=0 truncated=false
 resolution status=Resolved reason=UniqueAutomaticCandidate selected=cargo:cargo-multi-bin:test
-candidate action=cargo:cargo-multi-bin:test detector=cargo origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. program="cargo" args=["test"] availability=available
+candidate action=cargo:cargo-multi-bin:test detector=cargo source=cargo layer=ToolDefault origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. scope=. program="cargo" args=["test"] availability=available
   evidence kind=Manifest points=0 source=Cargo.toml reason=Cargo.toml declares package `cargo-multi-bin`
   evidence kind=Proximity points=30 source=. reason=same directory as target
 
@@ -456,7 +456,7 @@ candidate action=cargo:cargo-multi-bin:test detector=cargo origin=Declared polic
 roots package=. workspace=- scan=.
 scan structural=5 targets=0 truncated=false
 resolution status=Ambiguous reason=NoAutomaticCandidates selected=-
-candidate action=cargo:cargo-examples:example:demo detector=cargo origin=Conventional policy=ExplicitHint base=25 total=55 distance=0 cwd=. program="cargo" args=["run","--example","demo"] availability=available
+candidate action=cargo:cargo-examples:example:demo detector=cargo source=cargo layer=DirectTarget origin=Conventional policy=ExplicitHint base=25 total=55 distance=0 cwd=. scope=. program="cargo" args=["run","--example","demo"] availability=available
   evidence kind=Manifest points=0 source=Cargo.toml reason=Cargo package `cargo-examples` exposes example `demo`
   evidence kind=Proximity points=30 source=. reason=same directory as target
 diagnostic detector=cargo severity=Info source=Cargo.toml message=crate `cargo-examples` has no executable binary targets; try build, test, or an example hint
@@ -465,7 +465,7 @@ diagnostic detector=cargo severity=Info source=Cargo.toml message=crate `cargo-e
 roots package=. workspace=- scan=.
 scan structural=5 targets=0 truncated=false
 resolution status=Resolved reason=UniqueAutomaticCandidate selected=cargo:cargo-examples:build
-candidate action=cargo:cargo-examples:build detector=cargo origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. program="cargo" args=["build"] availability=available
+candidate action=cargo:cargo-examples:build detector=cargo source=cargo layer=ToolDefault origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. scope=. program="cargo" args=["build"] availability=available
   evidence kind=Manifest points=0 source=Cargo.toml reason=Cargo.toml declares package `cargo-examples`
   evidence kind=Proximity points=30 source=. reason=same directory as target
 
@@ -473,7 +473,7 @@ candidate action=cargo:cargo-examples:build detector=cargo origin=Declared polic
 roots package=. workspace=- scan=.
 scan structural=5 targets=0 truncated=false
 resolution status=Resolved reason=UniqueAutomaticCandidate selected=cargo:cargo-examples:test
-candidate action=cargo:cargo-examples:test detector=cargo origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. program="cargo" args=["test"] availability=available
+candidate action=cargo:cargo-examples:test detector=cargo source=cargo layer=ToolDefault origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. scope=. program="cargo" args=["test"] availability=available
   evidence kind=Manifest points=0 source=Cargo.toml reason=Cargo.toml declares package `cargo-examples`
   evidence kind=Proximity points=30 source=. reason=same directory as target
 
@@ -487,7 +487,7 @@ diagnostic detector=cargo severity=Info source=Cargo.toml message=crate `cargo-l
 roots package=. workspace=- scan=.
 scan structural=3 targets=0 truncated=false
 resolution status=Resolved reason=UniqueAutomaticCandidate selected=cargo:cargo-library:build
-candidate action=cargo:cargo-library:build detector=cargo origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. program="cargo" args=["build"] availability=available
+candidate action=cargo:cargo-library:build detector=cargo source=cargo layer=ToolDefault origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. scope=. program="cargo" args=["build"] availability=available
   evidence kind=Manifest points=0 source=Cargo.toml reason=Cargo.toml declares package `cargo-library`
   evidence kind=Proximity points=30 source=. reason=same directory as target
 
@@ -495,7 +495,7 @@ candidate action=cargo:cargo-library:build detector=cargo origin=Declared policy
 roots package=. workspace=- scan=.
 scan structural=3 targets=0 truncated=false
 resolution status=Resolved reason=UniqueAutomaticCandidate selected=cargo:cargo-library:test
-candidate action=cargo:cargo-library:test detector=cargo origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. program="cargo" args=["test"] availability=available
+candidate action=cargo:cargo-library:test detector=cargo source=cargo layer=ToolDefault origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. scope=. program="cargo" args=["test"] availability=available
   evidence kind=Manifest points=0 source=Cargo.toml reason=Cargo.toml declares package `cargo-library`
   evidence kind=Proximity points=30 source=. reason=same directory as target
 
@@ -503,7 +503,7 @@ candidate action=cargo:cargo-library:test detector=cargo origin=Declared policy=
 roots package=. workspace=. scan=.
 scan structural=6 targets=0 truncated=false
 resolution status=Resolved reason=UniqueAutomaticCandidate selected=cargo:nested-server:bin:nested-server
-candidate action=cargo:nested-server:bin:nested-server detector=cargo origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. program="cargo" args=["run","-p","nested-server"] availability=available
+candidate action=cargo:nested-server:bin:nested-server detector=cargo source=cargo layer=DirectTarget origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. scope=. program="cargo" args=["run","-p","nested-server"] availability=available
   evidence kind=Manifest points=0 source=crates/server/Cargo.toml reason=Cargo package `nested-server` exposes bin `nested-server`
   evidence kind=Proximity points=30 source=. reason=same directory as target
 
@@ -511,7 +511,7 @@ candidate action=cargo:nested-server:bin:nested-server detector=cargo origin=Dec
 roots package=. workspace=. scan=.
 scan structural=6 targets=0 truncated=false
 resolution status=Resolved reason=UniqueAutomaticCandidate selected=cargo:workspace:build
-candidate action=cargo:workspace:build detector=cargo origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. program="cargo" args=["build","--workspace"] availability=available
+candidate action=cargo:workspace:build detector=cargo source=cargo layer=ToolDefault origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. scope=. program="cargo" args=["build","--workspace"] availability=available
   evidence kind=Manifest points=0 source=Cargo.toml reason=Cargo.toml declares a virtual workspace
   evidence kind=Proximity points=30 source=. reason=same directory as target
 
@@ -519,7 +519,7 @@ candidate action=cargo:workspace:build detector=cargo origin=Declared policy=Aut
 roots package=. workspace=. scan=.
 scan structural=6 targets=0 truncated=false
 resolution status=Resolved reason=UniqueAutomaticCandidate selected=cargo:workspace:test
-candidate action=cargo:workspace:test detector=cargo origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. program="cargo" args=["test","--workspace"] availability=available
+candidate action=cargo:workspace:test detector=cargo source=cargo layer=ToolDefault origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. scope=. program="cargo" args=["test","--workspace"] availability=available
   evidence kind=Manifest points=0 source=Cargo.toml reason=Cargo.toml declares a virtual workspace
   evidence kind=Proximity points=30 source=. reason=same directory as target
 
@@ -527,10 +527,10 @@ candidate action=cargo:workspace:test detector=cargo origin=Declared policy=Auto
 roots package=. workspace=- scan=.
 scan structural=1 targets=0 truncated=false
 resolution status=Resolved reason=UniqueAutomaticCandidate selected=composer:acme/basic:script:dev
-candidate action=composer:acme/basic:script:dev detector=composer origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. program="composer" args=["run-script","dev"] availability=available
+candidate action=composer:acme/basic:script:dev detector=composer source=composer layer=EcosystemTask origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. scope=. program="composer" args=["run-script","dev"] availability=available
   evidence kind=Manifest points=0 source=composer.json reason=composer.json declares script `dev`
   evidence kind=Proximity points=30 source=. reason=same directory as target
-candidate action=composer:acme/basic:script:test detector=composer origin=Declared policy=ExplicitHint base=15 total=45 distance=0 cwd=. program="composer" args=["run-script","test"] availability=available
+candidate action=composer:acme/basic:script:test detector=composer source=composer layer=EcosystemTask origin=Declared policy=ExplicitHint base=15 total=45 distance=0 cwd=. scope=. program="composer" args=["run-script","test"] availability=available
   evidence kind=Manifest points=0 source=composer.json reason=composer.json declares script `test`
   evidence kind=Proximity points=30 source=. reason=same directory as target
 
@@ -543,24 +543,25 @@ resolution status=NoCandidates reason=NoCandidates selected=-
 roots package=. workspace=- scan=.
 scan structural=1 targets=0 truncated=false
 resolution status=Resolved reason=UniqueAutomaticCandidate selected=composer:acme/basic:script:test
-candidate action=composer:acme/basic:script:test detector=composer origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. program="composer" args=["run-script","test"] availability=available
+candidate action=composer:acme/basic:script:test detector=composer source=composer layer=EcosystemTask origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. scope=. program="composer" args=["run-script","test"] availability=available
   evidence kind=Manifest points=0 source=composer.json reason=composer.json declares script `test`
   evidence kind=Proximity points=30 source=. reason=same directory as target
 
 ## 20-laravel-composer/run
 roots package=. workspace=- scan=.
 scan structural=2 targets=0 truncated=false
-resolution status=Resolved reason=ClearStructuralWinner selected=composer:acme/laravel:script:dev
-candidate action=composer:acme/laravel:script:dev detector=composer origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. program="composer" args=["run-script","dev"] availability=available
+resolution status=Resolved reason=UniqueAutomaticCandidate selected=composer:acme/laravel:script:dev
+candidate action=composer:acme/laravel:script:dev detector=composer source=composer layer=EcosystemTask origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. scope=. program="composer" args=["run-script","dev"] availability=available
   evidence kind=Manifest points=0 source=composer.json reason=composer.json declares Laravel framework support
   evidence kind=Manifest points=0 source=composer.json reason=composer.json declares script `dev`
   evidence kind=Proximity points=30 source=. reason=same directory as target
   evidence kind=Rule points=0 source=composer.json reason=development script conventionally starts multiple processes
-candidate action=artisan:acme/laravel:serve detector=artisan origin=Declared policy=Automatic base=70 total=100 distance=0 cwd=. program="php" args=["artisan","serve"] availability=available
+candidate action=artisan:acme/laravel:serve detector=artisan source=artisan layer=ToolDefault origin=Declared policy=ExplicitHint base=70 total=100 distance=0 cwd=. scope=. program="php" args=["artisan","serve"] availability=available
   evidence kind=Manifest points=0 source=composer.json reason=composer.json declares Laravel framework support
   evidence kind=Convention points=0 source=artisan reason=project contains Artisan entrypoint for serve
   evidence kind=Proximity points=30 source=. reason=same directory as target
-candidate action=composer:acme/laravel:script:test detector=composer origin=Declared policy=ExplicitHint base=15 total=45 distance=0 cwd=. program="composer" args=["run-script","test"] availability=available
+  evidence kind=Rule points=0 source=- reason=demoted by canonical same-scope EcosystemTask project interface
+candidate action=composer:acme/laravel:script:test detector=composer source=composer layer=EcosystemTask origin=Declared policy=ExplicitHint base=15 total=45 distance=0 cwd=. scope=. program="composer" args=["run-script","test"] availability=available
   evidence kind=Manifest points=0 source=composer.json reason=composer.json declares Laravel framework support
   evidence kind=Manifest points=0 source=composer.json reason=composer.json declares script `test`
   evidence kind=Proximity points=30 source=. reason=same directory as target
@@ -573,21 +574,22 @@ resolution status=NoCandidates reason=NoCandidates selected=-
 ## 20-laravel-composer/test
 roots package=. workspace=- scan=.
 scan structural=2 targets=0 truncated=false
-resolution status=Resolved reason=ClearStructuralWinner selected=artisan:acme/laravel:test
-candidate action=artisan:acme/laravel:test detector=artisan origin=Declared policy=Automatic base=115 total=145 distance=0 cwd=. program="php" args=["artisan","test"] availability=available
-  evidence kind=Manifest points=0 source=composer.json reason=composer.json declares Laravel framework support
-  evidence kind=Convention points=0 source=artisan reason=project contains Artisan entrypoint for test
-  evidence kind=Proximity points=30 source=. reason=same directory as target
-candidate action=composer:acme/laravel:script:test detector=composer origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. program="composer" args=["run-script","test"] availability=available
+resolution status=Resolved reason=UniqueAutomaticCandidate selected=composer:acme/laravel:script:test
+candidate action=composer:acme/laravel:script:test detector=composer source=composer layer=EcosystemTask origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. scope=. program="composer" args=["run-script","test"] availability=available
   evidence kind=Manifest points=0 source=composer.json reason=composer.json declares Laravel framework support
   evidence kind=Manifest points=0 source=composer.json reason=composer.json declares script `test`
   evidence kind=Proximity points=30 source=. reason=same directory as target
+candidate action=artisan:acme/laravel:test detector=artisan source=artisan layer=ToolDefault origin=Declared policy=ExplicitHint base=115 total=145 distance=0 cwd=. scope=. program="php" args=["artisan","test"] availability=available
+  evidence kind=Manifest points=0 source=composer.json reason=composer.json declares Laravel framework support
+  evidence kind=Convention points=0 source=artisan reason=project contains Artisan entrypoint for test
+  evidence kind=Proximity points=30 source=. reason=same directory as target
+  evidence kind=Rule points=0 source=- reason=demoted by canonical same-scope EcosystemTask project interface
 
 ## 21-artisan-only/run
 roots package=. workspace=- scan=.
 scan structural=2 targets=0 truncated=false
 resolution status=Resolved reason=UniqueAutomaticCandidate selected=artisan:acme/artisan:serve
-candidate action=artisan:acme/artisan:serve detector=artisan origin=Declared policy=Automatic base=70 total=100 distance=0 cwd=. program="php" args=["artisan","serve"] availability=available
+candidate action=artisan:acme/artisan:serve detector=artisan source=artisan layer=ToolDefault origin=Declared policy=Automatic base=70 total=100 distance=0 cwd=. scope=. program="php" args=["artisan","serve"] availability=available
   evidence kind=Manifest points=0 source=composer.json reason=composer.json declares Laravel framework support
   evidence kind=Convention points=0 source=artisan reason=project contains Artisan entrypoint for serve
   evidence kind=Proximity points=30 source=. reason=same directory as target
@@ -601,7 +603,7 @@ resolution status=NoCandidates reason=NoCandidates selected=-
 roots package=. workspace=- scan=.
 scan structural=2 targets=0 truncated=false
 resolution status=Resolved reason=UniqueAutomaticCandidate selected=artisan:acme/artisan:test
-candidate action=artisan:acme/artisan:test detector=artisan origin=Declared policy=Automatic base=115 total=145 distance=0 cwd=. program="php" args=["artisan","test"] availability=available
+candidate action=artisan:acme/artisan:test detector=artisan source=artisan layer=ToolDefault origin=Declared policy=Automatic base=115 total=145 distance=0 cwd=. scope=. program="php" args=["artisan","test"] availability=available
   evidence kind=Manifest points=0 source=composer.json reason=composer.json declares Laravel framework support
   evidence kind=Convention points=0 source=artisan reason=project contains Artisan entrypoint for test
   evidence kind=Proximity points=30 source=. reason=same directory as target
@@ -610,7 +612,7 @@ candidate action=artisan:acme/artisan:test detector=artisan origin=Declared poli
 roots package=- workspace=- scan=.
 scan structural=2 targets=0 truncated=false
 resolution status=Ambiguous reason=NoAutomaticCandidates selected=-
-candidate action=shell:run:scripts:run.php detector=shell origin=Conventional policy=ExplicitHint base=20 total=35 distance=1 cwd=scripts program="./run.php" args=[] availability=available
+candidate action=shell:run:scripts:run.php detector=shell source=shell layer=DirectTarget origin=Conventional policy=ExplicitHint base=20 total=35 distance=1 cwd=scripts scope=scripts program="./run.php" args=[] availability=available
   evidence kind=Convention points=0 source=scripts/run.php reason=selected executable shebang `/usr/bin/env php` for script target
   evidence kind=Proximity points=15 source=scripts reason=1 directory edges from target
 
@@ -643,7 +645,7 @@ resolution status=NoCandidates reason=NoCandidates selected=-
 roots package=. workspace=- scan=.
 scan structural=2 targets=0 truncated=false
 resolution status=Resolved reason=UniqueAutomaticCandidate selected=go:example.com/root:run:root
-candidate action=go:example.com/root:run:root detector=go origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. program="go" args=["run","."] availability=available
+candidate action=go:example.com/root:run:root detector=go source=go layer=ToolDefault origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. scope=. program="go" args=["run","."] availability=available
   evidence kind=Manifest points=0 source=main.go reason=main.go declares package main
   evidence kind=Proximity points=30 source=. reason=same directory as target
 
@@ -651,7 +653,7 @@ candidate action=go:example.com/root:run:root detector=go origin=Declared policy
 roots package=. workspace=- scan=.
 scan structural=2 targets=0 truncated=false
 resolution status=Resolved reason=UniqueAutomaticCandidate selected=go:example.com/root:build:root
-candidate action=go:example.com/root:build:root detector=go origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. program="go" args=["build","."] availability=available
+candidate action=go:example.com/root:build:root detector=go source=go layer=ToolDefault origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. scope=. program="go" args=["build","."] availability=available
   evidence kind=Manifest points=0 source=main.go reason=main.go declares package main
   evidence kind=Proximity points=30 source=. reason=same directory as target
 
@@ -659,7 +661,7 @@ candidate action=go:example.com/root:build:root detector=go origin=Declared poli
 roots package=. workspace=- scan=.
 scan structural=2 targets=0 truncated=false
 resolution status=Resolved reason=UniqueAutomaticCandidate selected=go:example.com/root:test:all
-candidate action=go:example.com/root:test:all detector=go origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. program="go" args=["test","./..."] availability=available
+candidate action=go:example.com/root:test:all detector=go source=go layer=ToolDefault origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. scope=. program="go" args=["test","./..."] availability=available
   evidence kind=Manifest points=0 source=go.mod reason=go.mod defines the selected test module
   evidence kind=Proximity points=30 source=. reason=same directory as target
 
@@ -667,7 +669,7 @@ candidate action=go:example.com/root:test:all detector=go origin=Declared policy
 roots package=. workspace=- scan=.
 scan structural=3 targets=0 truncated=false
 resolution status=Resolved reason=UniqueAutomaticCandidate selected=go:example.com/multi:run:root
-candidate action=go:example.com/multi:run:root detector=go origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. program="go" args=["run","."] availability=available
+candidate action=go:example.com/multi:run:root detector=go source=go layer=ToolDefault origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. scope=. program="go" args=["run","."] availability=available
   evidence kind=Manifest points=0 source=helper.go reason=helper.go declares package main
   evidence kind=Proximity points=30 source=. reason=same directory as target
 
@@ -675,7 +677,7 @@ candidate action=go:example.com/multi:run:root detector=go origin=Declared polic
 roots package=. workspace=- scan=.
 scan structural=3 targets=0 truncated=false
 resolution status=Resolved reason=UniqueAutomaticCandidate selected=go:example.com/multi:build:root
-candidate action=go:example.com/multi:build:root detector=go origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. program="go" args=["build","."] availability=available
+candidate action=go:example.com/multi:build:root detector=go source=go layer=ToolDefault origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. scope=. program="go" args=["build","."] availability=available
   evidence kind=Manifest points=0 source=helper.go reason=helper.go declares package main
   evidence kind=Proximity points=30 source=. reason=same directory as target
 
@@ -683,7 +685,7 @@ candidate action=go:example.com/multi:build:root detector=go origin=Declared pol
 roots package=. workspace=- scan=.
 scan structural=3 targets=0 truncated=false
 resolution status=Resolved reason=UniqueAutomaticCandidate selected=go:example.com/multi:test:all
-candidate action=go:example.com/multi:test:all detector=go origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. program="go" args=["test","./..."] availability=available
+candidate action=go:example.com/multi:test:all detector=go source=go layer=ToolDefault origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. scope=. program="go" args=["test","./..."] availability=available
   evidence kind=Manifest points=0 source=go.mod reason=go.mod defines the selected test module
   evidence kind=Proximity points=30 source=. reason=same directory as target
 
@@ -691,7 +693,7 @@ candidate action=go:example.com/multi:test:all detector=go origin=Declared polic
 roots package=. workspace=- scan=.
 scan structural=4 targets=0 truncated=false
 resolution status=Resolved reason=UniqueAutomaticCandidate selected=go:example.com/services:run:cmd:server
-candidate action=go:example.com/services:run:cmd:server detector=go origin=Declared policy=Automatic base=80 total=110 distance=0 cwd=. program="go" args=["run","./cmd/server"] availability=available
+candidate action=go:example.com/services:run:cmd:server detector=go source=go layer=ToolDefault origin=Declared policy=Automatic base=80 total=110 distance=0 cwd=. scope=. program="go" args=["run","./cmd/server"] availability=available
   evidence kind=Manifest points=0 source=cmd/server/main.go reason=cmd/server/main.go declares package main
   evidence kind=Proximity points=30 source=. reason=same directory as target
 
@@ -699,7 +701,7 @@ candidate action=go:example.com/services:run:cmd:server detector=go origin=Decla
 roots package=. workspace=- scan=.
 scan structural=4 targets=0 truncated=false
 resolution status=Resolved reason=UniqueAutomaticCandidate selected=go:example.com/services:build:cmd:server
-candidate action=go:example.com/services:build:cmd:server detector=go origin=Declared policy=Automatic base=80 total=110 distance=0 cwd=. program="go" args=["build","./cmd/server"] availability=available
+candidate action=go:example.com/services:build:cmd:server detector=go source=go layer=ToolDefault origin=Declared policy=Automatic base=80 total=110 distance=0 cwd=. scope=. program="go" args=["build","./cmd/server"] availability=available
   evidence kind=Manifest points=0 source=cmd/server/main.go reason=cmd/server/main.go declares package main
   evidence kind=Proximity points=30 source=. reason=same directory as target
 
@@ -707,7 +709,7 @@ candidate action=go:example.com/services:build:cmd:server detector=go origin=Dec
 roots package=. workspace=- scan=.
 scan structural=4 targets=0 truncated=false
 resolution status=Resolved reason=UniqueAutomaticCandidate selected=go:example.com/services:test:all
-candidate action=go:example.com/services:test:all detector=go origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. program="go" args=["test","./..."] availability=available
+candidate action=go:example.com/services:test:all detector=go source=go layer=ToolDefault origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. scope=. program="go" args=["test","./..."] availability=available
   evidence kind=Manifest points=0 source=go.mod reason=go.mod defines the selected test module
   evidence kind=Proximity points=30 source=. reason=same directory as target
 
@@ -715,7 +717,7 @@ candidate action=go:example.com/services:test:all detector=go origin=Declared po
 roots package=- workspace=- scan=.
 scan structural=4 targets=0 truncated=false
 resolution status=Resolved reason=UniqueAutomaticCandidate selected=go:example.com/api:run:root
-candidate action=go:example.com/api:run:root detector=go origin=Declared policy=Automatic base=95 total=103 distance=2 cwd=services/api program="go" args=["run","."] availability=available
+candidate action=go:example.com/api:run:root detector=go source=go layer=ToolDefault origin=Declared policy=Automatic base=95 total=103 distance=2 cwd=services/api scope=services/api program="go" args=["run","."] availability=available
   evidence kind=Manifest points=0 source=services/api/main.go reason=services/api/main.go declares package main
   evidence kind=Proximity points=8 source=services/api reason=2 directory edges from target
 
@@ -723,7 +725,7 @@ candidate action=go:example.com/api:run:root detector=go origin=Declared policy=
 roots package=- workspace=- scan=.
 scan structural=4 targets=0 truncated=false
 resolution status=Resolved reason=UniqueAutomaticCandidate selected=go:example.com/api:build:root
-candidate action=go:example.com/api:build:root detector=go origin=Declared policy=Automatic base=95 total=103 distance=2 cwd=services/api program="go" args=["build","."] availability=available
+candidate action=go:example.com/api:build:root detector=go source=go layer=ToolDefault origin=Declared policy=Automatic base=95 total=103 distance=2 cwd=services/api scope=services/api program="go" args=["build","."] availability=available
   evidence kind=Manifest points=0 source=services/api/main.go reason=services/api/main.go declares package main
   evidence kind=Proximity points=8 source=services/api reason=2 directory edges from target
 
@@ -731,7 +733,7 @@ candidate action=go:example.com/api:build:root detector=go origin=Declared polic
 roots package=- workspace=- scan=.
 scan structural=4 targets=0 truncated=false
 resolution status=Resolved reason=UniqueAutomaticCandidate selected=go:example.com/api:test:all
-candidate action=go:example.com/api:test:all detector=go origin=Declared policy=Automatic base=95 total=103 distance=2 cwd=services/api program="go" args=["test","./..."] availability=available
+candidate action=go:example.com/api:test:all detector=go source=go layer=ToolDefault origin=Declared policy=Automatic base=95 total=103 distance=2 cwd=services/api scope=services/api program="go" args=["test","./..."] availability=available
   evidence kind=Manifest points=0 source=services/api/go.mod reason=go.mod defines the selected test module
   evidence kind=Proximity points=8 source=services/api reason=2 directory edges from target
 
@@ -739,7 +741,7 @@ candidate action=go:example.com/api:test:all detector=go origin=Declared policy=
 roots package=- workspace=. scan=.
 scan structural=5 targets=0 truncated=false
 resolution status=Resolved reason=UniqueAutomaticCandidate selected=go:example.com/work-api:run:root
-candidate action=go:example.com/work-api:run:root detector=go origin=Declared policy=Automatic base=95 total=103 distance=2 cwd=services/api program="go" args=["run","."] availability=available
+candidate action=go:example.com/work-api:run:root detector=go source=go layer=ToolDefault origin=Declared policy=Automatic base=95 total=103 distance=2 cwd=services/api scope=services/api program="go" args=["run","."] availability=available
   evidence kind=Manifest points=0 source=services/api/main.go reason=services/api/main.go declares package main
   evidence kind=Proximity points=8 source=services/api reason=2 directory edges from target
 
@@ -747,7 +749,7 @@ candidate action=go:example.com/work-api:run:root detector=go origin=Declared po
 roots package=- workspace=. scan=.
 scan structural=5 targets=0 truncated=false
 resolution status=Resolved reason=UniqueAutomaticCandidate selected=go:example.com/work-api:build:root
-candidate action=go:example.com/work-api:build:root detector=go origin=Declared policy=Automatic base=95 total=103 distance=2 cwd=services/api program="go" args=["build","."] availability=available
+candidate action=go:example.com/work-api:build:root detector=go source=go layer=ToolDefault origin=Declared policy=Automatic base=95 total=103 distance=2 cwd=services/api scope=services/api program="go" args=["build","."] availability=available
   evidence kind=Manifest points=0 source=services/api/main.go reason=services/api/main.go declares package main
   evidence kind=Proximity points=8 source=services/api reason=2 directory edges from target
 
@@ -755,7 +757,7 @@ candidate action=go:example.com/work-api:build:root detector=go origin=Declared 
 roots package=- workspace=. scan=.
 scan structural=5 targets=0 truncated=false
 resolution status=Resolved reason=UniqueAutomaticCandidate selected=go:example.com/work-api:test:all
-candidate action=go:example.com/work-api:test:all detector=go origin=Declared policy=Automatic base=95 total=103 distance=2 cwd=services/api program="go" args=["test","./..."] availability=available
+candidate action=go:example.com/work-api:test:all detector=go source=go layer=ToolDefault origin=Declared policy=Automatic base=95 total=103 distance=2 cwd=services/api scope=services/api program="go" args=["test","./..."] availability=available
   evidence kind=Manifest points=0 source=services/api/go.mod reason=go.mod defines the selected test module
   evidence kind=Proximity points=8 source=services/api reason=2 directory edges from target
 
@@ -763,7 +765,7 @@ candidate action=go:example.com/work-api:test:all detector=go origin=Declared po
 roots package=. workspace=- scan=.
 scan structural=2 targets=0 truncated=false
 resolution status=Resolved reason=UniqueAutomaticCandidate selected=zig:29-zig-package:build:run
-candidate action=zig:29-zig-package:build:run detector=zig origin=Declared policy=Automatic base=85 total=115 distance=0 cwd=. program="zig" args=["build","run"] availability=available
+candidate action=zig:29-zig-package:build:run detector=zig source=zig layer=ToolDefault origin=Declared policy=Automatic base=85 total=115 distance=0 cwd=. scope=. program="zig" args=["build","run"] availability=available
   evidence kind=Manifest points=0 source=build.zig reason=project contains build.zig
   evidence kind=Proximity points=30 source=. reason=same directory as target
   evidence kind=Rule points=0 source=build.zig reason=build.zig is executable code; custom steps were not evaluated
@@ -772,7 +774,7 @@ candidate action=zig:29-zig-package:build:run detector=zig origin=Declared polic
 roots package=. workspace=- scan=.
 scan structural=2 targets=0 truncated=false
 resolution status=Resolved reason=UniqueAutomaticCandidate selected=zig:29-zig-package:build:build
-candidate action=zig:29-zig-package:build:build detector=zig origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. program="zig" args=["build"] availability=available
+candidate action=zig:29-zig-package:build:build detector=zig source=zig layer=ToolDefault origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. scope=. program="zig" args=["build"] availability=available
   evidence kind=Manifest points=0 source=build.zig reason=project contains build.zig
   evidence kind=Proximity points=30 source=. reason=same directory as target
   evidence kind=Rule points=0 source=build.zig reason=build.zig is executable code; custom steps were not evaluated
@@ -781,7 +783,7 @@ candidate action=zig:29-zig-package:build:build detector=zig origin=Declared pol
 roots package=. workspace=- scan=.
 scan structural=2 targets=0 truncated=false
 resolution status=Resolved reason=UniqueAutomaticCandidate selected=zig:29-zig-package:build:test
-candidate action=zig:29-zig-package:build:test detector=zig origin=Declared policy=Automatic base=85 total=115 distance=0 cwd=. program="zig" args=["build","test"] availability=available
+candidate action=zig:29-zig-package:build:test detector=zig source=zig layer=ToolDefault origin=Declared policy=Automatic base=85 total=115 distance=0 cwd=. scope=. program="zig" args=["build","test"] availability=available
   evidence kind=Manifest points=0 source=build.zig reason=project contains build.zig
   evidence kind=Proximity points=30 source=. reason=same directory as target
   evidence kind=Rule points=0 source=build.zig reason=build.zig is executable code; custom steps were not evaluated
@@ -805,7 +807,7 @@ resolution status=NoCandidates reason=NoCandidates selected=-
 roots package=. workspace=- scan=.
 scan structural=4 targets=0 truncated=false
 resolution status=Resolved reason=UniqueAutomaticCandidate selected=swift:31-swift-executable:run:Runner
-candidate action=swift:31-swift-executable:run:Runner detector=swift origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. program="swift" args=["run"] availability=available
+candidate action=swift:31-swift-executable:run:Runner detector=swift source=swift layer=DirectTarget origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. scope=. program="swift" args=["run"] availability=available
   evidence kind=Manifest points=0 source=Package.swift reason=project contains Package.swift
   evidence kind=Convention points=0 source=Sources/Runner/main.swift reason=Sources/Runner/main.swift is a conventional executable entrypoint
   evidence kind=Proximity points=30 source=. reason=same directory as target
@@ -815,7 +817,7 @@ candidate action=swift:31-swift-executable:run:Runner detector=swift origin=Decl
 roots package=. workspace=- scan=.
 scan structural=4 targets=0 truncated=false
 resolution status=Resolved reason=UniqueAutomaticCandidate selected=swift:31-swift-executable:build
-candidate action=swift:31-swift-executable:build detector=swift origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. program="swift" args=["build"] availability=available
+candidate action=swift:31-swift-executable:build detector=swift source=swift layer=ToolDefault origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. scope=. program="swift" args=["build"] availability=available
   evidence kind=Manifest points=0 source=Package.swift reason=project contains Package.swift
   evidence kind=Proximity points=30 source=. reason=same directory as target
   evidence kind=Rule points=0 source=Package.swift reason=Package.swift is executable code and was not evaluated
@@ -824,7 +826,7 @@ candidate action=swift:31-swift-executable:build detector=swift origin=Declared 
 roots package=. workspace=- scan=.
 scan structural=4 targets=0 truncated=false
 resolution status=Resolved reason=UniqueAutomaticCandidate selected=swift:31-swift-executable:test
-candidate action=swift:31-swift-executable:test detector=swift origin=Declared policy=Automatic base=70 total=100 distance=0 cwd=. program="swift" args=["test"] availability=available
+candidate action=swift:31-swift-executable:test detector=swift source=swift layer=ToolDefault origin=Declared policy=Automatic base=70 total=100 distance=0 cwd=. scope=. program="swift" args=["test"] availability=available
   evidence kind=Manifest points=0 source=Package.swift reason=project contains Package.swift
   evidence kind=Proximity points=30 source=. reason=same directory as target
   evidence kind=Rule points=0 source=Package.swift reason=Package.swift is executable code and was not evaluated
@@ -838,7 +840,7 @@ resolution status=NoCandidates reason=NoCandidates selected=-
 roots package=. workspace=- scan=.
 scan structural=4 targets=0 truncated=false
 resolution status=Resolved reason=UniqueAutomaticCandidate selected=swift:32-swift-library:build
-candidate action=swift:32-swift-library:build detector=swift origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. program="swift" args=["build"] availability=available
+candidate action=swift:32-swift-library:build detector=swift source=swift layer=ToolDefault origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. scope=. program="swift" args=["build"] availability=available
   evidence kind=Manifest points=0 source=Package.swift reason=project contains Package.swift
   evidence kind=Proximity points=30 source=. reason=same directory as target
   evidence kind=Rule points=0 source=Package.swift reason=Package.swift is executable code and was not evaluated
@@ -847,7 +849,7 @@ candidate action=swift:32-swift-library:build detector=swift origin=Declared pol
 roots package=. workspace=- scan=.
 scan structural=4 targets=0 truncated=false
 resolution status=Resolved reason=UniqueAutomaticCandidate selected=swift:32-swift-library:test
-candidate action=swift:32-swift-library:test detector=swift origin=Declared policy=Automatic base=70 total=100 distance=0 cwd=. program="swift" args=["test"] availability=available
+candidate action=swift:32-swift-library:test detector=swift source=swift layer=ToolDefault origin=Declared policy=Automatic base=70 total=100 distance=0 cwd=. scope=. program="swift" args=["test"] availability=available
   evidence kind=Manifest points=0 source=Package.swift reason=project contains Package.swift
   evidence kind=Proximity points=30 source=. reason=same directory as target
   evidence kind=Rule points=0 source=Package.swift reason=Package.swift is executable code and was not evaluated
@@ -874,7 +876,7 @@ diagnostic detector=swift severity=Info source=App.xcodeproj message=Xcode proje
 roots package=. workspace=- scan=.
 scan structural=5 targets=0 truncated=false
 resolution status=Resolved reason=UniqueAutomaticCandidate selected=flutter:flutter_ios:run
-candidate action=flutter:flutter_ios:run detector=flutter origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. program="flutter" args=["run"] availability=available
+candidate action=flutter:flutter_ios:run detector=dart source=flutter layer=ToolDefault origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. scope=. program="flutter" args=["run"] availability=available
   evidence kind=Manifest points=0 source=pubspec.yaml reason=pubspec.yaml declares a Flutter project
   evidence kind=Proximity points=30 source=. reason=same directory as target
 
@@ -882,7 +884,7 @@ candidate action=flutter:flutter_ios:run detector=flutter origin=Declared policy
 roots package=. workspace=- scan=.
 scan structural=5 targets=0 truncated=false
 resolution status=Ambiguous reason=NoAutomaticCandidates selected=-
-candidate action=flutter:flutter_ios:ios detector=flutter origin=Declared policy=ExplicitHint base=50 total=80 distance=0 cwd=. program="flutter" args=["build","ipa"] availability=available
+candidate action=flutter:flutter_ios:ios detector=dart source=flutter layer=ToolDefault origin=Declared policy=ExplicitHint base=50 total=80 distance=0 cwd=. scope=. program="flutter" args=["build","ipa"] availability=available
   evidence kind=Manifest points=0 source=pubspec.yaml reason=pubspec.yaml declares a Flutter project
   evidence kind=Proximity points=30 source=. reason=same directory as target
 
@@ -890,7 +892,7 @@ candidate action=flutter:flutter_ios:ios detector=flutter origin=Declared policy
 roots package=. workspace=- scan=.
 scan structural=5 targets=0 truncated=false
 resolution status=Resolved reason=UniqueAutomaticCandidate selected=flutter:flutter_ios:test
-candidate action=flutter:flutter_ios:test detector=flutter origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. program="flutter" args=["test"] availability=available
+candidate action=flutter:flutter_ios:test detector=dart source=flutter layer=ToolDefault origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. scope=. program="flutter" args=["test"] availability=available
   evidence kind=Manifest points=0 source=pubspec.yaml reason=pubspec.yaml declares a Flutter project
   evidence kind=Proximity points=30 source=. reason=same directory as target
 
@@ -898,7 +900,7 @@ candidate action=flutter:flutter_ios:test detector=flutter origin=Declared polic
 roots package=. workspace=- scan=.
 scan structural=9 targets=0 truncated=false
 resolution status=Resolved reason=UniqueAutomaticCandidate selected=flutter:flutter_platforms:run
-candidate action=flutter:flutter_platforms:run detector=flutter origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. program="flutter" args=["run"] availability=available
+candidate action=flutter:flutter_platforms:run detector=dart source=flutter layer=ToolDefault origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. scope=. program="flutter" args=["run"] availability=available
   evidence kind=Manifest points=0 source=pubspec.yaml reason=pubspec.yaml declares a Flutter project
   evidence kind=Proximity points=30 source=. reason=same directory as target
 
@@ -906,13 +908,13 @@ candidate action=flutter:flutter_platforms:run detector=flutter origin=Declared 
 roots package=. workspace=- scan=.
 scan structural=9 targets=0 truncated=false
 resolution status=Ambiguous reason=NoAutomaticCandidates selected=-
-candidate action=flutter:flutter_platforms:linux detector=flutter origin=Declared policy=ExplicitHint base=50 total=80 distance=0 cwd=. program="flutter" args=["build","linux"] availability=available
+candidate action=flutter:flutter_platforms:linux detector=dart source=flutter layer=ToolDefault origin=Declared policy=ExplicitHint base=50 total=80 distance=0 cwd=. scope=. program="flutter" args=["build","linux"] availability=available
   evidence kind=Manifest points=0 source=pubspec.yaml reason=pubspec.yaml declares a Flutter project
   evidence kind=Proximity points=30 source=. reason=same directory as target
-candidate action=flutter:flutter_platforms:web detector=flutter origin=Declared policy=ExplicitHint base=50 total=80 distance=0 cwd=. program="flutter" args=["build","web"] availability=available
+candidate action=flutter:flutter_platforms:web detector=dart source=flutter layer=ToolDefault origin=Declared policy=ExplicitHint base=50 total=80 distance=0 cwd=. scope=. program="flutter" args=["build","web"] availability=available
   evidence kind=Manifest points=0 source=pubspec.yaml reason=pubspec.yaml declares a Flutter project
   evidence kind=Proximity points=30 source=. reason=same directory as target
-candidate action=flutter:flutter_platforms:windows detector=flutter origin=Declared policy=ExplicitHint base=50 total=80 distance=0 cwd=. program="flutter" args=["build","windows"] availability=available
+candidate action=flutter:flutter_platforms:windows detector=dart source=flutter layer=ToolDefault origin=Declared policy=ExplicitHint base=50 total=80 distance=0 cwd=. scope=. program="flutter" args=["build","windows"] availability=available
   evidence kind=Manifest points=0 source=pubspec.yaml reason=pubspec.yaml declares a Flutter project
   evidence kind=Proximity points=30 source=. reason=same directory as target
 
@@ -920,7 +922,7 @@ candidate action=flutter:flutter_platforms:windows detector=flutter origin=Decla
 roots package=. workspace=- scan=.
 scan structural=9 targets=0 truncated=false
 resolution status=Resolved reason=UniqueAutomaticCandidate selected=flutter:flutter_platforms:test
-candidate action=flutter:flutter_platforms:test detector=flutter origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. program="flutter" args=["test"] availability=available
+candidate action=flutter:flutter_platforms:test detector=dart source=flutter layer=ToolDefault origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. scope=. program="flutter" args=["test"] availability=available
   evidence kind=Manifest points=0 source=pubspec.yaml reason=pubspec.yaml declares a Flutter project
   evidence kind=Proximity points=30 source=. reason=same directory as target
 
@@ -928,7 +930,7 @@ candidate action=flutter:flutter_platforms:test detector=flutter origin=Declared
 roots package=. workspace=- scan=.
 scan structural=5 targets=0 truncated=false
 resolution status=Resolved reason=UniqueAutomaticCandidate selected=dart:dart_package:run:target:bin:app.dart
-candidate action=dart:dart_package:run:target:bin:app.dart detector=dart origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. program="dart" args=["run","bin/app.dart"] availability=available
+candidate action=dart:dart_package:run:target:bin:app.dart detector=dart source=dart layer=ToolDefault origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. scope=. program="dart" args=["run","bin/app.dart"] availability=available
   evidence kind=Manifest points=0 source=pubspec.yaml reason=pubspec.yaml declares a Dart project
   evidence kind=Proximity points=30 source=. reason=same directory as target
 
@@ -941,7 +943,7 @@ resolution status=NoCandidates reason=NoCandidates selected=-
 roots package=. workspace=- scan=.
 scan structural=5 targets=0 truncated=false
 resolution status=Resolved reason=UniqueAutomaticCandidate selected=dart:dart_package:test
-candidate action=dart:dart_package:test detector=dart origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. program="dart" args=["test"] availability=available
+candidate action=dart:dart_package:test detector=dart source=dart layer=ToolDefault origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. scope=. program="dart" args=["test"] availability=available
   evidence kind=Manifest points=0 source=pubspec.yaml reason=pubspec.yaml declares a Dart project
   evidence kind=Proximity points=30 source=. reason=same directory as target
 
@@ -979,7 +981,7 @@ resolution status=NoCandidates reason=NoCandidates selected=-
 roots package=. workspace=- scan=.
 scan structural=1 targets=0 truncated=false
 resolution status=Resolved reason=UniqueAutomaticCandidate selected=make:root:dev
-candidate action=make:root:dev detector=make origin=Declared policy=Automatic base=90 total=120 distance=0 cwd=. program="make" args=["dev"] availability=available
+candidate action=make:root:dev detector=make source=make layer=ProjectFacade origin=Declared policy=Automatic base=90 total=120 distance=0 cwd=. scope=. program="make" args=["dev"] availability=available
   evidence kind=Manifest points=0 source=Makefile reason=Makefile declares literal target `dev`
   evidence kind=Convention points=0 source=Makefile reason=`dev` is a conventional run target
   evidence kind=Proximity points=30 source=. reason=same directory as target
@@ -987,17 +989,17 @@ candidate action=make:root:dev detector=make origin=Declared policy=Automatic ba
 ## 39-make-comments/build
 roots package=. workspace=- scan=.
 scan structural=1 targets=0 truncated=false
-resolution status=Resolved reason=UniqueAutomaticCandidate selected=make:root:dev
-candidate action=make:root:dev detector=make origin=Declared policy=Automatic base=75 total=105 distance=0 cwd=. program="make" args=["dev"] availability=available
+resolution status=Ambiguous reason=NoAutomaticCandidates selected=-
+candidate action=make:root:dev detector=make source=make layer=ProjectFacade origin=Declared policy=ExplicitHint base=15 total=45 distance=0 cwd=. scope=. program="make" args=["dev"] availability=available
   evidence kind=Manifest points=0 source=Makefile reason=Makefile declares literal target `dev`
-  evidence kind=Convention points=0 source=Makefile reason=literal first eligible target is Make's default goal
+  evidence kind=Convention points=0 source=Makefile reason=non-canonical literal Make target requires an identity hint
   evidence kind=Proximity points=30 source=. reason=same directory as target
 
 ## 39-make-comments/test
 roots package=. workspace=- scan=.
 scan structural=1 targets=0 truncated=false
 resolution status=Ambiguous reason=NoAutomaticCandidates selected=-
-candidate action=make:root:dev detector=make origin=Declared policy=ExplicitHint base=15 total=45 distance=0 cwd=. program="make" args=["dev"] availability=available
+candidate action=make:root:dev detector=make source=make layer=ProjectFacade origin=Declared policy=ExplicitHint base=15 total=45 distance=0 cwd=. scope=. program="make" args=["dev"] availability=available
   evidence kind=Manifest points=0 source=Makefile reason=Makefile declares literal target `dev`
   evidence kind=Convention points=0 source=Makefile reason=non-canonical literal Make target requires an identity hint
   evidence kind=Proximity points=30 source=. reason=same directory as target
@@ -1006,19 +1008,19 @@ candidate action=make:root:dev detector=make origin=Declared policy=ExplicitHint
 roots package=. workspace=- scan=.
 scan structural=1 targets=0 truncated=false
 resolution status=Ambiguous reason=CloseCandidates selected=-
-candidate action=make:root:run detector=make origin=Declared policy=Automatic base=85 total=115 distance=0 cwd=. program="make" args=["run"] availability=available
+candidate action=make:root:run detector=make source=make layer=ProjectFacade origin=Declared policy=Automatic base=85 total=115 distance=0 cwd=. scope=. program="make" args=["run"] availability=available
   evidence kind=Manifest points=0 source=Makefile reason=Makefile declares literal target `run`
   evidence kind=Convention points=0 source=Makefile reason=`run` is a conventional run target
   evidence kind=Proximity points=30 source=. reason=same directory as target
-candidate action=make:root:serve detector=make origin=Declared policy=Automatic base=80 total=110 distance=0 cwd=. program="make" args=["serve"] availability=available
+candidate action=make:root:serve detector=make source=make layer=ProjectFacade origin=Declared policy=Automatic base=80 total=110 distance=0 cwd=. scope=. program="make" args=["serve"] availability=available
   evidence kind=Manifest points=0 source=Makefile reason=Makefile declares literal target `serve`
   evidence kind=Convention points=0 source=Makefile reason=`serve` is a conventional run target
   evidence kind=Proximity points=30 source=. reason=same directory as target
-candidate action=make:root:build detector=make origin=Declared policy=ExplicitHint base=15 total=45 distance=0 cwd=. program="make" args=["build"] availability=available
+candidate action=make:root:build detector=make source=make layer=ProjectFacade origin=Declared policy=ExplicitHint base=15 total=45 distance=0 cwd=. scope=. program="make" args=["build"] availability=available
   evidence kind=Manifest points=0 source=Makefile reason=Makefile declares literal target `build`
   evidence kind=Convention points=0 source=Makefile reason=non-canonical literal Make target requires an identity hint
   evidence kind=Proximity points=30 source=. reason=same directory as target
-candidate action=make:root:test detector=make origin=Declared policy=ExplicitHint base=15 total=45 distance=0 cwd=. program="make" args=["test"] availability=available
+candidate action=make:root:test detector=make source=make layer=ProjectFacade origin=Declared policy=ExplicitHint base=15 total=45 distance=0 cwd=. scope=. program="make" args=["test"] availability=available
   evidence kind=Manifest points=0 source=Makefile reason=Makefile declares literal target `test`
   evidence kind=Convention points=0 source=Makefile reason=non-canonical literal Make target requires an identity hint
   evidence kind=Proximity points=30 source=. reason=same directory as target
@@ -1027,19 +1029,19 @@ candidate action=make:root:test detector=make origin=Declared policy=ExplicitHin
 roots package=. workspace=- scan=.
 scan structural=1 targets=0 truncated=false
 resolution status=Resolved reason=UniqueAutomaticCandidate selected=make:root:build
-candidate action=make:root:build detector=make origin=Declared policy=Automatic base=90 total=120 distance=0 cwd=. program="make" args=["build"] availability=available
+candidate action=make:root:build detector=make source=make layer=ProjectFacade origin=Declared policy=Automatic base=90 total=120 distance=0 cwd=. scope=. program="make" args=["build"] availability=available
   evidence kind=Manifest points=0 source=Makefile reason=Makefile declares literal target `build`
   evidence kind=Convention points=0 source=Makefile reason=`build` is a conventional build target
   evidence kind=Proximity points=30 source=. reason=same directory as target
-candidate action=make:root:run detector=make origin=Declared policy=ExplicitHint base=15 total=45 distance=0 cwd=. program="make" args=["run"] availability=available
+candidate action=make:root:run detector=make source=make layer=ProjectFacade origin=Declared policy=ExplicitHint base=15 total=45 distance=0 cwd=. scope=. program="make" args=["run"] availability=available
   evidence kind=Manifest points=0 source=Makefile reason=Makefile declares literal target `run`
   evidence kind=Convention points=0 source=Makefile reason=non-canonical literal Make target requires an identity hint
   evidence kind=Proximity points=30 source=. reason=same directory as target
-candidate action=make:root:serve detector=make origin=Declared policy=ExplicitHint base=15 total=45 distance=0 cwd=. program="make" args=["serve"] availability=available
+candidate action=make:root:serve detector=make source=make layer=ProjectFacade origin=Declared policy=ExplicitHint base=15 total=45 distance=0 cwd=. scope=. program="make" args=["serve"] availability=available
   evidence kind=Manifest points=0 source=Makefile reason=Makefile declares literal target `serve`
   evidence kind=Convention points=0 source=Makefile reason=non-canonical literal Make target requires an identity hint
   evidence kind=Proximity points=30 source=. reason=same directory as target
-candidate action=make:root:test detector=make origin=Declared policy=ExplicitHint base=15 total=45 distance=0 cwd=. program="make" args=["test"] availability=available
+candidate action=make:root:test detector=make source=make layer=ProjectFacade origin=Declared policy=ExplicitHint base=15 total=45 distance=0 cwd=. scope=. program="make" args=["test"] availability=available
   evidence kind=Manifest points=0 source=Makefile reason=Makefile declares literal target `test`
   evidence kind=Convention points=0 source=Makefile reason=non-canonical literal Make target requires an identity hint
   evidence kind=Proximity points=30 source=. reason=same directory as target
@@ -1048,19 +1050,19 @@ candidate action=make:root:test detector=make origin=Declared policy=ExplicitHin
 roots package=. workspace=- scan=.
 scan structural=1 targets=0 truncated=false
 resolution status=Resolved reason=UniqueAutomaticCandidate selected=make:root:test
-candidate action=make:root:test detector=make origin=Declared policy=Automatic base=90 total=120 distance=0 cwd=. program="make" args=["test"] availability=available
+candidate action=make:root:test detector=make source=make layer=ProjectFacade origin=Declared policy=Automatic base=90 total=120 distance=0 cwd=. scope=. program="make" args=["test"] availability=available
   evidence kind=Manifest points=0 source=Makefile reason=Makefile declares literal target `test`
   evidence kind=Convention points=0 source=Makefile reason=`test` is a conventional test target
   evidence kind=Proximity points=30 source=. reason=same directory as target
-candidate action=make:root:build detector=make origin=Declared policy=ExplicitHint base=15 total=45 distance=0 cwd=. program="make" args=["build"] availability=available
+candidate action=make:root:build detector=make source=make layer=ProjectFacade origin=Declared policy=ExplicitHint base=15 total=45 distance=0 cwd=. scope=. program="make" args=["build"] availability=available
   evidence kind=Manifest points=0 source=Makefile reason=Makefile declares literal target `build`
   evidence kind=Convention points=0 source=Makefile reason=non-canonical literal Make target requires an identity hint
   evidence kind=Proximity points=30 source=. reason=same directory as target
-candidate action=make:root:run detector=make origin=Declared policy=ExplicitHint base=15 total=45 distance=0 cwd=. program="make" args=["run"] availability=available
+candidate action=make:root:run detector=make source=make layer=ProjectFacade origin=Declared policy=ExplicitHint base=15 total=45 distance=0 cwd=. scope=. program="make" args=["run"] availability=available
   evidence kind=Manifest points=0 source=Makefile reason=Makefile declares literal target `run`
   evidence kind=Convention points=0 source=Makefile reason=non-canonical literal Make target requires an identity hint
   evidence kind=Proximity points=30 source=. reason=same directory as target
-candidate action=make:root:serve detector=make origin=Declared policy=ExplicitHint base=15 total=45 distance=0 cwd=. program="make" args=["serve"] availability=available
+candidate action=make:root:serve detector=make source=make layer=ProjectFacade origin=Declared policy=ExplicitHint base=15 total=45 distance=0 cwd=. scope=. program="make" args=["serve"] availability=available
   evidence kind=Manifest points=0 source=Makefile reason=Makefile declares literal target `serve`
   evidence kind=Convention points=0 source=Makefile reason=non-canonical literal Make target requires an identity hint
   evidence kind=Proximity points=30 source=. reason=same directory as target
@@ -1084,10 +1086,10 @@ resolution status=NoCandidates reason=NoCandidates selected=-
 roots package=. workspace=- scan=.
 scan structural=1 targets=0 truncated=false
 resolution status=Ambiguous reason=NoAutomaticCandidates selected=-
-candidate action=docker:root:compose-up:target:web detector=docker origin=Declared policy=ExplicitHint base=45 total=75 distance=0 cwd=. program="docker" args=["compose","up","web"] availability=available
+candidate action=docker:root:compose-up:target:web detector=docker source=docker layer=ToolDefault origin=Declared policy=ExplicitHint base=45 total=75 distance=0 cwd=. scope=. program="docker" args=["compose","up","web"] availability=available
   evidence kind=Manifest points=0 source=compose.yml reason=compose.yml declares service `web`
   evidence kind=Proximity points=30 source=. reason=same directory as target
-candidate action=docker:root:compose-up detector=docker origin=Declared policy=ExplicitHint base=40 total=70 distance=0 cwd=. program="docker" args=["compose","up"] availability=available
+candidate action=docker:root:compose-up detector=docker source=docker layer=ToolDefault origin=Declared policy=ExplicitHint base=40 total=70 distance=0 cwd=. scope=. program="docker" args=["compose","up"] availability=available
   evidence kind=Manifest points=0 source=compose.yml reason=compose.yml is a standard Compose manifest
   evidence kind=Proximity points=30 source=. reason=same directory as target
 
@@ -1105,10 +1107,10 @@ resolution status=NoCandidates reason=NoCandidates selected=-
 roots package=. workspace=- scan=.
 scan structural=1 targets=0 truncated=false
 resolution status=Ambiguous reason=NoAutomaticCandidates selected=-
-candidate action=docker:root:compose-up:target:api detector=docker origin=Declared policy=ExplicitHint base=45 total=75 distance=0 cwd=. program="docker" args=["compose","up","api"] availability=available
+candidate action=docker:root:compose-up:target:api detector=docker source=docker layer=ToolDefault origin=Declared policy=ExplicitHint base=45 total=75 distance=0 cwd=. scope=. program="docker" args=["compose","up","api"] availability=available
   evidence kind=Manifest points=0 source=compose.yaml reason=compose.yaml declares service `api`
   evidence kind=Proximity points=30 source=. reason=same directory as target
-candidate action=docker:root:compose-up detector=docker origin=Declared policy=ExplicitHint base=40 total=70 distance=0 cwd=. program="docker" args=["compose","up"] availability=available
+candidate action=docker:root:compose-up detector=docker source=docker layer=ToolDefault origin=Declared policy=ExplicitHint base=40 total=70 distance=0 cwd=. scope=. program="docker" args=["compose","up"] availability=available
   evidence kind=Manifest points=0 source=compose.yaml reason=compose.yaml is a standard Compose manifest
   evidence kind=Proximity points=30 source=. reason=same directory as target
 
@@ -1126,10 +1128,10 @@ resolution status=NoCandidates reason=NoCandidates selected=-
 roots package=. workspace=- scan=.
 scan structural=1 targets=0 truncated=false
 resolution status=Ambiguous reason=NoAutomaticCandidates selected=-
-candidate action=docker:root:compose-up:target:worker detector=docker origin=Declared policy=ExplicitHint base=45 total=75 distance=0 cwd=. program="docker" args=["compose","up","worker"] availability=available
+candidate action=docker:root:compose-up:target:worker detector=docker source=docker layer=ToolDefault origin=Declared policy=ExplicitHint base=45 total=75 distance=0 cwd=. scope=. program="docker" args=["compose","up","worker"] availability=available
   evidence kind=Manifest points=0 source=docker-compose.yml reason=docker-compose.yml declares service `worker`
   evidence kind=Proximity points=30 source=. reason=same directory as target
-candidate action=docker:root:compose-up detector=docker origin=Declared policy=ExplicitHint base=40 total=70 distance=0 cwd=. program="docker" args=["compose","up"] availability=available
+candidate action=docker:root:compose-up detector=docker source=docker layer=ToolDefault origin=Declared policy=ExplicitHint base=40 total=70 distance=0 cwd=. scope=. program="docker" args=["compose","up"] availability=available
   evidence kind=Manifest points=0 source=docker-compose.yml reason=docker-compose.yml is a standard Compose manifest
   evidence kind=Proximity points=30 source=. reason=same directory as target
 
@@ -1147,10 +1149,10 @@ resolution status=NoCandidates reason=NoCandidates selected=-
 roots package=. workspace=- scan=.
 scan structural=1 targets=0 truncated=false
 resolution status=Ambiguous reason=NoAutomaticCandidates selected=-
-candidate action=docker:root:compose-up:target:db detector=docker origin=Declared policy=ExplicitHint base=45 total=75 distance=0 cwd=. program="docker" args=["compose","up","db"] availability=available
+candidate action=docker:root:compose-up:target:db detector=docker source=docker layer=ToolDefault origin=Declared policy=ExplicitHint base=45 total=75 distance=0 cwd=. scope=. program="docker" args=["compose","up","db"] availability=available
   evidence kind=Manifest points=0 source=docker-compose.yaml reason=docker-compose.yaml declares service `db`
   evidence kind=Proximity points=30 source=. reason=same directory as target
-candidate action=docker:root:compose-up detector=docker origin=Declared policy=ExplicitHint base=40 total=70 distance=0 cwd=. program="docker" args=["compose","up"] availability=available
+candidate action=docker:root:compose-up detector=docker source=docker layer=ToolDefault origin=Declared policy=ExplicitHint base=40 total=70 distance=0 cwd=. scope=. program="docker" args=["compose","up"] availability=available
   evidence kind=Manifest points=0 source=docker-compose.yaml reason=docker-compose.yaml is a standard Compose manifest
   evidence kind=Proximity points=30 source=. reason=same directory as target
 
@@ -1168,22 +1170,22 @@ resolution status=NoCandidates reason=NoCandidates selected=-
 roots package=. workspace=- scan=.
 scan structural=2 targets=0 truncated=false
 resolution status=Resolved reason=UniqueAutomaticCandidate selected=node:compose-vite:script:dev
-candidate action=node:compose-vite:script:dev detector=vite origin=Declared policy=Automatic base=95 total=130 distance=0 cwd=. program="npm" args=["run","dev"] availability=available
+candidate action=node:compose-vite:script:dev detector=node source=vite layer=EcosystemTask origin=Declared policy=Automatic base=95 total=130 distance=0 cwd=. scope=. program="npm" args=["run","dev"] availability=available
   evidence kind=Manifest points=10 source=package.json reason=package declares vite
   evidence kind=Manifest points=0 source=package.json reason=package.json declares script `dev`
   evidence kind=Proximity points=30 source=. reason=same directory as target
   evidence kind=Rule points=-5 source=- reason=defaulted to npm because no package-manager marker was found
-candidate action=docker:root:compose-up:target:web detector=docker origin=Declared policy=ExplicitHint base=45 total=75 distance=0 cwd=. program="docker" args=["compose","up","web"] availability=available
+candidate action=docker:root:compose-up:target:web detector=docker source=docker layer=ToolDefault origin=Declared policy=ExplicitHint base=45 total=75 distance=0 cwd=. scope=. program="docker" args=["compose","up","web"] availability=available
   evidence kind=Manifest points=0 source=compose.yaml reason=compose.yaml declares service `web`
   evidence kind=Proximity points=30 source=. reason=same directory as target
-candidate action=docker:root:compose-up detector=docker origin=Declared policy=ExplicitHint base=40 total=70 distance=0 cwd=. program="docker" args=["compose","up"] availability=available
+candidate action=docker:root:compose-up detector=docker source=docker layer=ToolDefault origin=Declared policy=ExplicitHint base=40 total=70 distance=0 cwd=. scope=. program="docker" args=["compose","up"] availability=available
   evidence kind=Manifest points=0 source=compose.yaml reason=compose.yaml is a standard Compose manifest
   evidence kind=Proximity points=30 source=. reason=same directory as target
-candidate action=vite:compose-vite:preview detector=vite origin=Declared policy=ExplicitHint base=25 total=65 distance=0 cwd=. program="npm" args=["exec","--offline","--","vite","preview"] availability=available
+candidate action=vite:compose-vite:preview detector=node source=vite layer=ToolDefault origin=Declared policy=ExplicitHint base=25 total=65 distance=0 cwd=. scope=. program="npm" args=["exec","--offline","--","vite","preview"] availability=available
   evidence kind=Manifest points=10 source=package.json reason=package declares vite without a canonical `preview` script
   evidence kind=Proximity points=30 source=. reason=same directory as target
   evidence kind=Rule points=0 source=- reason=npm uses its local-only binary execution mode
-candidate action=node:compose-vite:script:build detector=node origin=Declared policy=ExplicitHint base=15 total=40 distance=0 cwd=. program="npm" args=["run","build"] availability=available
+candidate action=node:compose-vite:script:build detector=node source=node layer=EcosystemTask origin=Declared policy=ExplicitHint base=15 total=40 distance=0 cwd=. scope=. program="npm" args=["run","build"] availability=available
   evidence kind=Manifest points=0 source=package.json reason=package.json declares script `build`
   evidence kind=Proximity points=30 source=. reason=same directory as target
   evidence kind=Rule points=-5 source=- reason=defaulted to npm because no package-manager marker was found
@@ -1192,7 +1194,7 @@ candidate action=node:compose-vite:script:build detector=node origin=Declared po
 roots package=. workspace=- scan=.
 scan structural=2 targets=0 truncated=false
 resolution status=Resolved reason=UniqueAutomaticCandidate selected=node:compose-vite:script:build
-candidate action=node:compose-vite:script:build detector=vite origin=Declared policy=Automatic base=95 total=130 distance=0 cwd=. program="npm" args=["run","build"] availability=available
+candidate action=node:compose-vite:script:build detector=node source=vite layer=EcosystemTask origin=Declared policy=Automatic base=95 total=130 distance=0 cwd=. scope=. program="npm" args=["run","build"] availability=available
   evidence kind=Manifest points=10 source=package.json reason=package declares vite
   evidence kind=Manifest points=0 source=package.json reason=package.json declares script `build`
   evidence kind=Proximity points=30 source=. reason=same directory as target
@@ -1207,7 +1209,7 @@ resolution status=NoCandidates reason=NoCandidates selected=-
 roots package=- workspace=- scan=.
 scan structural=2 targets=0 truncated=false
 resolution status=Ambiguous reason=NoAutomaticCandidates selected=-
-candidate action=shell:run:scripts:dev detector=shell origin=Conventional policy=ExplicitHint base=20 total=35 distance=1 cwd=scripts program="./dev" args=[] availability=available
+candidate action=shell:run:scripts:dev detector=shell source=shell layer=DirectTarget origin=Conventional policy=ExplicitHint base=20 total=35 distance=1 cwd=scripts scope=scripts program="./dev" args=[] availability=available
   evidence kind=Convention points=0 source=scripts/dev reason=selected executable shebang `/usr/bin/env -S bash -eu` for script target
   evidence kind=Proximity points=15 source=scripts reason=1 directory edges from target
 
@@ -1225,7 +1227,7 @@ resolution status=NoCandidates reason=NoCandidates selected=-
 roots package=- workspace=- scan=.
 scan structural=1 targets=0 truncated=false
 resolution status=Resolved reason=UniqueAutomaticCandidate selected=shell:run:run.sh
-candidate action=shell:run:run.sh detector=shell origin=Conventional policy=Automatic base=75 total=105 distance=0 cwd=. program="/bin/sh" args=["run.sh"] availability=available
+candidate action=shell:run:run.sh detector=shell source=shell layer=DirectTarget origin=Conventional policy=Automatic base=75 total=105 distance=0 cwd=. scope=. program="/bin/sh" args=["run.sh"] availability=available
   evidence kind=Convention points=0 source=run.sh reason=selected declared shebang `/bin/sh` for script target
   evidence kind=Proximity points=30 source=. reason=same directory as target
 
@@ -1243,7 +1245,7 @@ resolution status=NoCandidates reason=NoCandidates selected=-
 roots package=- workspace=- scan=.
 scan structural=2 targets=0 truncated=false
 resolution status=Ambiguous reason=NoAutomaticCandidates selected=-
-candidate action=shell:run:bin:tool detector=shell origin=Conventional policy=ExplicitHint base=20 total=35 distance=1 cwd=bin program="./tool" args=[] availability=available
+candidate action=shell:run:bin:tool detector=shell source=shell layer=DirectTarget origin=Conventional policy=ExplicitHint base=20 total=35 distance=1 cwd=bin scope=bin program="./tool" args=[] availability=available
   evidence kind=Convention points=0 source=bin/tool reason=selected the executable bit for script target
   evidence kind=Proximity points=15 source=bin reason=1 directory edges from target
 
@@ -1261,19 +1263,19 @@ resolution status=NoCandidates reason=NoCandidates selected=-
 roots package=. workspace=- scan=.
 scan structural=4 targets=0 truncated=false
 resolution status=Ambiguous reason=CloseCandidates selected=-
-candidate action=node:ambiguous:script:dev detector=vite origin=Declared policy=Automatic base=95 total=130 distance=0 cwd=. program="npm" args=["run","dev"] availability=available
+candidate action=node:ambiguous:script:dev detector=node source=vite layer=EcosystemTask origin=Declared policy=Automatic base=95 total=130 distance=0 cwd=. scope=. program="npm" args=["run","dev"] availability=available
   evidence kind=Manifest points=10 source=package.json reason=package declares vite
   evidence kind=Manifest points=0 source=package.json reason=package.json declares script `dev`
   evidence kind=Proximity points=30 source=. reason=same directory as target
   evidence kind=Rule points=-5 source=- reason=defaulted to npm because no package-manager marker was found
-candidate action=composer:acme/ambiguous:script:dev detector=composer origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. program="composer" args=["run-script","dev"] availability=available
+candidate action=composer:acme/ambiguous:script:dev detector=composer source=composer layer=EcosystemTask origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. scope=. program="composer" args=["run-script","dev"] availability=available
   evidence kind=Manifest points=0 source=composer.json reason=composer.json declares script `dev`
   evidence kind=Proximity points=30 source=. reason=same directory as target
-candidate action=vite:ambiguous:preview detector=vite origin=Declared policy=ExplicitHint base=25 total=65 distance=0 cwd=. program="npm" args=["exec","--offline","--","vite","preview"] availability=available
+candidate action=vite:ambiguous:preview detector=node source=vite layer=ToolDefault origin=Declared policy=ExplicitHint base=25 total=65 distance=0 cwd=. scope=. program="npm" args=["exec","--offline","--","vite","preview"] availability=available
   evidence kind=Manifest points=10 source=package.json reason=package declares vite without a canonical `preview` script
   evidence kind=Proximity points=30 source=. reason=same directory as target
   evidence kind=Rule points=0 source=- reason=npm uses its local-only binary execution mode
-candidate action=shell:run:scripts:dev detector=shell origin=Conventional policy=ExplicitHint base=20 total=35 distance=1 cwd=scripts program="./dev" args=[] availability=available
+candidate action=shell:run:scripts:dev detector=shell source=shell layer=DirectTarget origin=Conventional policy=ExplicitHint base=20 total=35 distance=1 cwd=scripts scope=scripts program="./dev" args=[] availability=available
   evidence kind=Convention points=0 source=scripts/dev reason=selected executable shebang `/bin/sh` for script target
   evidence kind=Proximity points=15 source=scripts reason=1 directory edges from target
 
@@ -1281,7 +1283,7 @@ candidate action=shell:run:scripts:dev detector=shell origin=Conventional policy
 roots package=. workspace=- scan=.
 scan structural=4 targets=0 truncated=false
 resolution status=Resolved reason=UniqueAutomaticCandidate selected=vite:ambiguous:build
-candidate action=vite:ambiguous:build detector=vite origin=Declared policy=Automatic base=80 total=120 distance=0 cwd=. program="npm" args=["exec","--offline","--","vite","build"] availability=available
+candidate action=vite:ambiguous:build detector=node source=vite layer=ToolDefault origin=Declared policy=Automatic base=80 total=120 distance=0 cwd=. scope=. program="npm" args=["exec","--offline","--","vite","build"] availability=available
   evidence kind=Manifest points=10 source=package.json reason=package declares vite without a canonical `build` script
   evidence kind=Proximity points=30 source=. reason=same directory as target
   evidence kind=Rule points=0 source=- reason=npm uses its local-only binary execution mode
@@ -1384,7 +1386,7 @@ resolution status=NoCandidates reason=NoCandidates selected=-
 roots package=. workspace=- scan=.
 scan structural=1 targets=0 truncated=false
 resolution status=Ambiguous reason=NoAutomaticCandidates selected=-
-candidate action=docker:root:build detector=docker origin=Declared policy=ExplicitHint base=40 total=70 distance=0 cwd=. program="docker" args=["build","."] availability=available
+candidate action=docker:root:build detector=docker source=docker layer=ToolDefault origin=Declared policy=ExplicitHint base=40 total=70 distance=0 cwd=. scope=. program="docker" args=["build","."] availability=available
   evidence kind=Manifest points=0 source=Dockerfile reason=project contains Dockerfile
   evidence kind=Proximity points=30 source=. reason=same directory as target
 

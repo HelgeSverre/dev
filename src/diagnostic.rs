@@ -2,6 +2,8 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
+use crate::registry::DetectorId;
+
 /// Severity for a non-fatal discovery diagnostic.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -12,9 +14,9 @@ pub enum Severity {
 }
 
 /// A detector or scanner problem retained for explainability.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct Diagnostic {
-    pub detector: &'static str,
+    pub detector: DetectorId,
     pub severity: Severity,
     pub message: String,
     pub source: Option<PathBuf>,
@@ -23,7 +25,7 @@ pub struct Diagnostic {
 impl Diagnostic {
     #[must_use]
     pub fn warning(
-        detector: &'static str,
+        detector: DetectorId,
         message: impl Into<String>,
         source: Option<PathBuf>,
     ) -> Self {

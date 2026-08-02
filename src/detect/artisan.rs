@@ -5,6 +5,7 @@ use crate::candidate::{
     Candidate, Evidence, EvidenceKind, Lifecycle, SearchDocument, SelectionPolicy,
 };
 use crate::intent::{Intent, Target};
+use crate::registry::{ARTISAN, ARTISAN_SOURCE};
 
 use super::composer::{composer_projects, has_laravel_evidence, project_scope, ComposerProject};
 use super::{Detection, Detector, ScanCtx};
@@ -12,14 +13,6 @@ use super::{Detection, Detector, ScanCtx};
 pub struct ArtisanDetector;
 
 impl Detector for ArtisanDetector {
-    fn name(&self) -> &'static str {
-        "artisan"
-    }
-
-    fn synonyms(&self) -> &'static [&'static str] {
-        &["laravel", "php", "artisan"]
-    }
-
     fn detect(&self, context: &ScanCtx<'_>) -> Detection {
         let (projects, _) = composer_projects(context, false);
         let mut output = Detection::default();
@@ -41,7 +34,8 @@ fn serve_candidate(project: &ComposerProject) -> Candidate {
     let scope = project_scope(project);
     let mut candidate = Candidate::new(
         format!("artisan:{scope}:serve"),
-        "artisan",
+        ARTISAN,
+        ARTISAN_SOURCE,
         Intent::Run,
         "serve",
         "php",
@@ -79,7 +73,8 @@ fn test_candidate(context: &ScanCtx<'_>, project: &ComposerProject) -> Candidate
         );
     let mut candidate = Candidate::new(
         format!("artisan:{scope}:test{action_suffix}"),
-        "artisan",
+        ARTISAN,
+        ARTISAN_SOURCE,
         Intent::Test,
         action_name,
         "php",

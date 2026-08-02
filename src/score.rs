@@ -134,6 +134,7 @@ mod tests {
 
     use crate::candidate::{Candidate, EvidenceKind, SelectionPolicy};
     use crate::intent::Intent;
+    use crate::registry::{NODE, NODE_SOURCE};
 
     use super::*;
 
@@ -148,7 +149,8 @@ mod tests {
         let score = |values: [i32; 2]| {
             let mut candidate = Candidate::new(
                 "test",
-                "test",
+                NODE,
+                NODE_SOURCE,
                 Intent::Run,
                 "test",
                 "true",

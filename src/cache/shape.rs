@@ -181,6 +181,7 @@ fn digest_file(path: &Path) -> Option<String> {
 mod tests {
     use crate::candidate::{Candidate, SelectionPolicy};
     use crate::intent::{Intent, Target};
+    use crate::registry::{NODE, NODE_SOURCE};
     use crate::scan::{resolve_roots, FileIndex, ScanOptions};
 
     use super::*;
@@ -188,7 +189,8 @@ mod tests {
     fn candidate(cwd: &Path) -> Candidate {
         Candidate::new(
             "test:run",
-            "node",
+            NODE,
+            NODE_SOURCE,
             Intent::Run,
             "run",
             "missing-test-program",

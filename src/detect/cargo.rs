@@ -4,10 +4,12 @@ use std::path::{Path, PathBuf};
 use serde::Deserialize;
 
 use crate::candidate::{
-    Candidate, CandidateOrigin, Evidence, EvidenceKind, SearchDocument, SelectionPolicy,
+    Candidate, CandidateOrigin, CommandLayer, Evidence, EvidenceKind, SearchDocument,
+    SelectionPolicy,
 };
 use crate::diagnostic::Diagnostic;
 use crate::intent::Intent;
+use crate::registry::{CARGO, CARGO_SOURCE};
 use crate::scan::IndexedFileType;
 
 use super::{Detection, Detector, ScanCtx};
@@ -45,14 +47,6 @@ struct ExecutableTarget {
 }
 
 impl Detector for CargoDetector {
-    fn name(&self) -> &'static str {
-        "cargo"
-    }
-
-    fn synonyms(&self) -> &'static [&'static str] {
-        &["rust", "rs", "cargo", "crate"]
-    }
-
     fn detect(&self, context: &ScanCtx<'_>) -> Detection {
         let mut output = Detection::default();
         let (manifests, diagnostics) = cargo_manifests(context);
@@ -101,7 +95,7 @@ impl Detector for CargoDetector {
                     let targets = executable_targets(context, &manifest, &package_directory);
                     if targets.iter().all(|target| target.example) {
                         output.diagnostics.push(Diagnostic {
-                            detector: self.name(),
+                            detector: CARGO,
                             severity: crate::diagnostic::Severity::Info,
                             message: format!(
                                 "crate `{}` has no executable binary targets; try build, test, or an example hint",
@@ -159,7 +153,7 @@ fn cargo_manifests(context: &ScanCtx<'_>) -> (Vec<(PathBuf, CargoManifest)>, Vec
             Ok(contents) => contents,
             Err(error) => {
                 diagnostics.push(Diagnostic::warning(
-                    "cargo",
+                    CARGO,
                     error.to_string(),
                     Some(absolute),
                 ));
@@ -169,7 +163,7 @@ fn cargo_manifests(context: &ScanCtx<'_>) -> (Vec<(PathBuf, CargoManifest)>, Vec
         match toml::from_str::<CargoManifest>(&contents) {
             Ok(manifest) => output.push((path, manifest)),
             Err(error) => diagnostics.push(Diagnostic::warning(
-                "cargo",
+                CARGO,
                 format!("invalid Cargo.toml: {error}"),
                 Some(absolute),
             )),
@@ -365,7 +359,8 @@ fn run_candidates(
             let kind = if target.example { "example" } else { "bin" };
             let mut candidate = Candidate::new(
                 format!("cargo:{}:{kind}:{}", package.name, target.name),
-                "cargo",
+                CARGO,
+                CARGO_SOURCE,
                 Intent::Run,
                 &target.name,
                 "cargo",
@@ -379,6 +374,7 @@ fn run_candidates(
             } else {
                 CandidateOrigin::Declared
             };
+            candidate.layer = CommandLayer::DirectTarget;
             candidate.passthrough = crate::candidate::PassthroughStyle::DoubleDash;
             candidate.label = if target.example {
                 format!("Cargo example `{}`", target.name)
@@ -429,7 +425,8 @@ fn package_action_candidate(
     let action = intent.to_string();
     let mut candidate = Candidate::new(
         format!("cargo:{}:{action}", package.name),
-        "cargo",
+        CARGO,
+        CARGO_SOURCE,
         intent,
         &action,
         "cargo",
@@ -476,7 +473,8 @@ fn virtual_workspace_candidates(
     let action = context.invocation.intent.to_string();
     let mut candidate = Candidate::new(
         format!("cargo:workspace:{action}"),
-        "cargo",
+        CARGO,
+        CARGO_SOURCE,
         context.invocation.intent,
         &action,
         "cargo",

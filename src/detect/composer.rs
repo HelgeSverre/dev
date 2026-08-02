@@ -5,11 +5,12 @@ use std::path::PathBuf;
 use serde::Deserialize;
 
 use crate::candidate::{
-    Candidate, CandidateOrigin, Evidence, EvidenceKind, Lifecycle, PassthroughStyle,
+    Candidate, CandidateOrigin, CommandLayer, Evidence, EvidenceKind, Lifecycle, PassthroughStyle,
     SearchDocument, SelectionPolicy,
 };
 use crate::diagnostic::Diagnostic;
 use crate::intent::Intent;
+use crate::registry::{COMPOSER, COMPOSER_SOURCE};
 use crate::scan::IndexedFileType;
 
 use super::{Detection, Detector, ScanCtx};
@@ -35,14 +36,6 @@ pub(super) struct ComposerProject {
 }
 
 impl Detector for ComposerDetector {
-    fn name(&self) -> &'static str {
-        "composer"
-    }
-
-    fn synonyms(&self) -> &'static [&'static str] {
-        &["php", "composer"]
-    }
-
     fn detect(&self, context: &ScanCtx<'_>) -> Detection {
         let (projects, diagnostics) = composer_projects(context, true);
         let mut output = Detection {
@@ -54,7 +47,7 @@ impl Detector for ComposerDetector {
             for (name, script) in &project.manifest.scripts {
                 if !is_executable_script(script) {
                     output.diagnostics.push(Diagnostic::warning(
-                        self.name(),
+                        COMPOSER,
                         format!("composer script `{name}` must be a string or string array"),
                         Some(context.roots.scan_root.join(&project.manifest_path)),
                     ));
@@ -112,7 +105,7 @@ pub(super) fn composer_projects(
             Err(error) => {
                 if report_diagnostics {
                     diagnostics.push(Diagnostic::warning(
-                        "composer",
+                        COMPOSER,
                         error.to_string(),
                         Some(absolute),
                     ));
@@ -125,7 +118,7 @@ pub(super) fn composer_projects(
             Err(error) => {
                 if report_diagnostics {
                     diagnostics.push(Diagnostic::warning(
-                        "composer",
+                        COMPOSER,
                         format!("invalid composer.json: {error}"),
                         Some(absolute),
                     ));
@@ -173,7 +166,8 @@ fn script_candidate(
     let scope = project_scope(project);
     let mut candidate = Candidate::new(
         format!("composer:{scope}:script:{name}"),
-        "composer",
+        COMPOSER,
+        COMPOSER_SOURCE,
         context.invocation.intent,
         name,
         "composer",
@@ -183,6 +177,7 @@ fn script_candidate(
         selection,
     );
     candidate.passthrough = PassthroughStyle::DoubleDash;
+    candidate.layer = CommandLayer::EcosystemTask;
     candidate.lifecycle =
         if context.invocation.intent == Intent::Run && name == "dev" && is_multi_process(script) {
             Lifecycle::MultiProcess
@@ -266,7 +261,8 @@ fn vendor_test_candidates(context: &ScanCtx<'_>, project: &ComposerProject) -> V
                     );
                 let mut candidate = Candidate::new(
                     format!("composer:{scope}:vendor-test:{runner}{action_suffix}"),
-                    "composer",
+                    COMPOSER,
+                    COMPOSER_SOURCE,
                     Intent::Test,
                     action_name,
                     PathBuf::from(".").join(&relative).into_os_string(),

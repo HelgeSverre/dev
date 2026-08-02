@@ -67,6 +67,7 @@ fn merge_into(existing: &mut Candidate, incoming: Candidate) {
 
     if use_incoming_metadata {
         existing.detector = incoming.detector;
+        existing.source = incoming.source;
         existing.action_key = incoming.action_key;
         existing.action_name = incoming.action_name;
         existing.scope_root = incoming.scope_root;
@@ -78,9 +79,9 @@ fn merge_into(existing: &mut Candidate, incoming: Candidate) {
 }
 
 fn preferred_metadata(incoming: &Candidate, existing: &Candidate) -> bool {
-    detector_specificity(incoming.detector)
-        .cmp(&detector_specificity(existing.detector))
-        .then_with(|| existing.detector.cmp(incoming.detector))
+    source_specificity(incoming.source)
+        .cmp(&source_specificity(existing.source))
+        .then_with(|| existing.source.cmp(&incoming.source))
         .then_with(|| existing.action_key.cmp(&incoming.action_key))
         .is_gt()
 }
@@ -109,12 +110,8 @@ fn merge_paths(existing: &mut Vec<PathBuf>, incoming: Vec<PathBuf>) {
     existing.extend(values);
 }
 
-fn detector_specificity(detector: &str) -> u8 {
-    match detector {
-        "vite" | "next" | "artisan" => 3,
-        "node" | "composer" | "cargo" | "go" | "zig" | "swift" | "dart" | "flutter" => 2,
-        _ => 1,
-    }
+fn source_specificity(source: crate::registry::CandidateSourceId) -> u8 {
+    crate::registry::source(source).map_or(0, |(_, source)| source.metadata_priority)
 }
 
 #[cfg(test)]
@@ -123,13 +120,15 @@ mod tests {
 
     use crate::candidate::{Availability, SelectionPolicy};
     use crate::intent::Intent;
+    use crate::registry::{CandidateSourceId, NODE, NODE_SOURCE, VITE_SOURCE};
 
     use super::*;
 
-    fn candidate(detector: &'static str, points: i32) -> Candidate {
+    fn candidate(source: CandidateSourceId, points: i32) -> Candidate {
         let mut candidate = Candidate::new(
-            format!("{detector}:run"),
-            detector,
+            format!("{source}:run"),
+            NODE,
+            source,
             Intent::Run,
             "run",
             "true",
@@ -148,7 +147,10 @@ mod tests {
     #[test]
     fn dedupe_is_idempotent() {
         let target = Target::Directory(PathBuf::from("/tmp"));
-        let once = deduplicate(vec![candidate("node", 80), candidate("vite", 90)], &target);
+        let once = deduplicate(
+            vec![candidate(NODE_SOURCE, 80), candidate(VITE_SOURCE, 90)],
+            &target,
+        );
         let twice = deduplicate(once.clone(), &target);
         assert_eq!(once.len(), 1);
         assert_eq!(twice.len(), 1);
@@ -159,8 +161,14 @@ mod tests {
     #[test]
     fn dedupe_metadata_and_evidence_are_input_order_independent() {
         let target = Target::Directory(PathBuf::from("/tmp"));
-        let forward = deduplicate(vec![candidate("node", 80), candidate("vite", 90)], &target);
-        let reverse = deduplicate(vec![candidate("vite", 90), candidate("node", 80)], &target);
+        let forward = deduplicate(
+            vec![candidate(NODE_SOURCE, 80), candidate(VITE_SOURCE, 90)],
+            &target,
+        );
+        let reverse = deduplicate(
+            vec![candidate(VITE_SOURCE, 90), candidate(NODE_SOURCE, 80)],
+            &target,
+        );
         assert_eq!(forward[0].id, reverse[0].id);
         assert_eq!(forward[0].detector, reverse[0].detector);
         assert_eq!(forward[0].action_key, reverse[0].action_key);

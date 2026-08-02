@@ -51,6 +51,7 @@ struct JsonCandidate<'a> {
     id: &'a str,
     action_key: &'a str,
     detector: &'a str,
+    source: &'a str,
     intent: crate::intent::Intent,
     origin: crate::candidate::CandidateOrigin,
     policy: crate::candidate::SelectionPolicy,
@@ -58,9 +59,11 @@ struct JsonCandidate<'a> {
     program: JsonOsValue,
     args: Vec<JsonOsValue>,
     cwd: String,
+    scope_root: String,
     environment: Vec<JsonEnvironment>,
     passthrough: crate::candidate::PassthroughStyle,
     lifecycle: crate::candidate::Lifecycle,
+    layer: crate::candidate::CommandLayer,
     structural_rank: i32,
     query_rank: i32,
     structural_evidence: Vec<JsonEvidence<'a>>,
@@ -116,7 +119,7 @@ pub fn render(
     diagnostics: &[Diagnostic],
 ) -> Result<String, serde_json::Error> {
     let output = JsonOutput {
-        schema_version: 1,
+        schema_version: 2,
         invocation: JsonInvocation {
             intent: invocation.intent.to_string(),
             target: invocation.target.path().to_string_lossy().into_owned(),
@@ -157,7 +160,7 @@ pub fn render(
         diagnostics: diagnostics
             .iter()
             .map(|diagnostic| JsonDiagnostic {
-                detector: diagnostic.detector,
+                detector: diagnostic.detector.as_str(),
                 severity: diagnostic.severity,
                 message: &diagnostic.message,
                 source: diagnostic
@@ -176,7 +179,8 @@ impl<'a> From<&'a RankedCandidate> for JsonCandidate<'a> {
         Self {
             id: candidate.id.as_str(),
             action_key: &candidate.action_key,
-            detector: candidate.detector,
+            detector: candidate.detector.as_str(),
+            source: candidate.source.as_str(),
             intent: candidate.intent,
             origin: candidate.origin,
             policy: candidate.selection,
@@ -188,6 +192,7 @@ impl<'a> From<&'a RankedCandidate> for JsonCandidate<'a> {
                 .map(|value| JsonOsValue::from(value.as_os_str()))
                 .collect(),
             cwd: candidate.cwd.to_string_lossy().into_owned(),
+            scope_root: candidate.scope_root.to_string_lossy().into_owned(),
             environment: candidate
                 .env
                 .iter()
@@ -198,6 +203,7 @@ impl<'a> From<&'a RankedCandidate> for JsonCandidate<'a> {
                 .collect(),
             passthrough: candidate.passthrough,
             lifecycle: candidate.lifecycle,
+            layer: candidate.layer,
             structural_rank: candidate.structural_points,
             query_rank: ranked.query.total_points,
             structural_evidence: candidate
