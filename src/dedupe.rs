@@ -75,6 +75,7 @@ fn merge_into(existing: &mut Candidate, incoming: Candidate) {
         existing.description = incoming.description;
         existing.lifecycle = incoming.lifecycle;
         existing.origin = incoming.origin;
+        existing.layer = incoming.layer;
     }
 }
 
@@ -118,13 +119,13 @@ fn source_specificity(source: crate::registry::CandidateSourceId) -> u8 {
 mod tests {
     use std::collections::BTreeMap;
 
-    use crate::candidate::{Availability, SelectionPolicy};
+    use crate::candidate::{Availability, CommandLayer, SelectionPolicy};
     use crate::intent::Intent;
     use crate::registry::{CandidateSourceId, NODE, NODE_SOURCE, VITE_SOURCE};
 
     use super::*;
 
-    fn candidate(source: CandidateSourceId, points: i32) -> Candidate {
+    fn candidate(source: CandidateSourceId, points: i32, layer: CommandLayer) -> Candidate {
         let mut candidate = Candidate::new(
             format!("{source}:run"),
             NODE,
@@ -140,6 +141,7 @@ mod tests {
         candidate.availability = Availability::Available {
             resolved_program: PathBuf::from("/usr/bin/true"),
         };
+        candidate.layer = layer;
         candidate.env = BTreeMap::new();
         candidate
     }
@@ -148,7 +150,10 @@ mod tests {
     fn dedupe_is_idempotent() {
         let target = Target::Directory(PathBuf::from("/tmp"));
         let once = deduplicate(
-            vec![candidate(NODE_SOURCE, 80), candidate(VITE_SOURCE, 90)],
+            vec![
+                candidate(NODE_SOURCE, 80, CommandLayer::EcosystemTask),
+                candidate(VITE_SOURCE, 90, CommandLayer::ProjectFacade),
+            ],
             &target,
         );
         let twice = deduplicate(once.clone(), &target);
@@ -162,16 +167,24 @@ mod tests {
     fn dedupe_metadata_and_evidence_are_input_order_independent() {
         let target = Target::Directory(PathBuf::from("/tmp"));
         let forward = deduplicate(
-            vec![candidate(NODE_SOURCE, 80), candidate(VITE_SOURCE, 90)],
+            vec![
+                candidate(NODE_SOURCE, 80, CommandLayer::EcosystemTask),
+                candidate(VITE_SOURCE, 90, CommandLayer::ProjectFacade),
+            ],
             &target,
         );
         let reverse = deduplicate(
-            vec![candidate(VITE_SOURCE, 90), candidate(NODE_SOURCE, 80)],
+            vec![
+                candidate(VITE_SOURCE, 90, CommandLayer::ProjectFacade),
+                candidate(NODE_SOURCE, 80, CommandLayer::EcosystemTask),
+            ],
             &target,
         );
         assert_eq!(forward[0].id, reverse[0].id);
         assert_eq!(forward[0].detector, reverse[0].detector);
         assert_eq!(forward[0].action_key, reverse[0].action_key);
+        assert_eq!(forward[0].layer, CommandLayer::ProjectFacade);
+        assert_eq!(forward[0].layer, reverse[0].layer);
         assert_eq!(forward[0].evidence, reverse[0].evidence);
         assert_eq!(forward[0].structural_points, reverse[0].structural_points);
     }

@@ -11,10 +11,10 @@ use crate::candidate::{
 use crate::diagnostic::Diagnostic;
 use crate::intent::Intent;
 use crate::registry::{
-    ToolId, WorkspaceContribution, WorkspaceContributor, BUN_TOOL, NEXT_SOURCE, NODE, NODE_SOURCE,
-    NODE_TOOL, NPM_TOOL, PNPM_TOOL, VITE_SOURCE, YARN_TOOL,
+    RootClassification, ScanContribution, ToolId, WorkspaceContributor, BUN_TOOL, NEXT_SOURCE,
+    NODE, NODE_SOURCE, NODE_TOOL, NPM_TOOL, PNPM_TOOL, VITE_SOURCE, YARN_TOOL,
 };
-use crate::scan::{IndexEntry, IndexedFileType};
+use crate::scan::{DiscoveryFiles, IndexEntry, IndexedFileType};
 
 use super::{CandidateBuilder, Detection, Detector, ScanCtx, TargetBinder};
 
@@ -23,13 +23,26 @@ pub struct NodeWorkspaceContributor;
 pub(crate) struct NodeTestBinder;
 
 impl WorkspaceContributor for NodeWorkspaceContributor {
-    fn is_workspace(&self, root: &Path) -> bool {
-        !self.scan_contribution(root).includes.is_empty()
+    fn classify_root(&self, marker: &Path, files: &DiscoveryFiles) -> RootClassification {
+        if files
+            .read(marker)
+            .ok()
+            .and_then(|contents| serde_json::from_str::<serde_json::Value>(&contents).ok())
+            .is_none()
+        {
+            return RootClassification::Neither;
+        }
+        let root = marker.parent().unwrap_or(Path::new("."));
+        if self.scan_contribution(root, files).includes.is_empty() {
+            RootClassification::Package
+        } else {
+            RootClassification::PackageAndWorkspace
+        }
     }
 
-    fn scan_contribution(&self, root: &Path) -> WorkspaceContribution {
-        let mut contribution = WorkspaceContribution::default();
-        if let Ok(contents) = std::fs::read_to_string(root.join("package.json")) {
+    fn scan_contribution(&self, root: &Path, files: &DiscoveryFiles) -> ScanContribution {
+        let mut contribution = ScanContribution::default();
+        if let Ok(contents) = files.read(&root.join("package.json")) {
             if let Ok(manifest) = serde_json::from_str::<serde_json::Value>(&contents) {
                 let workspaces = manifest.get("workspaces");
                 let values = workspaces
@@ -46,7 +59,7 @@ impl WorkspaceContributor for NodeWorkspaceContributor {
                 }
             }
         }
-        if let Ok(contents) = std::fs::read_to_string(root.join("pnpm-workspace.yaml")) {
+        if let Ok(contents) = files.read(&root.join("pnpm-workspace.yaml")) {
             if let Ok(manifest) = serde_yaml::from_str::<serde_yaml::Value>(&contents) {
                 if let Some(packages) = manifest
                     .get("packages")
@@ -298,8 +311,12 @@ impl Detector for NodeDetector {
                     ));
                 }
             }
-            let (manager, manager_reason) =
-                package_manager(&manifest, &package_directory, &context.roots.scan_root);
+            let (manager, manager_reason) = package_manager(
+                &manifest,
+                &package_directory,
+                &context.roots.scan_root,
+                &context.index.manifests,
+            );
             let framework = framework(&manifest, &package_directory);
             output.candidates.extend(script_candidates(
                 context,
@@ -342,9 +359,11 @@ impl Detector for NodeDetector {
 }
 
 fn package_manifests(context: &ScanCtx<'_>) -> Vec<PathBuf> {
-    let node_workspace_root = context.roots.workspace_root.as_ref().filter(|root| {
-        crate::registry::workspace(NODE).is_some_and(|workspace| workspace.is_workspace(root))
-    });
+    let node_workspace_root = context
+        .roots
+        .workspace_root
+        .as_ref()
+        .filter(|root| is_node_workspace(root, &context.index.manifests));
     let mut paths = context
         .index
         .all_entries()
@@ -370,7 +389,12 @@ fn package_manifests(context: &ScanCtx<'_>) -> Vec<PathBuf> {
             absolute_manifest
                 .strip_prefix(workspace_root)
                 .is_ok_and(|relative| {
-                    crate::registry::workspace_contains_manifest(NODE, workspace_root, relative)
+                    crate::registry::workspace_contains_manifest(
+                        NODE,
+                        workspace_root,
+                        relative,
+                        &context.index.manifests,
+                    )
                 })
         })
         .map(|entry| entry.relative_path.clone())
@@ -552,6 +576,7 @@ fn package_manager(
     manifest: &PackageManifest,
     directory: &Path,
     scan_root: &Path,
+    files: &DiscoveryFiles,
 ) -> (PackageManager, String) {
     if let Some(value) = manifest.package_manager.as_deref() {
         return (
@@ -565,10 +590,9 @@ fn package_manager(
         .ok()
         .map(Path::to_path_buf);
     let manager_root = if directory != scan_root
-        && crate::registry::workspace(NODE)
-            .is_some_and(|workspace| workspace.is_workspace(scan_root))
+        && is_node_workspace(scan_root, files)
         && !manifest_relative.as_deref().is_some_and(|relative| {
-            crate::registry::workspace_contains_manifest(NODE, scan_root, relative)
+            crate::registry::workspace_contains_manifest(NODE, scan_root, relative, files)
         }) {
         directory
     } else {
@@ -581,7 +605,8 @@ fn package_manager(
         .take_while(|ancestor| ancestor.starts_with(manager_root))
     {
         let manifest_path = ancestor.join("package.json");
-        let Some(value) = std::fs::read_to_string(&manifest_path)
+        let Some(value) = files
+            .read(&manifest_path)
             .ok()
             .and_then(|contents| serde_json::from_str::<PackageManifest>(&contents).ok())
             .and_then(|manifest| manifest.package_manager)
@@ -644,7 +669,12 @@ fn workspace_member(
     }
     let absolute_manifest = context.roots.scan_root.join(manifest_path);
     let relative_manifest = absolute_manifest.strip_prefix(root).ok()?;
-    if !crate::registry::workspace_contains_manifest(NODE, root, relative_manifest) {
+    if !crate::registry::workspace_contains_manifest(
+        NODE,
+        root,
+        relative_manifest,
+        &context.index.manifests,
+    ) {
         return None;
     }
     let relative_path = package_directory.strip_prefix(root).ok()?.to_path_buf();
@@ -653,6 +683,11 @@ fn workspace_member(
         relative_path,
         name: manifest.name.clone(),
     })
+}
+
+fn is_node_workspace(root: &Path, files: &DiscoveryFiles) -> bool {
+    crate::registry::workspace(NODE)
+        .is_some_and(|workspace| !workspace.scan_contribution(root, files).includes.is_empty())
 }
 
 fn framework(manifest: &PackageManifest, directory: &Path) -> Option<&'static str> {

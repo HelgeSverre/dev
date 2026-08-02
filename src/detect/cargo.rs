@@ -9,9 +9,9 @@ use crate::candidate::{
 use crate::diagnostic::Diagnostic;
 use crate::intent::Intent;
 use crate::registry::{
-    WorkspaceContribution, WorkspaceContributor, CARGO, CARGO_SOURCE, CARGO_TOOL,
+    RootClassification, ScanContribution, WorkspaceContributor, CARGO, CARGO_SOURCE, CARGO_TOOL,
 };
-use crate::scan::IndexedFileType;
+use crate::scan::{DiscoveryFiles, IndexedFileType};
 
 use super::{CandidateBuilder, Detection, Detector, ScanCtx};
 
@@ -19,22 +19,35 @@ pub struct CargoDetector;
 pub struct CargoWorkspaceContributor;
 
 impl WorkspaceContributor for CargoWorkspaceContributor {
-    fn is_workspace(&self, root: &Path) -> bool {
-        std::fs::read_to_string(root.join("Cargo.toml"))
+    fn classify_root(&self, marker: &Path, files: &DiscoveryFiles) -> RootClassification {
+        let Some(manifest) = files
+            .read(marker)
             .ok()
             .and_then(|contents| toml::from_str::<toml::Value>(&contents).ok())
-            .is_some_and(|manifest| manifest.get("workspace").is_some())
+        else {
+            return RootClassification::Neither;
+        };
+        match (
+            manifest.get("package").is_some(),
+            manifest.get("workspace").is_some(),
+        ) {
+            (true, true) => RootClassification::PackageAndWorkspace,
+            (true, false) => RootClassification::Package,
+            (false, true) => RootClassification::Workspace,
+            (false, false) => RootClassification::Neither,
+        }
     }
 
-    fn scan_contribution(&self, root: &Path) -> WorkspaceContribution {
-        let Some(workspace) = std::fs::read_to_string(root.join("Cargo.toml"))
+    fn scan_contribution(&self, root: &Path, files: &DiscoveryFiles) -> ScanContribution {
+        let Some(workspace) = files
+            .read(&root.join("Cargo.toml"))
             .ok()
             .and_then(|contents| toml::from_str::<toml::Value>(&contents).ok())
             .and_then(|manifest| manifest.get("workspace").cloned())
         else {
-            return WorkspaceContribution::default();
+            return ScanContribution::default();
         };
-        let mut contribution = WorkspaceContribution {
+        let mut contribution = ScanContribution {
             includes: workspace
                 .get("members")
                 .and_then(toml::Value::as_array)

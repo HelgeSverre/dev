@@ -130,7 +130,9 @@ fn registered_marker_paths(root: &Path) -> Vec<PathBuf> {
         .iter()
         .flat_map(|marker| match marker.pattern {
             MarkerPattern::Exact(name) => vec![root.join(name)],
-            MarkerPattern::AsciiCaseInsensitiveBasename(_) | MarkerPattern::Extension(_) => entries
+            MarkerPattern::AsciiCaseInsensitiveBasename(_)
+            | MarkerPattern::BasenamePrefixSuffix { .. }
+            | MarkerPattern::Extension(_) => entries
                 .iter()
                 .filter(|path| marker.pattern.matches(path))
                 .cloned()

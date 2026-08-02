@@ -32,9 +32,12 @@ struct ParseState<'a> {
 
 impl Detector for MiseDetector {
     fn detect(&self, context: &ScanCtx<'_>) -> Detection {
+        let active_environments = active_environments();
         let mut by_directory = BTreeMap::<PathBuf, Vec<PathBuf>>::new();
         for entry in context.index.all_entries() {
-            if entry.file_type != IndexedFileType::File || !is_mise_config(&entry.relative_path) {
+            if entry.file_type != IndexedFileType::File
+                || !is_mise_config(&entry.relative_path, &active_environments)
+            {
                 continue;
             }
             let absolute = context.roots.scan_root.join(&entry.relative_path);
@@ -47,33 +50,86 @@ impl Detector for MiseDetector {
 
         let mut output = Detection::default();
         for (directory, mut configs) in by_directory {
-            configs.sort_by_key(|path| config_priority(path));
+            configs.sort_by_key(|path| config_priority(path, &active_environments));
             detect_configs(context, &directory, &configs, &mut output);
         }
         output
     }
 }
 
-fn is_mise_config(path: &Path) -> bool {
-    path.file_name()
-        .and_then(|name| name.to_str())
-        .is_some_and(|name| {
-            matches!(name, "mise.toml" | ".mise.toml")
-                || (name.starts_with("mise.") && name.ends_with(".toml"))
-                || (name.starts_with(".mise.") && name.ends_with(".toml"))
-        })
+fn is_mise_config(path: &Path, active_environments: &[String]) -> bool {
+    let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
+        return false;
+    };
+    let name = name.strip_prefix('.').unwrap_or(name);
+    if matches!(name, "mise.toml" | "mise.local.toml") {
+        return true;
+    }
+    let Some(variant) = name
+        .strip_prefix("mise.")
+        .and_then(|name| name.strip_suffix(".toml"))
+    else {
+        return false;
+    };
+    let environment = variant.strip_suffix(".local").unwrap_or(variant);
+    active_environments
+        .iter()
+        .any(|active| active == environment)
 }
 
-fn config_priority(path: &Path) -> (bool, bool, String) {
+fn active_environments() -> Vec<String> {
+    active_environments_from(std::env::var("MISE_ENV").ok().as_deref())
+}
+
+fn active_environments_from(value: Option<&str>) -> Vec<String> {
+    value
+        .into_iter()
+        .flat_map(|value| value.split(','))
+        .map(str::trim)
+        .filter(|environment| {
+            !environment.is_empty()
+                && environment.chars().all(|character| {
+                    character.is_ascii_alphanumeric() || matches!(character, '-' | '_')
+                })
+        })
+        .map(str::to_owned)
+        .collect()
+}
+
+fn config_priority(path: &Path, active_environments: &[String]) -> (u8, usize, bool, String) {
     let name = path
         .file_name()
         .and_then(|name| name.to_str())
         .unwrap_or_default();
+    let normalized = name.strip_prefix('.').unwrap_or(name);
+    let middle = normalized
+        .strip_prefix("mise.")
+        .and_then(|name| name.strip_suffix(".toml"));
+    let (layer, environment_priority) = match middle {
+        None => (0, 0),
+        Some("local") => (2, 0),
+        Some(variant) if variant.ends_with(".local") => (
+            3,
+            environment_priority(
+                variant.strip_suffix(".local").unwrap_or(variant),
+                active_environments,
+            ),
+        ),
+        Some(environment) => (1, environment_priority(environment, active_environments)),
+    };
     (
-        name.contains("local"),
+        layer,
+        environment_priority,
         name.starts_with('.'),
         name.to_owned(),
     )
+}
+
+fn environment_priority(environment: &str, active_environments: &[String]) -> usize {
+    active_environments
+        .iter()
+        .rposition(|active| active == environment)
+        .unwrap_or_default()
 }
 
 fn detect_configs(
@@ -354,15 +410,42 @@ mod tests {
 
     #[test]
     fn mise_config_names_include_environment_and_local_variants() {
+        let active = vec!["dev".to_owned()];
         for name in [
             "mise.toml",
             ".mise.toml",
             "mise.local.toml",
+            ".mise.local.toml",
             ".mise.dev.toml",
+            "mise.dev.local.toml",
         ] {
-            assert!(is_mise_config(Path::new(name)), "{name}");
+            assert!(is_mise_config(Path::new(name), &active), "{name}");
         }
-        assert!(!is_mise_config(Path::new("mise.lock")));
-        assert!(!is_mise_config(Path::new("my-mise.toml")));
+        assert!(!is_mise_config(Path::new("mise.production.toml"), &active));
+        assert!(!is_mise_config(Path::new("mise.lock"), &active));
+        assert!(!is_mise_config(Path::new("my-mise.toml"), &active));
+        assert!(
+            config_priority(Path::new("mise.dev.toml"), &active)
+                < config_priority(Path::new("mise.local.toml"), &active)
+        );
+        assert!(
+            config_priority(Path::new("mise.local.toml"), &active)
+                < config_priority(Path::new("mise.dev.local.toml"), &active)
+        );
+    }
+
+    #[test]
+    fn mise_environment_order_matches_last_wins_precedence() {
+        let active = active_environments_from(Some("ci, test"));
+        assert_eq!(active, ["ci", "test"]);
+        assert!(
+            config_priority(Path::new("mise.ci.toml"), &active)
+                < config_priority(Path::new("mise.test.toml"), &active)
+        );
+        assert!(
+            config_priority(Path::new("mise.ci.local.toml"), &active)
+                < config_priority(Path::new("mise.test.local.toml"), &active)
+        );
+        assert!(active_environments_from(Some("ci:test")).is_empty());
     }
 }

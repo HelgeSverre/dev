@@ -500,7 +500,7 @@ candidate action=cargo:cargo-library:test detector=cargo source=cargo layer=Tool
   evidence kind=Proximity points=30 source=. reason=same directory as target
 
 ## 18-cargo-nested-workspace/run
-roots package=. workspace=. scan=.
+roots package=- workspace=. scan=.
 scan structural=6 targets=0 truncated=false
 resolution status=Resolved reason=UniqueAutomaticCandidate selected=cargo:nested-server:bin:nested-server
 candidate action=cargo:nested-server:bin:nested-server detector=cargo source=cargo layer=DirectTarget origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. scope=. program="cargo" args=["run","-p","nested-server"] availability=available
@@ -508,7 +508,7 @@ candidate action=cargo:nested-server:bin:nested-server detector=cargo source=car
   evidence kind=Proximity points=30 source=. reason=same directory as target
 
 ## 18-cargo-nested-workspace/build
-roots package=. workspace=. scan=.
+roots package=- workspace=. scan=.
 scan structural=6 targets=0 truncated=false
 resolution status=Resolved reason=UniqueAutomaticCandidate selected=cargo:workspace:build
 candidate action=cargo:workspace:build detector=cargo source=cargo layer=ToolDefault origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. scope=. program="cargo" args=["build","--workspace"] availability=available
@@ -516,7 +516,7 @@ candidate action=cargo:workspace:build detector=cargo source=cargo layer=ToolDef
   evidence kind=Proximity points=30 source=. reason=same directory as target
 
 ## 18-cargo-nested-workspace/test
-roots package=. workspace=. scan=.
+roots package=- workspace=. scan=.
 scan structural=6 targets=0 truncated=false
 resolution status=Resolved reason=UniqueAutomaticCandidate selected=cargo:workspace:test
 candidate action=cargo:workspace:test detector=cargo source=cargo layer=ToolDefault origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. scope=. program="cargo" args=["test","--workspace"] availability=available
@@ -1309,25 +1309,25 @@ scan structural=1 targets=0 truncated=false
 resolution status=NoCandidates reason=NoCandidates selected=-
 
 ## 52-malformed-node/run
-roots package=. workspace=- scan=.
+roots package=- workspace=- scan=.
 scan structural=1 targets=0 truncated=false
 resolution status=NoCandidates reason=NoCandidates selected=-
 diagnostic detector=node severity=Warning source=package.json message=invalid package.json: trailing comma at line 1 column 26
 
 ## 52-malformed-node/build
-roots package=. workspace=- scan=.
+roots package=- workspace=- scan=.
 scan structural=1 targets=0 truncated=false
 resolution status=NoCandidates reason=NoCandidates selected=-
 diagnostic detector=node severity=Warning source=package.json message=invalid package.json: trailing comma at line 1 column 26
 
 ## 52-malformed-node/test
-roots package=. workspace=- scan=.
+roots package=- workspace=- scan=.
 scan structural=1 targets=0 truncated=false
 resolution status=NoCandidates reason=NoCandidates selected=-
 diagnostic detector=node severity=Warning source=package.json message=invalid package.json: trailing comma at line 1 column 26
 
 ## 53-malformed-cargo/run
-roots package=. workspace=- scan=.
+roots package=- workspace=- scan=.
 scan structural=1 targets=0 truncated=false
 resolution status=NoCandidates reason=NoCandidates selected=-
 diagnostic detector=cargo severity=Warning source=Cargo.toml message=invalid Cargo.toml: TOML parse error at line 1, column 9
@@ -1338,7 +1338,7 @@ unclosed table, expected `]`
 
 
 ## 53-malformed-cargo/build
-roots package=. workspace=- scan=.
+roots package=- workspace=- scan=.
 scan structural=1 targets=0 truncated=false
 resolution status=NoCandidates reason=NoCandidates selected=-
 diagnostic detector=cargo severity=Warning source=Cargo.toml message=invalid Cargo.toml: TOML parse error at line 1, column 9
@@ -1349,7 +1349,7 @@ unclosed table, expected `]`
 
 
 ## 53-malformed-cargo/test
-roots package=. workspace=- scan=.
+roots package=- workspace=- scan=.
 scan structural=1 targets=0 truncated=false
 resolution status=NoCandidates reason=NoCandidates selected=-
 diagnostic detector=cargo severity=Warning source=Cargo.toml message=invalid Cargo.toml: TOML parse error at line 1, column 9

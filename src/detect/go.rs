@@ -5,8 +5,8 @@ use std::path::{Path, PathBuf};
 use crate::candidate::{Candidate, Evidence, EvidenceKind, SearchDocument, SelectionPolicy};
 use crate::diagnostic::Diagnostic;
 use crate::intent::Intent;
-use crate::registry::{WorkspaceContribution, WorkspaceContributor, GO, GO_SOURCE, GO_TOOL};
-use crate::scan::IndexedFileType;
+use crate::registry::{ScanContribution, WorkspaceContributor, GO, GO_SOURCE, GO_TOOL};
+use crate::scan::{DiscoveryFiles, IndexedFileType};
 
 use super::{CandidateBuilder, Detection, Detector, ScanCtx};
 
@@ -14,12 +14,9 @@ pub struct GoDetector;
 pub struct GoWorkspaceContributor;
 
 impl WorkspaceContributor for GoWorkspaceContributor {
-    fn is_workspace(&self, root: &Path) -> bool {
-        root.join("go.work").is_file()
-    }
-
-    fn scan_contribution(&self, root: &Path) -> WorkspaceContribution {
-        let mut includes = std::fs::read_to_string(root.join("go.work"))
+    fn scan_contribution(&self, root: &Path, files: &DiscoveryFiles) -> ScanContribution {
+        let mut includes = files
+            .read(&root.join("go.work"))
             .ok()
             .map(|contents| go_work_uses(&contents))
             .unwrap_or_default()
@@ -28,7 +25,7 @@ impl WorkspaceContributor for GoWorkspaceContributor {
             .collect::<Vec<_>>();
         includes.sort();
         includes.dedup();
-        WorkspaceContribution {
+        ScanContribution {
             includes,
             excludes: Vec::new(),
         }

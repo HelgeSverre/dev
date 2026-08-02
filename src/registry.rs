@@ -14,6 +14,7 @@ use crate::detect::{
     NodeTestBinder, NodeWorkspaceContributor, PhpFileDetector, PythonFileDetector, SemaDetector,
     ShellDetector, SwiftDetector, TargetBinder, TargetRunner, TaskfileDetector, ZigDetector,
 };
+use crate::scan::DiscoveryFiles;
 
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Serialize)]
 #[serde(transparent)]
@@ -166,6 +167,10 @@ pub struct CandidateSourceRegistration {
 pub enum MarkerPattern {
     Exact(&'static str),
     AsciiCaseInsensitiveBasename(&'static str),
+    BasenamePrefixSuffix {
+        prefix: &'static str,
+        suffix: &'static str,
+    },
     Extension(&'static str),
 }
 
@@ -178,6 +183,11 @@ impl MarkerPattern {
         match self {
             Self::Exact(expected) => name == expected,
             Self::AsciiCaseInsensitiveBasename(expected) => name.eq_ignore_ascii_case(expected),
+            Self::BasenamePrefixSuffix { prefix, suffix } => {
+                name.starts_with(prefix)
+                    && name.ends_with(suffix)
+                    && name.len() > prefix.len() + suffix.len()
+            }
             Self::Extension(expected) => path
                 .extension()
                 .and_then(|extension| extension.to_str())
@@ -189,7 +199,9 @@ impl MarkerPattern {
     pub const fn exact_name(self) -> Option<&'static str> {
         match self {
             Self::Exact(name) => Some(name),
-            Self::AsciiCaseInsensitiveBasename(_) | Self::Extension(_) => None,
+            Self::AsciiCaseInsensitiveBasename(_)
+            | Self::BasenamePrefixSuffix { .. }
+            | Self::Extension(_) => None,
         }
     }
 }
@@ -246,6 +258,7 @@ pub struct DetectorRegistration {
     pub markers: &'static [ProjectMarker],
     pub tools: &'static [ToolRegistration],
     pub conventional_roots: &'static [&'static str],
+    pub cache_environment: &'static [&'static str],
     pub candidate_schema: u32,
     pub detector: &'static dyn Detector,
     pub workspace: Option<&'static dyn WorkspaceContributor>,
@@ -253,15 +266,40 @@ pub struct DetectorRegistration {
     pub target_runners: &'static [&'static dyn TargetRunner],
 }
 
+#[derive(Copy, Clone, Debug, Default, Eq, PartialEq)]
+pub enum RootClassification {
+    #[default]
+    Neither,
+    Package,
+    Workspace,
+    PackageAndWorkspace,
+}
+
+impl RootClassification {
+    #[must_use]
+    pub const fn is_package(self) -> bool {
+        matches!(self, Self::Package | Self::PackageAndWorkspace)
+    }
+
+    #[must_use]
+    pub const fn is_workspace(self) -> bool {
+        matches!(self, Self::Workspace | Self::PackageAndWorkspace)
+    }
+}
+
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
-pub struct WorkspaceContribution {
+pub struct ScanContribution {
     pub includes: Vec<String>,
     pub excludes: Vec<String>,
 }
 
 pub trait WorkspaceContributor: Send + Sync {
-    fn is_workspace(&self, root: &Path) -> bool;
-    fn scan_contribution(&self, root: &Path) -> WorkspaceContribution;
+    fn classify_root(&self, marker: &Path, files: &DiscoveryFiles) -> RootClassification {
+        let _ = (marker, files);
+        RootClassification::Neither
+    }
+
+    fn scan_contribution(&self, root: &Path, files: &DiscoveryFiles) -> ScanContribution;
 }
 
 impl fmt::Debug for DetectorRegistration {
@@ -274,6 +312,7 @@ impl fmt::Debug for DetectorRegistration {
             .field("markers", &self.markers)
             .field("tools", &self.tools)
             .field("conventional_roots", &self.conventional_roots)
+            .field("cache_environment", &self.cache_environment)
             .field("candidate_schema", &self.candidate_schema)
             .field("workspace", &self.workspace.is_some())
             .finish_non_exhaustive()
@@ -424,7 +463,8 @@ static REGISTRATIONS: &[DetectorRegistration] = &[
             BUN_PROGRAM,
         ],
         conventional_roots: ROOTS,
-        candidate_schema: 1,
+        cache_environment: &[],
+        candidate_schema: 2,
         detector: &NodeDetector,
         workspace: Some(&NodeWorkspaceContributor),
         target_binders: &[&NodeTestBinder],
@@ -450,7 +490,8 @@ static REGISTRATIONS: &[DetectorRegistration] = &[
         ],
         tools: &[CARGO_PROGRAM, RUSTC_PROGRAM],
         conventional_roots: ROOTS,
-        candidate_schema: 1,
+        cache_environment: &[],
+        candidate_schema: 2,
         detector: &CargoDetector,
         workspace: Some(&CargoWorkspaceContributor),
         target_binders: &[],
@@ -476,6 +517,7 @@ static REGISTRATIONS: &[DetectorRegistration] = &[
         ],
         tools: &[COMPOSER_PROGRAM, PHP_PROGRAM],
         conventional_roots: ROOTS,
+        cache_environment: &[],
         candidate_schema: 1,
         detector: &ComposerDetector,
         workspace: None,
@@ -496,6 +538,7 @@ static REGISTRATIONS: &[DetectorRegistration] = &[
         }],
         tools: &[PHP_PROGRAM],
         conventional_roots: ROOTS,
+        cache_environment: &[],
         candidate_schema: 1,
         detector: &ArtisanDetector,
         workspace: None,
@@ -526,6 +569,7 @@ static REGISTRATIONS: &[DetectorRegistration] = &[
         ],
         tools: &[GO_PROGRAM],
         conventional_roots: ROOTS,
+        cache_environment: &[],
         candidate_schema: 1,
         detector: &GoDetector,
         workspace: Some(&GoWorkspaceContributor),
@@ -560,7 +604,15 @@ static REGISTRATIONS: &[DetectorRegistration] = &[
         ],
         tools: &[GRADLE_PROGRAM],
         conventional_roots: ROOTS,
-        candidate_schema: 1,
+        cache_environment: &[
+            "GRADLE_OPTS",
+            "GRADLE_USER_HOME",
+            "HOME",
+            "JAVA_OPTS",
+            "JAVA_TOOL_OPTIONS",
+            "_JAVA_OPTIONS",
+        ],
+        candidate_schema: 2,
         detector: &GradleDetector,
         workspace: Some(&GradleWorkspaceContributor),
         target_binders: &[],
@@ -576,11 +628,21 @@ static REGISTRATIONS: &[DetectorRegistration] = &[
         synonyms: &["maven", "mvn", "jvm", "java"],
         markers: &[ProjectMarker {
             pattern: MarkerPattern::Exact("pom.xml"),
-            root_role: RootRole::Package,
+            root_role: RootRole::Classified,
         }],
         tools: &[MAVEN_PROGRAM],
         conventional_roots: ROOTS,
-        candidate_schema: 1,
+        cache_environment: &[
+            "HOME",
+            "MAVEN_USER_HOME",
+            "MAVEN_OPTS",
+            "MAVEN_WRAPPER_ALWAYS_DOWNLOAD",
+            "MAVEN_WRAPPER_ALWAYS_UNPACK",
+            "JAVA_OPTS",
+            "JAVA_TOOL_OPTIONS",
+            "_JAVA_OPTIONS",
+        ],
+        candidate_schema: 2,
         detector: &MavenDetector,
         workspace: Some(&MavenWorkspaceContributor),
         target_binders: &[],
@@ -622,6 +684,7 @@ static REGISTRATIONS: &[DetectorRegistration] = &[
         ],
         tools: &[DOTNET_PROGRAM],
         conventional_roots: ROOTS,
+        cache_environment: &[],
         candidate_schema: 1,
         detector: &DotnetDetector,
         workspace: Some(&DotnetWorkspaceContributor),
@@ -639,6 +702,7 @@ static REGISTRATIONS: &[DetectorRegistration] = &[
         markers: &[],
         tools: &[PHP_PROGRAM],
         conventional_roots: ROOTS,
+        cache_environment: &[],
         candidate_schema: 1,
         detector: &PhpFileDetector,
         workspace: None,
@@ -665,6 +729,7 @@ static REGISTRATIONS: &[DetectorRegistration] = &[
         ],
         tools: &[ZIG_PROGRAM],
         conventional_roots: ROOTS,
+        cache_environment: &[],
         candidate_schema: 1,
         detector: &ZigDetector,
         workspace: None,
@@ -691,6 +756,7 @@ static REGISTRATIONS: &[DetectorRegistration] = &[
         ],
         tools: &[SWIFT_PROGRAM],
         conventional_roots: ROOTS,
+        cache_environment: &[],
         candidate_schema: 1,
         detector: &SwiftDetector,
         workspace: None,
@@ -724,6 +790,7 @@ static REGISTRATIONS: &[DetectorRegistration] = &[
         ],
         tools: &[DART_PROGRAM, FLUTTER_PROGRAM],
         conventional_roots: ROOTS,
+        cache_environment: &[],
         candidate_schema: 1,
         detector: &DartDetector,
         workspace: None,
@@ -741,6 +808,7 @@ static REGISTRATIONS: &[DetectorRegistration] = &[
         markers: &[],
         tools: &[PYTHON3_PROGRAM, PYTHON_PROGRAM],
         conventional_roots: ROOTS,
+        cache_environment: &["VIRTUAL_ENV"],
         candidate_schema: 1,
         detector: &PythonFileDetector,
         workspace: None,
@@ -767,7 +835,8 @@ static REGISTRATIONS: &[DetectorRegistration] = &[
         ],
         tools: &[JUST_PROGRAM],
         conventional_roots: ROOTS,
-        candidate_schema: 1,
+        cache_environment: &[],
+        candidate_schema: 2,
         detector: &JustDetector,
         workspace: None,
         target_binders: &[],
@@ -787,7 +856,8 @@ static REGISTRATIONS: &[DetectorRegistration] = &[
         }],
         tools: &[JAKE_PROGRAM],
         conventional_roots: ROOTS,
-        candidate_schema: 1,
+        cache_environment: &[],
+        candidate_schema: 2,
         detector: &JakeDetector,
         workspace: None,
         target_binders: &[],
@@ -837,7 +907,8 @@ static REGISTRATIONS: &[DetectorRegistration] = &[
         ],
         tools: &[TASK_PROGRAM],
         conventional_roots: ROOTS,
-        candidate_schema: 1,
+        cache_environment: &[],
+        candidate_schema: 2,
         detector: &TaskfileDetector,
         workspace: None,
         target_binders: &[],
@@ -860,10 +931,25 @@ static REGISTRATIONS: &[DetectorRegistration] = &[
                 pattern: MarkerPattern::Exact(".mise.toml"),
                 root_role: RootRole::Package,
             },
+            ProjectMarker {
+                pattern: MarkerPattern::BasenamePrefixSuffix {
+                    prefix: "mise.",
+                    suffix: ".toml",
+                },
+                root_role: RootRole::Package,
+            },
+            ProjectMarker {
+                pattern: MarkerPattern::BasenamePrefixSuffix {
+                    prefix: ".mise.",
+                    suffix: ".toml",
+                },
+                root_role: RootRole::Package,
+            },
         ],
         tools: &[MISE_PROGRAM],
         conventional_roots: ROOTS,
-        candidate_schema: 1,
+        cache_environment: &["MISE_ENV"],
+        candidate_schema: 2,
         detector: &MiseDetector,
         workspace: None,
         target_binders: &[],
@@ -888,12 +974,13 @@ static REGISTRATIONS: &[DetectorRegistration] = &[
             },
             ProjectMarker {
                 pattern: MarkerPattern::Extension("sema"),
-                root_role: RootRole::Classified,
+                root_role: RootRole::Package,
             },
         ],
         tools: &[SEMA_PROGRAM],
         conventional_roots: ROOTS,
-        candidate_schema: 1,
+        cache_environment: &[],
+        candidate_schema: 2,
         detector: &SemaDetector,
         workspace: None,
         target_binders: &[],
@@ -910,6 +997,7 @@ static REGISTRATIONS: &[DetectorRegistration] = &[
         markers: &[],
         tools: &[],
         conventional_roots: ROOTS,
+        cache_environment: &[],
         candidate_schema: 1,
         detector: &ShellDetector,
         workspace: None,
@@ -940,6 +1028,7 @@ static REGISTRATIONS: &[DetectorRegistration] = &[
         ],
         tools: &[MAKE_PROGRAM],
         conventional_roots: ROOTS,
+        cache_environment: &[],
         candidate_schema: 1,
         detector: &MakeDetector,
         workspace: None,
@@ -978,6 +1067,7 @@ static REGISTRATIONS: &[DetectorRegistration] = &[
         ],
         tools: &[DOCKER_PROGRAM],
         conventional_roots: ROOTS,
+        cache_environment: &[],
         candidate_schema: 1,
         detector: &DockerDetector,
         workspace: None,
@@ -1004,11 +1094,16 @@ pub fn workspace(id: DetectorId) -> Option<&'static dyn WorkspaceContributor> {
 }
 
 #[must_use]
-pub fn workspace_contains_manifest(id: DetectorId, root: &Path, relative: &Path) -> bool {
+pub fn workspace_contains_manifest(
+    id: DetectorId,
+    root: &Path,
+    relative: &Path,
+    files: &DiscoveryFiles,
+) -> bool {
     let Some(workspace) = workspace(id) else {
         return false;
     };
-    let contribution = workspace.scan_contribution(root);
+    let contribution = workspace.scan_contribution(root, files);
     let Ok(includes) = compile_workspace_globs(&contribution.includes) else {
         return false;
     };
@@ -1114,38 +1209,87 @@ pub fn conventional_roots() -> &'static [&'static str] {
 }
 
 #[must_use]
+pub fn cache_environment() -> &'static [&'static str] {
+    static KEYS: OnceLock<Vec<&'static str>> = OnceLock::new();
+    KEYS.get_or_init(|| {
+        registrations()
+            .iter()
+            .flat_map(|registration| registration.cache_environment)
+            .copied()
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect()
+    })
+    .as_slice()
+}
+
+#[must_use]
 pub fn fingerprint() -> &'static str {
     static FINGERPRINT: OnceLock<String> = OnceLock::new();
-    FINGERPRINT.get_or_init(|| {
-        let mut hasher = blake3::Hasher::new();
-        for registration in registrations() {
-            hash_text(&mut hasher, registration.id.as_str());
-            hasher.update(&registration.candidate_schema.to_le_bytes());
-            for source in registration.candidate_sources {
-                hash_text(&mut hasher, source.id.as_str());
-                hasher.update(&[source.metadata_priority]);
-                for tag in source.default_tags {
-                    hash_text(&mut hasher, tag);
-                }
+    FINGERPRINT.get_or_init(|| fingerprint_for(registrations().iter()))
+}
+
+fn fingerprint_for<'a>(
+    registrations: impl IntoIterator<Item = &'a DetectorRegistration>,
+) -> String {
+    let mut registrations = registrations.into_iter().collect::<Vec<_>>();
+    registrations.sort_by_key(|registration| registration.id);
+    let mut hasher = blake3::Hasher::new();
+    for registration in registrations {
+        hash_text(&mut hasher, registration.id.as_str());
+        hasher.update(&registration.candidate_schema.to_le_bytes());
+
+        let mut sources = registration.candidate_sources.iter().collect::<Vec<_>>();
+        sources.sort_by_key(|source| source.id);
+        for source in sources {
+            hash_text(&mut hasher, source.id.as_str());
+            hasher.update(&[source.metadata_priority]);
+            for tag in source.default_tags.iter().copied().collect::<BTreeSet<_>>() {
+                hash_text(&mut hasher, tag);
             }
-            for synonym in registration.synonyms {
-                hash_text(&mut hasher, synonym);
-            }
-            for marker in registration.markers {
-                hash_text(&mut hasher, &format!("{marker:?}"));
-            }
-            for tool in registration.tools {
-                hash_text(&mut hasher, tool.id.as_str());
-                hash_text(&mut hasher, tool.program);
-                hash_text(&mut hasher, &format!("{:?}", tool.doctor));
-            }
-            for root in registration.conventional_roots {
-                hash_text(&mut hasher, root);
-            }
-            hasher.update(&[u8::from(registration.workspace.is_some())]);
         }
-        hasher.finalize().to_hex().to_string()
-    })
+        for synonym in registration
+            .synonyms
+            .iter()
+            .copied()
+            .collect::<BTreeSet<_>>()
+        {
+            hash_text(&mut hasher, synonym);
+        }
+        for marker in registration
+            .markers
+            .iter()
+            .copied()
+            .collect::<BTreeSet<_>>()
+        {
+            hash_text(&mut hasher, &format!("{marker:?}"));
+        }
+        let mut tools = registration.tools.iter().collect::<Vec<_>>();
+        tools.sort_by_key(|tool| tool.id);
+        for tool in tools {
+            hash_text(&mut hasher, tool.id.as_str());
+            hash_text(&mut hasher, tool.program);
+            hash_text(&mut hasher, &format!("{:?}", tool.doctor));
+        }
+        for root in registration
+            .conventional_roots
+            .iter()
+            .copied()
+            .collect::<BTreeSet<_>>()
+        {
+            hash_text(&mut hasher, root);
+        }
+        for key in registration
+            .cache_environment
+            .iter()
+            .copied()
+            .collect::<BTreeSet<_>>()
+        {
+            hash_text(&mut hasher, key);
+        }
+        hasher.update(&[u8::from(registration.workspace.is_some())]);
+    }
+    hasher.finalize().to_hex().to_string()
 }
 
 fn hash_text(hasher: &mut blake3::Hasher, value: &str) {
@@ -1168,6 +1312,13 @@ pub enum RegistryError {
         detector: DetectorId,
         marker: &'static str,
     },
+    #[error("detector `{detector}` has invalid cache environment key `{key}`")]
+    InvalidCacheEnvironment {
+        detector: DetectorId,
+        key: &'static str,
+    },
+    #[error("detector `{0}` has a classified marker but no workspace contributor")]
+    ClassifiedMarkerWithoutWorkspace(DetectorId),
 }
 
 pub fn validate() -> Result<(), RegistryError> {
@@ -1181,6 +1332,16 @@ pub fn validate() -> Result<(), RegistryError> {
         if registration.candidate_schema == 0 {
             return Err(RegistryError::ZeroCandidateSchema(registration.id));
         }
+        if registration.workspace.is_none()
+            && registration
+                .markers
+                .iter()
+                .any(|marker| marker.root_role == RootRole::Classified)
+        {
+            return Err(RegistryError::ClassifiedMarkerWithoutWorkspace(
+                registration.id,
+            ));
+        }
         for marker in registration.markers {
             if let MarkerPattern::Exact(name) = marker.pattern {
                 if name.is_empty() || name.contains(['/', '\\']) {
@@ -1189,6 +1350,14 @@ pub fn validate() -> Result<(), RegistryError> {
                         marker: name,
                     });
                 }
+            }
+        }
+        for key in registration.cache_environment {
+            if key.is_empty() || key.contains(['=', '\0']) {
+                return Err(RegistryError::InvalidCacheEnvironment {
+                    detector: registration.id,
+                    key,
+                });
             }
         }
         for source in registration.candidate_sources {
@@ -1224,6 +1393,23 @@ mod tests {
         );
         assert!(source_by_name("vite").is_some());
         assert!(source_by_name("unknown").is_none());
+        assert_eq!(
+            cache_environment(),
+            [
+                "GRADLE_OPTS",
+                "GRADLE_USER_HOME",
+                "HOME",
+                "JAVA_OPTS",
+                "JAVA_TOOL_OPTIONS",
+                "MAVEN_OPTS",
+                "MAVEN_USER_HOME",
+                "MAVEN_WRAPPER_ALWAYS_DOWNLOAD",
+                "MAVEN_WRAPPER_ALWAYS_UNPACK",
+                "MISE_ENV",
+                "VIRTUAL_ENV",
+                "_JAVA_OPTIONS"
+            ]
+        );
         Ok(())
     }
 
@@ -1231,5 +1417,9 @@ mod tests {
     fn fingerprint_is_stable_and_nonempty() {
         assert_eq!(fingerprint(), fingerprint());
         assert_eq!(fingerprint().len(), 64);
+        assert_eq!(
+            fingerprint_for(registrations().iter()),
+            fingerprint_for(registrations().iter().rev())
+        );
     }
 }

@@ -1,3 +1,4 @@
+use std::ffi::{OsStr, OsString};
 use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
@@ -13,6 +14,8 @@ pub struct CacheKey {
     pub intent: Intent,
     pub query: QueryCacheKey,
     pub chaos: u8,
+    #[serde(default)]
+    pub environment_fingerprint: String,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
@@ -48,7 +51,58 @@ pub fn cache_key(invocation: &Invocation, roots: &RootInfo) -> CacheKey {
         intent: invocation.intent,
         query,
         chaos: invocation.chaos,
+        environment_fingerprint: environment_fingerprint(),
     }
+}
+
+fn environment_fingerprint() -> String {
+    environment_fingerprint_with(|key| std::env::var_os(key))
+}
+
+fn environment_fingerprint_with(mut value: impl FnMut(&str) -> Option<OsString>) -> String {
+    let keys = crate::registry::cache_environment();
+    if keys.is_empty() {
+        return String::new();
+    }
+    let mut hasher = blake3::Hasher::new();
+    for key in keys {
+        hasher.update(&(key.len() as u64).to_le_bytes());
+        hasher.update(key.as_bytes());
+        if let Some(value) = value(key) {
+            hasher.update(&[1]);
+            hash_os(&mut hasher, &value);
+        } else {
+            hasher.update(&[0]);
+        }
+    }
+    hasher.finalize().to_hex().to_string()
+}
+
+#[cfg(unix)]
+fn hash_os(hasher: &mut blake3::Hasher, value: &OsStr) {
+    use std::os::unix::ffi::OsStrExt as _;
+
+    let bytes = value.as_bytes();
+    hasher.update(&(bytes.len() as u64).to_le_bytes());
+    hasher.update(bytes);
+}
+
+#[cfg(windows)]
+fn hash_os(hasher: &mut blake3::Hasher, value: &OsStr) {
+    use std::os::windows::ffi::OsStrExt as _;
+
+    let wide = value.encode_wide().collect::<Vec<_>>();
+    hasher.update(&(wide.len() as u64).to_le_bytes());
+    for unit in wide {
+        hasher.update(&unit.to_le_bytes());
+    }
+}
+
+#[cfg(not(any(unix, windows)))]
+fn hash_os(hasher: &mut blake3::Hasher, value: &OsStr) {
+    let value = value.to_string_lossy();
+    hasher.update(&(value.len() as u64).to_le_bytes());
+    hasher.update(value.as_bytes());
 }
 
 #[cfg(test)]
@@ -67,6 +121,7 @@ mod tests {
             workspace_root: None,
             repository_root: None,
             scan_root: PathBuf::from("/project"),
+            discovery_files: crate::scan::DiscoveryFiles::default(),
         }
     }
 
@@ -105,5 +160,18 @@ mod tests {
         let mut second = first.clone();
         second.chaos = 2;
         assert_ne!(cache_key(&first, &roots()), cache_key(&second, &roots()));
+    }
+
+    #[test]
+    fn registered_ambient_configuration_changes_cache_identity() {
+        let development = environment_fingerprint_with(|key| {
+            (key == "MISE_ENV").then(|| OsString::from("development"))
+        });
+        let production = environment_fingerprint_with(|key| {
+            (key == "MISE_ENV").then(|| OsString::from("production"))
+        });
+        let missing = environment_fingerprint_with(|_| None);
+        assert_ne!(development, production);
+        assert_ne!(development, missing);
     }
 }

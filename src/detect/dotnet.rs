@@ -7,10 +7,8 @@ use crate::candidate::{
 };
 use crate::diagnostic::Diagnostic;
 use crate::intent::Intent;
-use crate::registry::{
-    WorkspaceContribution, WorkspaceContributor, DOTNET, DOTNET_SOURCE, DOTNET_TOOL,
-};
-use crate::scan::IndexedFileType;
+use crate::registry::{ScanContribution, WorkspaceContributor, DOTNET, DOTNET_SOURCE, DOTNET_TOOL};
+use crate::scan::{DiscoveryFiles, IndexedFileType};
 
 use super::{CandidateBuilder, Detection, Detector, ScanCtx};
 
@@ -21,14 +19,10 @@ pub struct DotnetDetector;
 pub struct DotnetWorkspaceContributor;
 
 impl WorkspaceContributor for DotnetWorkspaceContributor {
-    fn is_workspace(&self, root: &Path) -> bool {
-        root_solution_files(root).next().is_some()
-    }
-
-    fn scan_contribution(&self, root: &Path) -> WorkspaceContribution {
+    fn scan_contribution(&self, root: &Path, files: &DiscoveryFiles) -> ScanContribution {
         let mut includes = Vec::new();
         for solution in root_solution_files(root) {
-            let contents = std::fs::read_to_string(&solution).unwrap_or_default();
+            let contents = files.read(&solution).unwrap_or_default();
             let extension = solution
                 .extension()
                 .and_then(|extension| extension.to_str())
@@ -50,7 +44,7 @@ impl WorkspaceContributor for DotnetWorkspaceContributor {
         }
         includes.sort();
         includes.dedup();
-        WorkspaceContribution {
+        ScanContribution {
             includes,
             excludes: Vec::new(),
         }

@@ -7,9 +7,9 @@ use crate::candidate::{
 use crate::diagnostic::Diagnostic;
 use crate::intent::Intent;
 use crate::registry::{
-    WorkspaceContribution, WorkspaceContributor, MAVEN, MAVEN_SOURCE, MAVEN_TOOL,
+    RootClassification, ScanContribution, WorkspaceContributor, MAVEN, MAVEN_SOURCE, MAVEN_TOOL,
 };
-use crate::scan::IndexedFileType;
+use crate::scan::{DiscoveryFiles, IndexedFileType};
 
 use super::wrapper::{locally_usable_wrapper, WrapperKind};
 use super::{CandidateBuilder, Detection, Detector, ScanCtx};
@@ -18,12 +18,23 @@ pub struct MavenDetector;
 pub struct MavenWorkspaceContributor;
 
 impl WorkspaceContributor for MavenWorkspaceContributor {
-    fn is_workspace(&self, root: &Path) -> bool {
-        !self.scan_contribution(root).includes.is_empty()
+    fn classify_root(&self, marker: &Path, files: &DiscoveryFiles) -> RootClassification {
+        let Ok(contents) = files.read(marker) else {
+            return RootClassification::Neither;
+        };
+        if !contents.contains("<project") {
+            return RootClassification::Neither;
+        }
+        let root = marker.parent().unwrap_or(Path::new("."));
+        if self.scan_contribution(root, files).includes.is_empty() {
+            RootClassification::Package
+        } else {
+            RootClassification::PackageAndWorkspace
+        }
     }
 
-    fn scan_contribution(&self, root: &Path) -> WorkspaceContribution {
-        let contents = std::fs::read_to_string(root.join("pom.xml")).unwrap_or_default();
+    fn scan_contribution(&self, root: &Path, files: &DiscoveryFiles) -> ScanContribution {
+        let contents = files.read(&root.join("pom.xml")).unwrap_or_default();
         let mut includes = section_tag_values(&contents, "modules", "module")
             .into_iter()
             .filter(|module| safe_module(module))
@@ -31,7 +42,7 @@ impl WorkspaceContributor for MavenWorkspaceContributor {
             .collect::<Vec<_>>();
         includes.sort();
         includes.dedup();
-        WorkspaceContribution {
+        ScanContribution {
             includes,
             excludes: Vec::new(),
         }
@@ -124,7 +135,11 @@ fn emit_project(context: &ScanCtx<'_>, project: &MavenProject, output: &mut Dete
         Intent::Test => vec![("test", 90, SelectionPolicy::Automatic)],
         Intent::Run => run_goals(&project.plugins),
     };
-    let wrapper = locally_usable_wrapper(&project.directory, WrapperKind::Maven);
+    let wrapper = locally_usable_wrapper(
+        &project.directory,
+        WrapperKind::Maven,
+        &context.index.manifests,
+    );
     let name = project.artifact.as_deref().unwrap_or("maven-project");
     let scope = project.directory.file_name().map_or_else(
         || name.to_owned(),

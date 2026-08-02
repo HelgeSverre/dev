@@ -7,10 +7,8 @@ use crate::candidate::{
 };
 use crate::diagnostic::Diagnostic;
 use crate::intent::Intent;
-use crate::registry::{
-    WorkspaceContribution, WorkspaceContributor, GRADLE, GRADLE_SOURCE, GRADLE_TOOL,
-};
-use crate::scan::IndexedFileType;
+use crate::registry::{ScanContribution, WorkspaceContributor, GRADLE, GRADLE_SOURCE, GRADLE_TOOL};
+use crate::scan::{DiscoveryFiles, IndexedFileType};
 
 use super::wrapper::{locally_usable_wrapper, WrapperKind};
 use super::{CandidateBuilder, Detection, Detector, ScanCtx};
@@ -26,17 +24,13 @@ pub struct GradleDetector;
 pub struct GradleWorkspaceContributor;
 
 impl WorkspaceContributor for GradleWorkspaceContributor {
-    fn is_workspace(&self, root: &Path) -> bool {
-        root.join("settings.gradle").is_file() || root.join("settings.gradle.kts").is_file()
-    }
-
-    fn scan_contribution(&self, root: &Path) -> WorkspaceContribution {
+    fn scan_contribution(&self, root: &Path, files: &DiscoveryFiles) -> ScanContribution {
         let settings = [
             root.join("settings.gradle"),
             root.join("settings.gradle.kts"),
         ]
         .into_iter()
-        .find_map(|path| std::fs::read_to_string(path).ok())
+        .find_map(|path| files.read(&path).ok())
         .unwrap_or_default();
         let mut includes = literal_project_includes(&settings)
             .into_iter()
@@ -50,7 +44,7 @@ impl WorkspaceContributor for GradleWorkspaceContributor {
             .collect::<Vec<_>>();
         includes.sort();
         includes.dedup();
-        WorkspaceContribution {
+        ScanContribution {
             includes,
             excludes: Vec::new(),
         }
@@ -166,7 +160,7 @@ fn emit_project(
             }),
     );
 
-    let wrapper = locally_usable_wrapper(directory, WrapperKind::Gradle);
+    let wrapper = locally_usable_wrapper(directory, WrapperKind::Gradle, &context.index.manifests);
     let relative_directory = directory
         .strip_prefix(&context.roots.scan_root)
         .unwrap_or(directory);
@@ -266,12 +260,25 @@ fn task_policy(intent: Intent, task: &str, application: bool) -> (SelectionPolic
 }
 
 fn has_application_plugin(contents: &str) -> bool {
-    contents.lines().map(strip_comment).any(|line| {
+    let mut in_plugins_block = false;
+    for line in contents.lines().map(strip_comment) {
         let compact = line.split_ascii_whitespace().collect::<String>();
-        compact.contains("id(\"application\")")
+        if compact.contains("id(\"application\")")
             || compact.contains("id('application')")
+            || compact.contains("id'application'")
             || compact.contains("plugin:'application'")
-    })
+            || compact.contains("plugins{application}")
+            || (in_plugins_block && compact == "application")
+        {
+            return true;
+        }
+        if compact.starts_with("plugins{") {
+            in_plugins_block = !compact.ends_with('}');
+        } else if in_plugins_block && compact.contains('}') {
+            in_plugins_block = false;
+        }
+    }
+    false
 }
 
 fn literal_tasks(contents: &str) -> BTreeSet<String> {
@@ -366,6 +373,9 @@ mod tests {
             tasks.register(dynamicName)
         "#;
         assert!(has_application_plugin(source));
+        assert!(has_application_plugin("plugins { application }"));
+        assert!(has_application_plugin("plugins {\n  application\n}"));
+        assert!(has_application_plugin("plugins {\n  id 'application'\n}"));
         assert_eq!(
             literal_tasks(source),
             BTreeSet::from([

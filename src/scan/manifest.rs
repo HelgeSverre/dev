@@ -1,12 +1,12 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 const MAX_MANIFEST_SIZE: u64 = 4 * 1024 * 1024;
 
-#[derive(Debug, Default)]
-pub struct ManifestCache {
-    values: Mutex<HashMap<PathBuf, Result<String, String>>>,
+#[derive(Clone, Debug, Default)]
+pub struct DiscoveryFiles {
+    values: Arc<Mutex<HashMap<PathBuf, Result<String, String>>>>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -25,7 +25,7 @@ pub enum ManifestError {
     Poisoned,
 }
 
-impl ManifestCache {
+impl DiscoveryFiles {
     pub fn read(&self, path: &Path) -> Result<String, ManifestError> {
         if let Some(cached) = self
             .values

@@ -7,7 +7,7 @@ use std::time::SystemTime;
 use ignore::WalkBuilder;
 use smallvec::SmallVec;
 
-use super::manifest::ManifestCache;
+use super::manifest::DiscoveryFiles;
 use super::RootInfo;
 
 pub type EntryId = usize;
@@ -62,7 +62,7 @@ pub struct FileIndex {
     pub targets: Vec<IndexEntry>,
     pub by_name: HashMap<OsString, SmallVec<[EntryId; 2]>>,
     pub by_extension: HashMap<OsString, SmallVec<[EntryId; 8]>>,
-    pub manifests: ManifestCache,
+    pub manifests: DiscoveryFiles,
     pub truncated: Vec<Truncation>,
     pub(crate) structural_complete: bool,
 }
@@ -83,6 +83,7 @@ impl FileIndex {
         let mut index = Self {
             structural,
             structural_complete,
+            manifests: roots.discovery_files.clone(),
             ..Self::default()
         };
         index.include_declared_workspace_manifests(roots, options.hard_cap);
@@ -125,7 +126,7 @@ impl FileIndex {
     }
 
     fn include_declared_workspace_manifests(&mut self, roots: &RootInfo, hard_cap: usize) {
-        let patterns = workspace_manifest_patterns(&roots.scan_root);
+        let patterns = workspace_manifest_patterns(&roots.scan_root, &self.manifests);
         if patterns.includes.is_empty() {
             return;
         }
@@ -308,13 +309,13 @@ struct WorkspacePatterns {
     excludes: Vec<String>,
 }
 
-fn workspace_manifest_patterns(root: &Path) -> WorkspacePatterns {
+fn workspace_manifest_patterns(root: &Path, files: &DiscoveryFiles) -> WorkspacePatterns {
     let mut output = WorkspacePatterns::default();
     for workspace in crate::registry::registrations()
         .iter()
         .filter_map(|registration| registration.workspace)
     {
-        let contribution = workspace.scan_contribution(root);
+        let contribution = workspace.scan_contribution(root, files);
         output.includes.extend(contribution.includes);
         output.excludes.extend(contribution.excludes);
     }
@@ -424,7 +425,7 @@ mod tests {
         assert_eq!(
             crate::registry::workspace(crate::registry::GO)
                 .expect("Go workspace contributor")
-                .scan_contribution(temp.path())
+                .scan_contribution(temp.path(), &DiscoveryFiles::default())
                 .includes,
             [
                 "apps/api/go.mod",

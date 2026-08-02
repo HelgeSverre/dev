@@ -83,12 +83,14 @@ fn run_resolution(request: ResolveRequest) -> anyhow::Result<i32> {
     if fast_cache_allowed(&request) {
         if let CacheLookup::Valid(entry) = &cache_lookup {
             if let Some(candidate) = entry.candidate(&request.invocation.target) {
-                if entry.needs_touch() {
-                    if let Err(error) = dev_launcher::cache::touch(&entry.key) {
-                        eprintln!("dev: warning: could not refresh remembered choice: {error}");
+                if candidate.availability.is_available() {
+                    if entry.needs_touch() {
+                        if let Err(error) = dev_launcher::cache::touch(&entry.key) {
+                            eprintln!("dev: warning: could not refresh remembered choice: {error}");
+                        }
                     }
+                    return execute_candidate(&candidate, &request, None);
                 }
-                return execute_candidate(&candidate, &request, None);
             }
         }
     }

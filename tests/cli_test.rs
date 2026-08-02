@@ -1028,7 +1028,7 @@ fn corrupt_cache_is_recovered_during_a_locked_write() -> anyhow::Result<()> {
 
     let recovered: serde_json::Value =
         serde_json::from_slice(&fs::read(cache_directory.join("choices.json"))?)?;
-    assert_eq!(recovered["schema_version"], 2);
+    assert_eq!(recovered["schema_version"], 3);
     assert_eq!(recovered["entries"].as_array().map(Vec::len), Some(0));
     assert!(fs::read_dir(cache_directory)?
         .filter_map(Result::ok)
@@ -1469,6 +1469,39 @@ fn mise_task_executes_through_explicit_run_subcommand() -> anyhow::Result<()> {
 }
 
 #[test]
+fn mise_ignores_inactive_environment_task_configs() -> anyhow::Result<()> {
+    let temp = tempfile::tempdir()?;
+    let project = temp.path().join("mise-environments");
+    fs::create_dir(&project)?;
+    fs::write(project.join("mise.toml"), "[tools]\nnode = 'latest'\n")?;
+    fs::write(
+        project.join("mise.production.toml"),
+        "[tasks.test]\nrun = 'cargo test'\n",
+    )?;
+    let bin = fake_program(temp.path(), "mise")?;
+
+    let mut inactive = cargo_bin_cmd!("dev");
+    inactive
+        .args(["test", "--json", "--at"])
+        .arg(&project)
+        .env_remove("MISE_ENV")
+        .env("PATH", &bin);
+    inactive.assert().code(4);
+
+    let mut active = cargo_bin_cmd!("dev");
+    active
+        .args(["test", "--quiet", "--at"])
+        .arg(&project)
+        .env("MISE_ENV", "production")
+        .env("PATH", &bin);
+    active.assert().success().stdout(format!(
+        "cwd=<{}>\narg0=<run>\narg1=<test>\n",
+        project.display()
+    ));
+    Ok(())
+}
+
+#[test]
 fn sema_package_uses_entrypoint_and_conventional_test_file() -> anyhow::Result<()> {
     let temp = tempfile::tempdir()?;
     let project = temp.path().join("sema-project");
@@ -1546,12 +1579,27 @@ fn gradle_uses_global_tool_until_declared_wrapper_distribution_is_cached() -> an
         "#!/bin/sh\nprintf 'wrapper=<yes>\\ncwd=<%s>\\narg0=<%s>\\n' \"$PWD\" \"$1\"\n",
     )?;
 
+    let mut run = cargo_bin_cmd!("dev");
+    run.args(["run", "--quiet", "--at"])
+        .arg(&project)
+        .env("PATH", &bin)
+        .env("GRADLE_USER_HOME", &cache)
+        .env_remove("GRADLE_OPTS")
+        .env_remove("JAVA_OPTS")
+        .env_remove("JAVA_TOOL_OPTIONS")
+        .env_remove("_JAVA_OPTIONS");
+    run.assert()
+        .success()
+        .stdout(format!("cwd=<{}>\narg0=<run>\n", project.display()));
+
     let mut global = cargo_bin_cmd!("dev");
     global
         .args(["build", "--quiet", "--at"])
         .arg(&project)
         .env("PATH", &bin)
-        .env("GRADLE_USER_HOME", &cache);
+        .env("GRADLE_USER_HOME", &cache)
+        .env_remove("GRADLE_OPTS")
+        .env_remove("JAVA_OPTS");
     global
         .assert()
         .success()
@@ -1567,11 +1615,126 @@ fn gradle_uses_global_tool_until_declared_wrapper_distribution_is_cached() -> an
         .args(["build", "--quiet", "--at"])
         .arg(&project)
         .env("PATH", &bin)
-        .env("GRADLE_USER_HOME", &cache);
+        .env("GRADLE_USER_HOME", &cache)
+        .env_remove("GRADLE_OPTS")
+        .env_remove("JAVA_OPTS")
+        .env_remove("JAVA_TOOL_OPTIONS")
+        .env_remove("_JAVA_OPTIONS");
     wrapper.assert().success().stdout(format!(
         "wrapper=<yes>\ncwd=<{}>\narg0=<build>\n",
         project.display()
     ));
+
+    let mut overridden_home = cargo_bin_cmd!("dev");
+    overridden_home
+        .args(["build", "--quiet", "--at"])
+        .arg(&project)
+        .env("PATH", &bin)
+        .env("GRADLE_USER_HOME", &cache)
+        .env_remove("JAVA_OPTS")
+        .env("GRADLE_OPTS", "-Dgradle.user.home=/different-cache");
+    overridden_home
+        .assert()
+        .success()
+        .stdout(format!("cwd=<{}>\narg0=<build>\n", project.display()));
+    Ok(())
+}
+
+#[test]
+fn maven_wrapper_requires_a_cached_distribution_and_safe_wrapper_flags() -> anyhow::Result<()> {
+    let temp = tempfile::tempdir()?;
+    let project = temp.path().join("maven-wrapper-project");
+    let cache = temp.path().join("maven-home");
+    fs::create_dir_all(project.join(".mvn/wrapper"))?;
+    fs::write(
+        project.join("pom.xml"),
+        "<project><artifactId>app</artifactId></project>",
+    )?;
+    let wrapper_properties = "distributionUrl=https://repo.maven.apache.org/maven2/org/apache/maven/apache-maven/3.9.11/apache-maven-3.9.11-bin.zip\n";
+    fs::write(
+        project.join(".mvn/wrapper/maven-wrapper.properties"),
+        wrapper_properties,
+    )?;
+    let bin = fake_program(temp.path(), "mvn")?;
+    write_executable(
+        &project.join("mvnw"),
+        "#!/bin/sh\nprintf 'wrapper=<yes>\\ncwd=<%s>\\narg0=<%s>\\n' \"$PWD\" \"$1\"\n",
+    )?;
+
+    let mut global = cargo_bin_cmd!("dev");
+    global
+        .args(["build", "--quiet", "--at"])
+        .arg(&project)
+        .env("PATH", &bin)
+        .env("MAVEN_USER_HOME", &cache)
+        .env_remove("JAVA_OPTS")
+        .env_remove("JAVA_TOOL_OPTIONS")
+        .env_remove("MAVEN_OPTS")
+        .env_remove("MAVEN_WRAPPER_ALWAYS_DOWNLOAD")
+        .env_remove("MAVEN_WRAPPER_ALWAYS_UNPACK")
+        .env_remove("_JAVA_OPTIONS");
+    global
+        .assert()
+        .success()
+        .stdout(format!("cwd=<{}>\narg0=<package>\n", project.display()));
+
+    fs::create_dir_all(
+        cache.join("wrapper/dists/apache-maven-3.9.11-bin/hash/apache-maven-3.9.11/bin"),
+    )?;
+    fs::write(
+        cache.join("wrapper/dists/apache-maven-3.9.11-bin/hash/apache-maven-3.9.11/bin/mvn"),
+        "cached",
+    )?;
+    let mut wrapper = cargo_bin_cmd!("dev");
+    wrapper
+        .args(["build", "--quiet", "--at"])
+        .arg(&project)
+        .env("PATH", &bin)
+        .env("MAVEN_USER_HOME", &cache)
+        .env_remove("JAVA_OPTS")
+        .env_remove("JAVA_TOOL_OPTIONS")
+        .env_remove("MAVEN_OPTS")
+        .env_remove("MAVEN_WRAPPER_ALWAYS_DOWNLOAD")
+        .env_remove("MAVEN_WRAPPER_ALWAYS_UNPACK")
+        .env_remove("_JAVA_OPTIONS");
+    wrapper.assert().success().stdout(format!(
+        "wrapper=<yes>\ncwd=<{}>\narg0=<package>\n",
+        project.display()
+    ));
+
+    fs::write(
+        project.join(".mvn/wrapper/maven-wrapper.properties"),
+        format!("{wrapper_properties}distributionBase=PROJECT\n"),
+    )?;
+    let mut custom_layout = cargo_bin_cmd!("dev");
+    custom_layout
+        .args(["build", "--quiet", "--at"])
+        .arg(&project)
+        .env("PATH", &bin)
+        .env("MAVEN_USER_HOME", &cache)
+        .env_remove("MAVEN_WRAPPER_ALWAYS_DOWNLOAD")
+        .env_remove("MAVEN_WRAPPER_ALWAYS_UNPACK");
+    custom_layout
+        .assert()
+        .success()
+        .stdout(format!("cwd=<{}>\narg0=<package>\n", project.display()));
+    fs::write(
+        project.join(".mvn/wrapper/maven-wrapper.properties"),
+        wrapper_properties,
+    )?;
+
+    let mut forced_download = cargo_bin_cmd!("dev");
+    forced_download
+        .args(["build", "--quiet", "--at"])
+        .arg(&project)
+        .env("PATH", &bin)
+        .env("MAVEN_USER_HOME", &cache)
+        .env_remove("MAVEN_WRAPPER_ALWAYS_UNPACK")
+        .env("MAVEN_WRAPPER_ALWAYS_DOWNLOAD", "true");
+    forced_download
+        .assert()
+        .success()
+        .stdout(format!("cwd=<{}>\narg0=<package>\n", project.display()));
     Ok(())
 }
 

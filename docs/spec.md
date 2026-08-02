@@ -1,6 +1,6 @@
 # `dev` — Architecture & Implementation Specification
 
-**Status:** normative; revision 4 migration pending
+**Status:** normative; revision 4 implemented
 **Revision:** 4 — makes detector capabilities the single source of truth
 **Language:** Rust 2021  
 **Audience:** implementing agent and maintainer
@@ -692,6 +692,7 @@ pub struct DetectorRegistration {
     pub markers: &'static [ProjectMarker],
     pub tools: &'static [ToolRegistration],
     pub conventional_roots: &'static [&'static str],
+    pub cache_environment: &'static [&'static str],
     pub candidate_schema: u32,
     pub detector: &'static dyn Detector,
     pub workspace: Option<&'static dyn WorkspaceContributor>,
@@ -713,6 +714,10 @@ pub struct ProjectMarker {
 pub enum MarkerPattern {
     Exact(&'static str),
     AsciiCaseInsensitiveBasename(&'static str),
+    BasenamePrefixSuffix {
+        prefix: &'static str,
+        suffix: &'static str,
+    },
     Extension(&'static str),
 }
 
@@ -735,9 +740,15 @@ pub enum DoctorProbe {
     Command {
         args: &'static [&'static str],
         timeout: Duration,
+        output: CommandOutput,
     },
-    LocalMetadata(fn(resolved_program: &Path) -> ProbeOutcome),
+    LocalMetadata(LocalMetadataProbe),
     PresenceOnly { reason: &'static str },
+}
+
+pub enum CommandOutput {
+    FirstNonEmptyLine,
+    LinePrefix(&'static str),
 }
 ```
 
@@ -756,7 +767,8 @@ The registry is the single source of truth for all of these consumers:
 - bounded workspace-member scan expansion;
 - chaos-1 conventional target roots;
 - target binders and standalone target runners;
-- tool availability and `dev doctor` probes.
+- tool availability and `dev doctor` probes;
+- ambient environment keys that affect detection and cache identity.
 
 Adding a detector MUST NOT require adding its name or marker to another module.
 Infrastructure may keep derived, sorted indexes for performance, but those
@@ -771,10 +783,10 @@ projection of matching directory entries so creating a new `Justfile` or
 `*.csproj` invalidates a remembered choice. The cache stores a deterministic
 fingerprint of the sorted candidate-relevant registration metadata, including
 detector/source/tool IDs, programs, markers, priorities, conventional roots,
-and `candidate_schema`, instead of a manually maintained global detector
-number. Hook behavior that is not represented in static metadata requires a
-`candidate_schema` bump. A candidate source is restored only through a current
-registry lookup.
+ambient cache keys, and `candidate_schema`, instead of a manually maintained
+global detector number. Hook behavior that is not represented in static
+metadata requires a `candidate_schema` bump. A candidate source is restored
+only through a current registry lookup.
 
 Workspace support is an optional pure-data hook:
 
@@ -794,11 +806,11 @@ pub trait WorkspaceContributor: Send + Sync {
 }
 ```
 
-`DiscoveryFiles` is bounded, memoized, read-only, and shared with the manifest
-cache. `ScanContribution` contains sorted include/exclude patterns and semantic
-input paths. This moves Cargo member globs, Node/pnpm workspaces, and `go.work`
-members behind the registrations that understand them while keeping root and
-scan orchestration ecosystem-agnostic.
+`DiscoveryFiles` is bounded, memoized, read-only, shared with the manifest
+cache, and records every semantic input path. `ScanContribution` contains
+sorted include/exclude patterns. This moves Cargo member globs, Node/pnpm
+workspaces, and `go.work` members behind the registrations that understand them
+while keeping root and scan orchestration ecosystem-agnostic.
 
 The initial registry is static. Registration order MUST NOT influence output.
 
@@ -1162,10 +1174,14 @@ variables requires confirmation. Execution is:
 task --taskfile <absolute-Taskfile> <task> -- <passthrough...>
 ```
 
-mise recognizes `mise.toml`, `.mise.toml`, and environment/local variants. It
-parses `[tasks]` entries, descriptions, aliases, hidden tasks, dependency-only
-tasks, and bounded literal `[task_config].includes`. It does not evaluate tool,
-environment, hook, or task scripts during discovery. Execution is:
+mise recognizes `mise.toml`, `.mise.toml`, their local variants, and only the
+environment variants activated by `MISE_ENV`. Inactive environment files are
+markers but MUST NOT contribute commands that `mise run` would not load. It
+preserves comma-separated environment order, with the last environment taking
+precedence. It parses `[tasks]` entries, descriptions, aliases, hidden tasks,
+dependency-only tasks, and bounded literal `[task_config].includes`. It does
+not evaluate tool, environment, hook, or task scripts during discovery.
+Execution is:
 
 ```text
 mise run <task> -- <passthrough...>
@@ -1300,6 +1316,12 @@ plugins and are not discovery APIs. `dotnet sln list` is unnecessary because
 solution formats can be parsed locally. Wrappers may download Gradle or Maven;
 they are considered available only when the declared distribution is already
 present locally. Doctor never invokes a project wrapper.
+
+Wrapper selection also requires the documented default distribution/cache
+layout. A custom distribution base/path, a JVM user-home override, or Maven's
+always-download/always-unpack switches make the project wrapper unavailable to
+`dev`; the global tool remains a candidate. Every ambient variable consulted by
+this decision is declared by the registration and included in cache identity.
 
 Build, test, and run commands in these ecosystems may perform their normal
 dependency resolution after the user authorizes execution. `dev` MUST NOT
