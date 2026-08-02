@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title id="title">dev Command Aperture logo</title>
+  <style>
+    .background { fill: oklch(89% 0.22 125); }
+    .edge { fill: none; stroke: oklch(14% 0.018 145); stroke-width: 1.5; }
+    .mark { fill: oklch(14% 0.018 145); }
+  </style>
+  <rect class="background" x="1" y="1" width="62" height="62" rx="14" />
+  <rect class="edge" x="1" y="1" width="62" height="62" rx="14" />
+  <path class="mark" d="M12 10H30V18H20V46H30V54H12ZM36 10L58 32L36 54V42L46 32L36 22Z" />
+</svg>

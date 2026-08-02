@@ -1,6 +1,19 @@
-# `dev`
+<p align="center">
+  <img src="website/logo.svg" width="96" height="96" alt="dev Command Aperture logo">
+</p>
 
-Zero-setup command discovery and launching for software projects.
+<h1 align="center">dev</h1>
+
+<p align="center">
+  <strong>Run the right command.</strong><br>
+  Zero-setup command discovery and launching for software projects.
+</p>
+
+<p align="center">
+  <a href="https://github.com/HelgeSverre/dev/blob/main/docs/spec.md">Specification</a>
+  ·
+  <a href="website/index.html">Website</a>
+</p>
 
 > **Status:** Early development. The CLI described below is the intended
 > interface and is not ready for general use yet.
