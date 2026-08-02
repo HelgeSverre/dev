@@ -1,7 +1,7 @@
 # `dev` — Architecture & Implementation Specification
 
-**Status:** design, pre-implementation  
-**Revision:** 3 — reconciles structural discovery with fuzzy hints  
+**Status:** normative; revision 4 migration pending
+**Revision:** 4 — makes detector capabilities the single source of truth
 **Language:** Rust 2021  
 **Audience:** implementing agent and maintainer
 
@@ -51,9 +51,11 @@ These invariants outrank individual scoring constants and detector details.
    task-definition language.
 2. **Known commands only.** Fuzzy matching may select or combine a known runner
    template with a known target. It MUST NOT generate arbitrary shell text.
-3. **No runtime installation.** Detection and execution MUST NOT implicitly
-   install packages, toolchains, or runners. In particular, `npx` must never be
-   allowed to download a missing package.
+3. **No inserted installation.** `dev` MUST NOT add an install, restore,
+   toolchain bootstrap, or retry step before or after the selected command. In
+   particular, `npx` must never be allowed to download a missing runner. A
+   selected native build command may retain its documented dependency-resolution
+   behavior; that behavior belongs to the exact command shown to the user.
 4. **Hints must matter.** If the user supplies meaningful hints and none match,
    `dev` MUST NOT silently auto-run the unhinted default.
 5. **Ambiguity is interactive.** A close or weak decision opens the picker on a
@@ -96,7 +98,8 @@ benchmark machine and corpus MUST be recorded with results.
 - Defining new project tasks in a `dev`-specific project file.
 - Orchestrating several selected candidates concurrently in v1.
 - Inspecting Gradle/Bazel task graphs or arbitrary build-language code.
-- Daemons, telemetry, remote execution, or runtime network access.
+- Daemons, telemetry, remote execution, or network-client behavior implemented
+  by `dev` itself.
 - Using an LLM for command selection.
 
 ---
@@ -254,7 +257,28 @@ pub enum SelectionPolicy {
 pub enum CandidateOrigin { Declared, Conventional, Synthetic }
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Serialize)]
+pub enum CommandLayer {
+    /// A repository-level facade such as a Just recipe or Make target.
+    ProjectFacade,
+    /// A declared ecosystem task such as an npm or Composer script.
+    EcosystemTask,
+    /// A native ecosystem default inferred from project structure.
+    ToolDefault,
+    /// A directly selected binary, source file, test, or other target.
+    DirectTarget,
+}
+
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Serialize)]
 pub enum Lifecycle { Finite, LongRunning, MultiProcess }
+
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Serialize)]
+pub struct DetectorId(&'static str);
+
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Serialize)]
+pub struct CandidateSourceId(&'static str);
+
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Serialize)]
+pub struct ToolId(&'static str);
 
 #[derive(Clone, Debug, Serialize)]
 pub enum Availability {
@@ -302,16 +326,23 @@ pub struct Candidate {
     pub id: CandidateId,
     /// Example: `node:packages/web:script:dev`.
     pub action_key: String,
-    pub detector: &'static str,
+    /// Implementation that emitted the candidate, e.g. `node`.
+    pub detector: DetectorId,
+    /// User-facing specialization, e.g. `node`, `vite`, or `next`.
+    pub source: CandidateSourceId,
     pub intent: Intent,
     pub action_name: String,
     pub program: OsString,
     pub args: Vec<OsString>,
     pub cwd: PathBuf,
+    /// Project/member scope used for proximity and facade dominance. This may
+    /// differ from `cwd` for workspace commands.
+    pub scope_root: PathBuf,
     pub env: BTreeMap<OsString, OsString>,
     pub passthrough: PassthroughStyle,
     pub lifecycle: Lifecycle,
     pub origin: CandidateOrigin,
+    pub layer: CommandLayer,
     pub selection: SelectionPolicy,
     pub availability: Availability,
     pub base_points: Points,
@@ -346,7 +377,7 @@ pub struct Detection {
 }
 
 pub struct Diagnostic {
-    pub detector: &'static str,
+    pub detector: DetectorId,
     pub severity: Severity,
     pub message: String,
     pub source: Option<PathBuf>,
@@ -355,9 +386,7 @@ pub struct Diagnostic {
 pub enum Severity { Info, Warning, Error }
 
 pub trait Detector: Send + Sync {
-    fn name(&self) -> &'static str;
-    fn synonyms(&self) -> &'static [&'static str];
-    fn detect(&self, ctx: &ScanCtx) -> Detection;
+    fn detect(&self, ctx: &ScanCtx, output: &mut Detection);
 }
 ```
 
@@ -368,6 +397,10 @@ source executable configuration. They may ask a shared `PathResolver` to inspect
 `ScanCtx` also exposes a bounded `PathProbe` for exact known paths such as
 `vendor/bin/pest`; this may stat/read explicitly requested files but may not
 walk an ignored dependency directory.
+
+Detector names, synonyms, tools, markers, target hooks, and metadata precedence
+belong to the registration described in section 10.1. They MUST NOT be repeated
+as methods or match tables elsewhere in the codebase.
 
 ---
 
@@ -423,7 +456,7 @@ Resolve three distinct concepts:
 
 1. **Package root:** nearest ancestor containing an applicable package marker,
    such as `package.json`, `Cargo.toml`, `composer.json`, `go.mod`, `build.zig`,
-   `Package.swift`, or `pubspec.yaml`.
+   `Package.swift`, `pubspec.yaml`, or a Justfile.
 2. **Workspace root:** nearest enclosing explicit workspace marker, such as
    `pnpm-workspace.yaml`, `go.work`, Cargo `[workspace]`, or a `package.json`
    containing `workspaces`. Continue above the package root to find it.
@@ -432,6 +465,10 @@ Resolve three distinct concepts:
 
 This distinction is mandatory. Stopping at a member package's `package.json`
 must not hide its enclosing pnpm workspace.
+
+Applicable markers come from the detector registry. `Classified` markers are
+interpreted through their registration's bounded `WorkspaceContributor`; root
+resolution MUST NOT contain an ecosystem-name match table.
 
 ### 8.3 Scan modes
 
@@ -490,6 +527,9 @@ pub struct IndexEntry {
 
 Manifest parsing is lazy and memoized. Parse errors become detector diagnostics.
 The cache must be concurrency-safe if detectors run in parallel.
+Root classification, workspace scan expansion, and normal detector parsing use
+the same `DiscoveryFiles`/manifest cache so every semantic read is recorded once
+for cache invalidation.
 
 ### 8.5 Determinism and concurrency
 
@@ -601,31 +641,183 @@ Unhinted candidates sort by:
 The final two keys exist only to make ties deterministic; they do not imply
 greater confidence.
 
+### 9.7 Declared task-layer dominance
+
+A canonical declared task is the project's interface and may contain
+setup, teardown, service orchestration, environment preparation, or several
+native commands. Higher declared layers therefore dominate lower layers for the
+same intent and `scope_root` during unhinted resolution. For example, a Just
+recipe named `test` outranks a Composer `test` script when the Just recipe wraps
+unit tests, Docker setup, integration tests, and cleanup.
+
+The precedence is:
+
+```text
+ProjectFacade > EcosystemTask > ToolDefault
+```
+
+Dominance changes automatic eligibility, not candidate existence or execution
+identity:
+
+1. Find available `Automatic` declared-task candidates whose identity is
+   canonical for the requested intent.
+2. For each such candidate, demote same-scope candidates in strictly lower
+   layers to `ExplicitHint` for this resolution.
+3. Keep demoted candidates visible in `--why`, `--list`, JSON, and the picker.
+4. A direct identity hint for a demoted candidate may still select it.
+5. Two distinct candidates in the same layer remain competitors; do not choose
+   between Just and Make or between npm and Composer solely by registration
+   order.
+
+Framework fallbacks and native conventions SHOULD use `ToolDefault`. Declared
+npm/Composer scripts SHOULD use `EcosystemTask`. Just recipes and literal Make
+targets SHOULD use `ProjectFacade`. Explicit files and binaries use
+`DirectTarget`.
+
 ---
 
 ## 10. Detector specification
 
 ### 10.1 Registry
 
+The registry is a static capability registry, not a plugin loader and not one
+large trait with mostly empty methods. Each entry combines immutable metadata
+with only the hooks that ecosystem needs:
+
+```rust
+pub struct DetectorRegistration {
+    pub id: DetectorId,
+    pub candidate_sources: &'static [CandidateSourceRegistration],
+    pub synonyms: &'static [&'static str],
+    pub markers: &'static [ProjectMarker],
+    pub tools: &'static [ToolRegistration],
+    pub conventional_roots: &'static [&'static str],
+    pub candidate_schema: u32,
+    pub detector: &'static dyn Detector,
+    pub workspace: Option<&'static dyn WorkspaceContributor>,
+    pub target_binders: &'static [&'static dyn TargetBinder],
+    pub target_runners: &'static [&'static dyn TargetRunner],
+}
+
+pub struct CandidateSourceRegistration {
+    pub id: CandidateSourceId,
+    pub metadata_priority: u8,
+    pub default_tags: &'static [&'static str],
+}
+
+pub struct ProjectMarker {
+    pub pattern: MarkerPattern,
+    pub root_role: RootRole,
+}
+
+pub enum MarkerPattern {
+    Exact(&'static str),
+    AsciiCaseInsensitiveBasename(&'static str),
+    Extension(&'static str),
+}
+
+pub enum RootRole {
+    Package,
+    Workspace,
+    /// A bounded parser decides whether the marker is a package, workspace, or
+    /// both, as with Cargo.toml and package.json.
+    Classified,
+    Auxiliary,
+}
+
+pub struct ToolRegistration {
+    pub id: ToolId,
+    pub program: &'static str,
+    pub doctor: DoctorProbe,
+}
+
+pub enum DoctorProbe {
+    Command {
+        args: &'static [&'static str],
+        timeout: Duration,
+    },
+    LocalMetadata(fn(resolved_program: &Path) -> ProbeOutcome),
+    PresenceOnly { reason: &'static str },
+}
+```
+
+`candidate_sources` separates the implementation that found an action from the
+specialized source shown to the user. For example, the Node implementation may
+emit `node`, `vite`, and `next` sources, and the Dart implementation may emit
+`dart` and `flutter`. Metadata precedence used during deduplication comes from
+the source registration; it MUST NOT live in a string match table.
+
+The registry is the single source of truth for all of these consumers:
+
+- detector dispatch;
+- package/workspace marker lookup during upward root resolution;
+- marker reporting in no-candidate diagnostics;
+- cache shape inputs and cached detector/source restoration;
+- bounded workspace-member scan expansion;
+- chaos-1 conventional target roots;
+- target binders and standalone target runners;
+- tool availability and `dev doctor` probes.
+
+Adding a detector MUST NOT require adding its name or marker to another module.
+Infrastructure may keep derived, sorted indexes for performance, but those
+indexes MUST be built from the registry. Exact duplicate declarations are
+deduplicated. Conflicting declarations for the same detector, source, or tool
+ID are programmer errors and MUST fail registry validation tests.
+
+Markers read through the bounded manifest reader become semantic cache inputs
+automatically. Exact marker paths are watched whether present or absent. For
+case-insensitive or extension patterns, the shape snapshot records a sorted
+projection of matching directory entries so creating a new `Justfile` or
+`*.csproj` invalidates a remembered choice. The cache stores a deterministic
+fingerprint of the sorted candidate-relevant registration metadata, including
+detector/source/tool IDs, programs, markers, priorities, conventional roots,
+and `candidate_schema`, instead of a manually maintained global detector
+number. Hook behavior that is not represented in static metadata requires a
+`candidate_schema` bump. A candidate source is restored only through a current
+registry lookup.
+
+Workspace support is an optional pure-data hook:
+
+```rust
+pub trait WorkspaceContributor: Send + Sync {
+    fn classify_root(
+        &self,
+        marker: &Path,
+        files: &DiscoveryFiles,
+    ) -> RootClassification;
+
+    fn scan_contribution(
+        &self,
+        root: &Path,
+        files: &DiscoveryFiles,
+    ) -> ScanContribution;
+}
+```
+
+`DiscoveryFiles` is bounded, memoized, read-only, and shared with the manifest
+cache. `ScanContribution` contains sorted include/exclude patterns and semantic
+input paths. This moves Cargo member globs, Node/pnpm workspaces, and `go.work`
+members behind the registrations that understand them while keeping root and
+scan orchestration ecosystem-agnostic.
+
 The initial registry is static. Registration order MUST NOT influence output.
 
-| Detector | Primary markers | Intents |
-|---|---|---|
-| `node` | `package.json`, lockfiles | run, build, test |
-| `vite` | `vite.config.*`, dependency | run, build |
-| `next` | `next.config.*`, dependency | run, build |
-| `cargo` | `Cargo.toml` | run, build, test |
-| `composer` | `composer.json` | run, build, test |
-| `artisan` | `artisan`, Laravel package evidence | run, test |
-| `php-file` | explicit or hinted `*.php` | run |
-| `go` | `go.mod`, `go.work`, `package main` | run, build, test |
-| `zig` | `build.zig`, explicit `*.zig` | run, build, test |
-| `swift` | `Package.swift` | run, build, test |
-| `flutter` / `dart` | `pubspec.yaml` | run, build, test |
-| `python-file` | explicit or hinted `*.py` | run |
-| `make` | Makefile variants | run, build, test |
-| `docker` | Compose files, `Dockerfile` | run, build |
-| `shell` | shebangs, executable files | run |
+| Registration | Candidate sources | Primary markers | Intents |
+|---|---|---|---|
+| `node` | `node`, `vite`, `next` | `package.json`, lockfiles | run, build, test |
+| `cargo` | `cargo` | `Cargo.toml` | run, build, test |
+| `composer` | `composer` | `composer.json` | run, build, test |
+| `artisan` | `artisan` | `artisan`, Laravel package evidence | run, test |
+| `php-file` | `php-file` | explicit or hinted `*.php` | run |
+| `go` | `go` | `go.mod`, `go.work`, `package main` | run, build, test |
+| `zig` | `zig` | `build.zig`, explicit `*.zig` | run, build, test |
+| `swift` | `swift` | `Package.swift` | run, build, test |
+| `dart` | `dart`, `flutter` | `pubspec.yaml` | run, build, test |
+| `python-file` | `python-file` | explicit or hinted `*.py` | run |
+| `just` | `just` | case-insensitive `justfile`, `.justfile` | run, build, test |
+| `make` | `make` | Makefile variants | run, build, test |
+| `docker` | `docker` | Compose files, `Dockerfile` | run, build |
+| `shell` | `shell` | shebangs, executable files | run |
 
 Full Python project support, JVM tools, .NET, CMake, Bazel, Nix, and plugin
 detectors are deferred. If broad public adoption is a v1 goal, Python project
@@ -643,6 +835,32 @@ Every emitted candidate MUST provide:
 - search identities, scopes, tags, and target paths;
 - lifecycle and origin;
 - availability evaluated by the shared resolver.
+
+Raw `Candidate::new` construction is private to the detection infrastructure.
+Detectors emit through a registry-bound builder so required metadata and shared
+policy cannot be skipped:
+
+```rust
+ctx.candidates
+    .declared_task(JUST_SOURCE, intent, scope, recipe.name())
+    .tool(JUST_TOOL)
+    .args(["--justfile", justfile, recipe.name()])
+    .cwd(project_root)
+    .passthrough(PassthroughStyle::Append)
+    .selection(selection)
+    .base_points(points)
+    .lifecycle(lifecycle)
+    .evidence(manifest_evidence)
+    .search(search_document)
+    .emit(output);
+```
+
+The builder validates that the source and tool belong to a current
+registration, attaches detector identity, default tags, and synonyms, resolves
+availability, and derives the initial candidate ID. An incomplete candidate
+becomes a detector diagnostic in release builds and a test failure in detector
+fixtures. Direct executable paths use an explicit `program_path` builder method
+instead of inventing a tool registration.
 
 Commands must use argv arrays. Detectors MUST NOT produce `sh -c` strings.
 Manifest commands that are defined by an ecosystem as shell snippets remain
@@ -845,22 +1063,72 @@ without claiming full Python-project understanding:
 `pyproject.toml` entry points, pytest, uv/Poetry/PDM environments, editable
 installs, and monorepo behavior require a dedicated post-v1 design.
 
-### 10.12 Make
+### 10.12 Just
+
+Recognize `.justfile` and any basename equal to `justfile` under ASCII
+case-insensitive comparison. A Justfile is a package marker. If several
+accepted spellings occur in one directory and a deterministic native precedence
+cannot be established, retain the candidates but require confirmation and emit
+a diagnostic.
+
+Discovery parses Justfiles as bounded local data. It MUST NOT invoke `just
+--list`, `--summary`, `--dump`, `--json`, or any other Just command: parsing or
+evaluating a Justfile can load imports and evaluate expressions. Execution uses
+the exact discovered file:
+
+```text
+just --justfile <absolute-justfile> <recipe>
+```
+
+The initial conservative parser:
+
+- emits public recipes whose minimum positional arity is zero;
+- accepts defaulted parameters and zero-minimum `*args` parameters;
+- omits recipes with required positional parameters or `+args`, with an info
+  diagnostic explaining why;
+- excludes underscore-prefixed recipes and recipes or aliases marked
+  `[private]`;
+- retains dependency-only recipes because they commonly express orchestration;
+- uses recipe doc comments as descriptions;
+- resolves non-private aliases into additional search identities on the target
+  recipe instead of emitting a second command;
+- reads only literal, relative imports/modules within the scan root, with a
+  depth and file-count cap; unsupported dynamic or escaping paths produce a
+  diagnostic rather than partial execution semantics.
+
+Run names are `run`, `dev`, `start`, `serve`, and `watch`; Build names are
+`build`, `all`, `compile`, and `bundle`; Test names are `test`, `check`, and
+`verify`. Canonical recipes are `Automatic`. Other public recipes are Run
+`ExplicitHint` actions. A zero-arity default recipe may also be an Automatic Run
+candidate when its name is not canonically Build or Test.
+
+Just recipes use `CommandLayer::ProjectFacade`. A canonical recipe therefore
+dominates lower-level same-scope defaults under section 9.7 while leaving those
+alternatives directly selectable. `just --version` is the registered doctor
+probe; `just version` is a recipe invocation and MUST NOT be used as a probe.
+
+### 10.13 Make
 
 Use a conservative line scanner, not a claim of fully parsing Make syntax.
 Recognize literal target names; ignore pattern rules, special targets, variable
 expansions, and `.PHONY` bookkeeping. Capture adjacent `##` comments as help.
 
 - Run names: `run`, `dev`, `serve`, `start`.
-- Build names: `build`, `all`, or Make's literal first eligible target.
+- Build names: `build`, `all`.
 - Test names: `test`, `check`.
 - Other literal targets: `ExplicitHint`, base 15.
+
+Make's first literal target is its default goal, but that does not establish
+Run/Build/Test intent. Record default-goal evidence for display and matching;
+do not make an otherwise non-canonical target Automatic. In particular, a
+first `help`, `lint`, or `format` target must not become a Build facade and
+demote a native build candidate under section 9.7.
 
 Make is often a wrapper. When an execution-equivalent native candidate exists,
 deduplication should prefer the native explanation; otherwise Make remains a
 valid candidate rather than receiving a blanket penalty.
 
-### 10.13 Docker and Compose
+### 10.14 Docker and Compose
 
 Recognize all standard Compose filename spellings:
 
@@ -880,7 +1148,7 @@ docker-compose.yaml
 Do not synthesize an image tag from a directory name: names may be invalid and
 tagging is an unnecessary side effect.
 
-### 10.14 Shell and executables
+### 10.15 Shell and executables
 
 - An explicitly anchored executable with a shebang runs directly.
 - A non-executable script with a recognized shebang runs through that
@@ -892,7 +1160,7 @@ tagging is an unnecessary side effect.
 
 Never source a script to inspect it.
 
-### 10.15 Target binding and synthetic candidates
+### 10.16 Target binding and synthetic candidates
 
 Specific ecosystem binding takes precedence over executing a matched file as a
 standalone program. Detectors may register pure target binders:
@@ -947,6 +1215,30 @@ Synthetic candidates:
 - include the runner decision as evidence;
 - never appear in unhinted resolution;
 - remain visible after the picker filter is cleared during the same invocation.
+
+### 10.17 Expansion constraints for Gradle, Maven, and .NET
+
+New ecosystems use the same registration, marker, workspace, candidate-builder,
+and doctor APIs. They do not receive discovery-time subprocess exceptions.
+
+| Registration | Markers and static discovery | Candidate execution | Doctor |
+|---|---|---|---|
+| `gradle` | `settings.gradle`, `settings.gradle.kts`, `build.gradle`, `build.gradle.kts`; conservatively parse literal project includes and plugin/task declarations | Prefer an already usable local wrapper, otherwise `gradle`; canonical tasks such as `build`, `test`, and evidenced `run` only | global `gradle --version` |
+| `maven` | `pom.xml`; parse XML modules, packaging, profiles, and declared plugins without resolving them | Prefer an already usable local wrapper, otherwise `mvn`; canonical lifecycle phases and statically declared plugin goals | global `mvn --version` |
+| `dotnet` | `.sln`, `.slnx`, `.slnf`, `.csproj`, `.fsproj`, `.vbproj`; parse solution/project data directly | `dotnet build`, `dotnet test`, and `dotnet run --project <path>` | `dotnet --version` |
+
+Gradle build scripts execute during configuration, so `gradle tasks` and
+`gradle help` are not discovery APIs. Maven help/plugin goals may resolve
+plugins and are not discovery APIs. `dotnet sln list` is unnecessary because
+solution formats can be parsed locally. Wrappers may download Gradle or Maven;
+they are considered available only when the declared distribution is already
+present locally. Doctor never invokes a project wrapper.
+
+Build, test, and run commands in these ecosystems may perform their normal
+dependency resolution after the user authorizes execution. `dev` MUST NOT
+silently prefix an install or restore command. Missing dependency state should
+produce a targeted post-failure suggestion when it can be diagnosed reliably,
+not an automatic retry with network access.
 
 ---
 
@@ -1402,6 +1694,7 @@ pub struct CacheEntry {
     pub command_fingerprint: String,
     pub shape: ShapeSnapshot,
     pub cache_schema: u32,
+    pub registry_fingerprint: String,
     pub matcher_schema: u32,
     pub chosen_at: SystemTime,
     pub last_used_at: SystemTime,
@@ -1422,8 +1715,9 @@ A cache hit should not require a full file walk. At selection time record:
 - metadata for the selected target and executable when project-local;
 - metadata for watched parent directories whose entry changes could introduce
   or remove relevant manifests/configs;
+- the sorted marker projection derived from the current detector registry;
 - logical and physical roots;
-- the detector/matcher schema revisions.
+- the registry fingerprint and matcher schema revision.
 
 Validation stats watched paths, reads and hashes only the small semantic
 manifest set, and compares directory metadata. Use a stable digest algorithm
@@ -1543,11 +1837,45 @@ Inherit the caller's environment, then apply only detector-declared deltas.
 `dev` MUST NOT load `.env` files itself. Native tools may do so as part of their
 normal behavior.
 
-`dev doctor` is an explicitly diagnostic command and MAY run bounded
-`--version` checks with timeouts. It still must not install, update, or access
-the network.
+### 15.7 Doctor probes
 
-### 15.7 Exit codes
+`dev doctor` derives its rows from the unique `ToolRegistration` values in the
+detector registry. It MUST NOT maintain a second tool list. Rows have stable
+`ToolId` ordering, and identical tool registrations shared by several detectors
+collapse to one row.
+
+There is no default version argument. Every tool explicitly registers one of:
+
+- an audited command probe with exact argv and a tool-specific timeout;
+- a bounded local-metadata reader;
+- presence-only reporting with a reason that a safe version probe is not
+  available.
+
+Initial exceptions demonstrate why a generic `--version` fallback is
+forbidden:
+
+```text
+go      -> go version
+zig     -> zig version
+just    -> just --version
+flutter -> read SDK-local bin/cache/flutter.version.json
+```
+
+Most other tools may explicitly register `--version`, but that choice remains
+visible in their own registration. Flutter's launcher is not a safe probe: on
+a stale installation it may wait for a startup lock, update the embedded Dart
+SDK, run `pub upgrade`, or rebuild the tool snapshot before printing anything.
+The metadata reader resolves recognized SDK/FVM symlinks and reads bounded JSON.
+If that layout is unavailable, doctor reports Flutter as present with an
+unknown version; it does not execute the launcher as a fallback.
+
+Command probes use null stdin and captured, bounded output. On timeout, terminate
+the complete probe process scope where the host supports process groups or Job
+Objects, then reap it. Render the timeout stored on that tool's probe rather
+than a global constant. Doctor still must not install, update, source project
+configuration, or access the network.
+
+### 15.8 Exit codes
 
 | Code | Meaning |
 |---:|---|
@@ -1568,8 +1896,9 @@ directly.
 ## 16. Trust and safety boundary
 
 Calling `dev run`, `dev build`, or `dev test` authorizes execution of the command
-that resolution selects. It does not authorize discovery-time code execution,
-dependency installation, or network access.
+that resolution selects, including that command's documented runtime behavior.
+It does not authorize discovery-time code execution or a separate install,
+restore, update, or network step added by `dev`.
 
 Requirements:
 
@@ -1677,6 +2006,8 @@ dev/
 │   ├── intent.rs
 │   ├── candidate.rs
 │   ├── diagnostic.rs
+│   ├── registry.rs
+│   ├── doctor.rs
 │   ├── scan/
 │   │   ├── mod.rs
 │   │   ├── roots.rs
@@ -1685,6 +2016,7 @@ dev/
 │   │   └── manifest.rs
 │   ├── detect/
 │   │   ├── mod.rs
+│   │   ├── builder.rs
 │   │   ├── node.rs
 │   │   ├── cargo.rs
 │   │   ├── php.rs
@@ -1693,6 +2025,7 @@ dev/
 │   │   ├── swift.rs
 │   │   ├── dart.rs
 │   │   ├── python.rs
+│   │   ├── just.rs
 │   │   ├── make.rs
 │   │   ├── docker.rs
 │   │   └── shell.rs
@@ -1776,6 +2109,8 @@ Create at least 50 tiny, real-shaped repositories covering:
 - Swift executable/library packages and bare Xcode projects;
 - Flutter generated platforms and host incompatibility;
 - standalone Python files with and without active virtual environment;
+- Justfile case variants, private/default/aliased/dependency-only recipes,
+  zero-minimum parameters, and bounded literal imports;
 - Make comments, wrapper targets, and syntax the scanner intentionally ignores;
 - all four Compose filenames and Compose beside a native Vite app;
 - shell shebang variants, missing executable bit, and extensionless executables;
@@ -1829,6 +2164,13 @@ outcome auto-runs, picks, or returns hint-no-match.
 ### 20.4 Property and invariant tests
 
 - Candidate order is independent of detector registration order.
+- Every detector/source/tool ID is registered exactly once or shared with an
+  identical declaration.
+- Derived root markers, cache marker projections, doctor rows, target hooks,
+  and error marker names contain every applicable registration without manual
+  side tables.
+- Candidate builders reject an unregistered source/tool and incomplete
+  evidence/search metadata.
 - Deduplicating twice is idempotent.
 - Adding unrelated low-tier candidates cannot change an unhinted clear winner.
 - Adding an unmatched hint cannot silently select an unrelated candidate.
@@ -1847,6 +2189,9 @@ outcome auto-runs, picks, or returns hint-no-match.
 - Chaos levels do not accidentally share entries.
 - Manifest content changes invalidate a snapshot.
 - Adding a root config invalidates through watched-directory metadata.
+- Adding, removing, or case-renaming any registered exact, case-insensitive, or
+  extension marker invalidates the relevant snapshot.
+- Changing a detector's candidate schema changes the registry fingerprint.
 - Stale exact candidate persists with a note.
 - Same action key with changed argv requires confirmation.
 - Concurrent writers preserve both entries.
@@ -1867,7 +2212,17 @@ Unix integration tests must verify:
 
 Equivalent Windows tests cover Job Objects, Ctrl-C, exit codes, and quoting.
 
-### 20.7 Performance tests
+### 20.7 Doctor tests
+
+- Assert exact argv for every command probe; in particular Go and Zig use the
+  `version` subcommand while Just uses `--version`.
+- Assert tool-specific timeout rendering and complete process-scope cleanup.
+- Assert Flutter reads bounded local metadata without launching Flutter.
+- Assert a missing or unrecognized metadata layout reports presence without an
+  unsafe command fallback.
+- Assert doctor rows are the stable deduplicated projection of registered tools.
+
+### 20.8 Performance tests
 
 Benchmark release builds against committed generated corpora:
 
@@ -1936,9 +2291,12 @@ At M2, `dev` is useful for Node and Rust without a TUI or cache.
 
 ### M7 — ecosystem expansion
 
+- Static capability registry, registry-bound candidate builder, and removal of
+  detector/tool/marker side tables.
+- Justfile detector and declared project-task dominance.
 - Full Python project design.
-- JVM/Gradle/Maven design pass.
-- .NET, CMake, Bazel, Nix, and plugin feasibility.
+- Gradle, Maven, and .NET detectors under the no-subprocess discovery contract.
+- CMake, Bazel, Nix, and plugin feasibility.
 
 ---
 
@@ -1963,7 +2321,42 @@ At M2, `dev` is useful for Node and Rust without a TUI or cache.
 
 ---
 
-## Appendix A — Material differences from revision 2
+## Appendix A — Material differences from revision 3
+
+Revision 4 makes detector registration the expansion boundary:
+
+| Revision 3 | Revision 4 |
+|---|---|
+| Separate detector, root-marker, cache-marker, doctor-tool, target-hook, and cached-name lists | One static capability registry projected into each subsystem |
+| Candidate construction is public and manually repeats detector defaults | Registry-bound builder validates sources, tools, evidence, availability, and search metadata |
+| Detector strings double as implementation identity, display source, cache allowlist, and dedupe priority | Stable detector, candidate-source, and tool IDs have distinct roles |
+| One `--version` command and timeout is applied to every doctor tool | Every tool declares an exact audited command, local metadata reader, or presence-only probe |
+| Workspace expansion for Cargo, Node, and Go lives in the generic scanner | Optional pure workspace contributions live with their ecosystem registrations |
+| Declared wrappers compete with lower-level defaults only through scores | Canonical project-task facades demote same-scope tool defaults without hiding them |
+| Justfiles are indexed incidentally but have no consumer | Static Justfile parsing emits public zero-arity recipes and registers Just markers/tooling |
+
+The registry remains compile-time and data-only. Revision 4 does not introduce
+runtime plugins or grant detectors permission to execute native task-listing
+commands.
+
+Migrate without a flag day:
+
+1. Add registry IDs/descriptors and mirror current behavior while existing side
+   tables still assert equal projections.
+2. Replace cached-name restoration, dedupe specificity, root markers, cache
+   markers, error markers, target hooks, and conventional roots with registry
+   projections; remove each old table in the same commit as its replacement.
+3. Introduce `CommandLayer` and the registry-bound candidate builder, then move
+   existing detectors in small ecosystem groups.
+4. Move doctor to registered probes and land the Go, Zig, Flutter, and Just
+   probe corrections together.
+5. Add the static Justfile parser and facade-dominance fixtures.
+6. Add Gradle, Maven, and .NET only after registry extension tests prove no
+   scanner, cache, UI, or doctor side table must change.
+
+---
+
+## Appendix B — Material differences from revision 2
 
 Revision 2 correctly moved hints into M1 and added normalization, typo matching,
 synonyms, discovery-tier participation, synthetic files, picker prefill, and
@@ -2002,9 +2395,9 @@ safety contradictions.
 
 ---
 
-## Appendix B — Worked resolutions
+## Appendix C — Worked resolutions
 
-### B.1 Broad scope plus specific identity
+### C.1 Broad scope plus specific identity
 
 ```console
 dev test laravel participant sync
@@ -2015,7 +2408,7 @@ Candidates include Laravel's whole test suite and several target test files.
 identity. The target-specific candidate wins without every Laravel candidate
 entering an undifferentiated strong-match set.
 
-### B.2 Unmatched words
+### C.2 Unmatched words
 
 ```console
 dev run purple monkey lasagna
@@ -2025,7 +2418,7 @@ No meaningful hint matches. Even if Vite is the unhinted structural winner,
 `dev` does not run it. On a TTY it opens the unfiltered picker with a no-match
 header. In CI it exits 5 with candidates in JSON/stderr.
 
-### B.3 Explicit obscure script
+### C.3 Explicit obscure script
 
 ```console
 dev run refresh-search-indxe
@@ -2036,7 +2429,7 @@ to automatic resolution. The typo-tolerant identity match is unique and above
 the automatic quality threshold, so its `ExplicitHint` policy permits it to
 run. The exact package-manager command appears in the preamble.
 
-### B.4 Same action in two packages
+### C.4 Same action in two packages
 
 ```console
 dev run worker
@@ -2049,7 +2442,7 @@ the picker opens. Adding `billing` makes that package scope the unique finalist:
 dev run billing worker
 ```
 
-### B.5 Broad search discovers a loose target
+### C.5 Broad search discovers a loose target
 
 ```console
 dev run --chaos 2 legacy importer
