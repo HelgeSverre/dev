@@ -1402,8 +1402,9 @@ mod tests {
             ..named.clone()
         };
         #[cfg(windows)]
-        let unnamed_selector =
-            PathBuf::from(".").join(PathBuf::from("apps/web")).into_os_string();
+        let unnamed_selector = PathBuf::from(".")
+            .join(PathBuf::from("apps/web"))
+            .into_os_string();
         #[cfg(not(windows))]
         let unnamed_selector = OsString::from("./apps/web");
 
