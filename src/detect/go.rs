@@ -5,10 +5,10 @@ use std::path::{Path, PathBuf};
 use crate::candidate::{Candidate, Evidence, EvidenceKind, SearchDocument, SelectionPolicy};
 use crate::diagnostic::Diagnostic;
 use crate::intent::Intent;
-use crate::registry::{WorkspaceContribution, WorkspaceContributor, GO, GO_SOURCE};
+use crate::registry::{WorkspaceContribution, WorkspaceContributor, GO, GO_SOURCE, GO_TOOL};
 use crate::scan::IndexedFileType;
 
-use super::{Detection, Detector, ScanCtx};
+use super::{CandidateBuilder, Detection, Detector, ScanCtx};
 
 pub struct GoDetector;
 pub struct GoWorkspaceContributor;
@@ -273,38 +273,35 @@ fn main_candidate(
     } else {
         80
     };
-    let mut candidate = Candidate::new(
-        format!(
+    let description = format!("Go main package {}", package_display(package_directory));
+    CandidateBuilder::tool_default(GO_SOURCE, intent, module.directory.clone(), &identity)
+        .action_key(format!(
             "go:{}:{action}:{}",
             module.module_path,
             stable_path_suffix(package_directory)
-        ),
-        GO,
-        GO_SOURCE,
-        intent,
-        &identity,
-        "go",
-        vec![OsString::from(action), package_argument],
-        module.directory.clone(),
-        base_points,
-        SelectionPolicy::Automatic,
-    );
-    candidate.label = format!("Go {action} {identity}");
-    candidate.description = format!("Go main package {}", package_display(package_directory));
-    candidate.evidence.push(Evidence {
-        kind: EvidenceKind::Manifest,
-        reason: format!("{} declares package main", source.display()),
-        points: 0,
-        source: Some(source.to_path_buf()),
-    });
-    candidate.search = SearchDocument {
-        identities: vec![identity, action.to_owned()],
-        target_paths: vec![source.to_path_buf(), package_directory.to_path_buf()],
-        scopes: vec![module.module_path.clone()],
-        tags: vec!["go".to_owned(), "golang".to_owned()],
-        text: vec![candidate.description.clone()],
-    };
-    candidate
+        ))
+        .tool(GO_TOOL)
+        .args([OsString::from(action), package_argument])
+        .cwd(module.directory.clone())
+        .selection(SelectionPolicy::Automatic)
+        .base_points(base_points)
+        .label(format!("Go {action} {identity}"))
+        .description(&description)
+        .evidence(Evidence {
+            kind: EvidenceKind::Manifest,
+            reason: format!("{} declares package main", source.display()),
+            points: 0,
+            source: Some(source.to_path_buf()),
+        })
+        .search(SearchDocument {
+            identities: vec![identity, action.to_owned()],
+            target_paths: vec![source.to_path_buf(), package_directory.to_path_buf()],
+            scopes: vec![module.module_path.clone()],
+            tags: vec!["go".to_owned(), "golang".to_owned()],
+            text: vec![description],
+        })
+        .build()
+        .expect("Go main candidate registration is valid")
 }
 
 fn test_candidates(
@@ -372,55 +369,54 @@ fn test_candidate(module: &GoModule, local_package: Option<PathBuf>) -> Candidat
     let identity = local_package
         .as_deref()
         .map_or_else(|| "all".to_owned(), |path| package_identity(module, path));
-    let mut candidate = Candidate::new(
-        format!(
-            "go:{}:test:{}",
-            module.module_path,
-            local_package
-                .as_deref()
-                .map_or_else(|| "all".to_owned(), stable_path_suffix)
-        ),
-        GO,
-        GO_SOURCE,
-        Intent::Test,
-        &identity,
-        "go",
-        vec![OsString::from("test"), package],
-        module.directory.clone(),
-        95,
-        SelectionPolicy::Automatic,
-    );
-    candidate.label = if local_package.is_some() {
+    let label = if local_package.is_some() {
         format!("Go package tests {identity}")
     } else {
         format!("Go module tests {}", module.module_path)
     };
-    candidate.description = "Runs Go tests through the selected module".to_owned();
-    candidate.evidence.push(Evidence {
+    let description = "Runs Go tests through the selected module".to_owned();
+    let mut evidence = vec![Evidence {
         kind: EvidenceKind::Manifest,
         reason: "go.mod defines the selected test module".to_owned(),
         points: 0,
         source: Some(module.manifest_path.clone()),
-    });
+    }];
     if let Some(target) = &local_package {
-        candidate.evidence.push(Evidence {
+        evidence.push(Evidence {
             kind: EvidenceKind::Rule,
             reason: format!("bound Go test provider to package {}", target.display()),
             points: 20,
             source: Some(target.clone()),
         });
     }
-    candidate.search = SearchDocument {
-        identities: vec![identity, "test".to_owned()],
-        target_paths: local_package
-            .into_iter()
-            .chain(std::iter::once(module.manifest_path.clone()))
-            .collect(),
-        scopes: vec![module.module_path.clone()],
-        tags: vec!["go".to_owned(), "golang".to_owned()],
-        text: vec![candidate.description.clone()],
-    };
-    candidate
+    CandidateBuilder::tool_default(GO_SOURCE, Intent::Test, module.directory.clone(), &identity)
+        .action_key(format!(
+            "go:{}:test:{}",
+            module.module_path,
+            local_package
+                .as_deref()
+                .map_or_else(|| "all".to_owned(), stable_path_suffix)
+        ))
+        .tool(GO_TOOL)
+        .args([OsString::from("test"), package])
+        .cwd(module.directory.clone())
+        .selection(SelectionPolicy::Automatic)
+        .base_points(95)
+        .label(label)
+        .description(&description)
+        .evidence_all(evidence)
+        .search(SearchDocument {
+            identities: vec![identity, "test".to_owned()],
+            target_paths: local_package
+                .into_iter()
+                .chain(std::iter::once(module.manifest_path.clone()))
+                .collect(),
+            scopes: vec![module.module_path.clone()],
+            tags: vec!["go".to_owned(), "golang".to_owned()],
+            text: vec![description],
+        })
+        .build()
+        .expect("Go test candidate registration is valid")
 }
 
 fn parse_module_path(contents: &str) -> Option<String> {

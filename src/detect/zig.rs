@@ -2,15 +2,15 @@ use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
 use crate::candidate::{
-    Candidate, CandidateOrigin, CommandLayer, Evidence, EvidenceKind, Lifecycle, PassthroughStyle,
+    Candidate, CandidateOrigin, Evidence, EvidenceKind, Lifecycle, PassthroughStyle,
     SearchDocument, SelectionPolicy,
 };
 use crate::intent::Intent;
-use crate::registry::{ZIG, ZIG_SOURCE};
+use crate::registry::{ZIG_SOURCE, ZIG_TOOL};
 use crate::scan::{IndexEntry, IndexedFileType};
 
 use super::target::{explicitly_anchored, target_scope};
-use super::{Detection, Detector, ScanCtx, TargetRunner};
+use super::{CandidateBuilder, Detection, Detector, ScanCtx, TargetRunner};
 
 pub struct ZigDetector;
 
@@ -83,48 +83,45 @@ fn build_candidate(intent: Intent, build_file: &Path) -> Candidate {
             PassthroughStyle::Append,
         ),
     };
-    let mut candidate = Candidate::new(
-        format!("zig:{scope}:build:{action}"),
-        ZIG,
-        ZIG_SOURCE,
-        intent,
-        action,
-        "zig",
-        args,
-        directory,
-        if intent == Intent::Build { 95 } else { 85 },
-        SelectionPolicy::Automatic,
-    );
-    candidate.passthrough = passthrough;
-    candidate.lifecycle = if intent == Intent::Run {
-        Lifecycle::LongRunning
-    } else {
-        Lifecycle::Finite
-    };
-    candidate.label = format!("Zig build {action}");
-    candidate.description = format!("Zig build-system {action} step");
-    candidate.evidence.extend([
-        Evidence {
-            kind: EvidenceKind::Manifest,
-            reason: "project contains build.zig".to_owned(),
-            points: 0,
-            source: Some(build_file.to_path_buf()),
-        },
-        Evidence {
-            kind: EvidenceKind::Rule,
-            reason: "build.zig is executable code; custom steps were not evaluated".to_owned(),
-            points: 0,
-            source: Some(build_file.to_path_buf()),
-        },
-    ]);
-    candidate.search = SearchDocument {
-        identities: vec![action.to_owned()],
-        target_paths: vec![PathBuf::from("build.zig")],
-        scopes: vec![scope],
-        tags: vec!["zig".to_owned()],
-        text: vec![candidate.description.clone()],
-    };
-    candidate
+    let description = format!("Zig build-system {action} step");
+    CandidateBuilder::tool_default(ZIG_SOURCE, intent, directory.clone(), action)
+        .action_key(format!("zig:{scope}:build:{action}"))
+        .tool(ZIG_TOOL)
+        .args(args)
+        .cwd(directory)
+        .selection(SelectionPolicy::Automatic)
+        .base_points(if intent == Intent::Build { 95 } else { 85 })
+        .passthrough(passthrough)
+        .lifecycle(if intent == Intent::Run {
+            Lifecycle::LongRunning
+        } else {
+            Lifecycle::Finite
+        })
+        .label(format!("Zig build {action}"))
+        .description(&description)
+        .evidence_all([
+            Evidence {
+                kind: EvidenceKind::Manifest,
+                reason: "project contains build.zig".to_owned(),
+                points: 0,
+                source: Some(build_file.to_path_buf()),
+            },
+            Evidence {
+                kind: EvidenceKind::Rule,
+                reason: "build.zig is executable code; custom steps were not evaluated".to_owned(),
+                points: 0,
+                source: Some(build_file.to_path_buf()),
+            },
+        ])
+        .search(SearchDocument {
+            identities: vec![action.to_owned()],
+            target_paths: vec![PathBuf::from("build.zig")],
+            scopes: vec![scope],
+            tags: vec!["zig".to_owned()],
+            text: vec![description],
+        })
+        .build()
+        .expect("Zig build candidate registration is valid")
 }
 
 fn standalone_candidate(absolute: &Path, relative: &Path, explicit: bool) -> Candidate {
@@ -136,48 +133,44 @@ fn standalone_candidate(absolute: &Path, relative: &Path, explicit: bool) -> Can
         || "main".to_owned(),
         |name| name.to_string_lossy().into_owned(),
     );
-    let mut candidate = Candidate::new(
-        format!(
+    let description = "Standalone Zig source target".to_owned();
+    CandidateBuilder::direct_target(ZIG_SOURCE, Intent::Run, directory.clone(), &stem)
+        .action_key(format!(
             "zig:file:{}",
             relative.to_string_lossy().replace(['/', '\\'], ":")
-        ),
-        ZIG,
-        ZIG_SOURCE,
-        Intent::Run,
-        &stem,
-        "zig",
-        vec![OsString::from("run"), filename.clone()],
-        directory,
-        if explicit { 95 } else { 25 },
-        if explicit {
+        ))
+        .tool(ZIG_TOOL)
+        .args([OsString::from("run"), filename.clone()])
+        .cwd(directory)
+        .selection(if explicit {
             SelectionPolicy::Automatic
         } else {
             SelectionPolicy::ExplicitHint
-        },
-    );
-    candidate.passthrough = PassthroughStyle::DoubleDash;
-    candidate.origin = if explicit {
-        CandidateOrigin::Declared
-    } else {
-        CandidateOrigin::Synthetic
-    };
-    candidate.layer = CommandLayer::DirectTarget;
-    candidate.label = format!("Zig file {}", relative.display());
-    candidate.description = "Standalone Zig source target".to_owned();
-    candidate.evidence.push(Evidence {
-        kind: EvidenceKind::Rule,
-        reason: "selected zig run for a standalone .zig target".to_owned(),
-        points: 0,
-        source: Some(relative.to_path_buf()),
-    });
-    candidate.search = SearchDocument {
-        identities: vec![stem, filename.to_string_lossy().into_owned()],
-        target_paths: vec![PathBuf::from(filename), relative.to_path_buf()],
-        scopes: vec![target_scope(relative)],
-        tags: vec!["zig".to_owned()],
-        text: vec![candidate.description.clone()],
-    };
-    candidate
+        })
+        .base_points(if explicit { 95 } else { 25 })
+        .passthrough(PassthroughStyle::DoubleDash)
+        .origin(if explicit {
+            CandidateOrigin::Declared
+        } else {
+            CandidateOrigin::Synthetic
+        })
+        .label(format!("Zig file {}", relative.display()))
+        .description(&description)
+        .evidence(Evidence {
+            kind: EvidenceKind::Rule,
+            reason: "selected zig run for a standalone .zig target".to_owned(),
+            points: 0,
+            source: Some(relative.to_path_buf()),
+        })
+        .search(SearchDocument {
+            identities: vec![stem, filename.to_string_lossy().into_owned()],
+            target_paths: vec![PathBuf::from(filename), relative.to_path_buf()],
+            scopes: vec![target_scope(relative)],
+            tags: vec!["zig".to_owned()],
+            text: vec![description],
+        })
+        .build()
+        .expect("Zig file candidate registration is valid")
 }
 
 fn is_zig_file(entry: &IndexEntry) -> bool {

@@ -3,14 +3,14 @@ use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
 use crate::candidate::{
-    Candidate, CommandLayer, Evidence, EvidenceKind, Lifecycle, SearchDocument, SelectionPolicy,
+    Candidate, Evidence, EvidenceKind, Lifecycle, SearchDocument, SelectionPolicy,
 };
 use crate::diagnostic::{Diagnostic, Severity};
 use crate::intent::Intent;
-use crate::registry::{SWIFT, SWIFT_SOURCE};
+use crate::registry::{SWIFT, SWIFT_SOURCE, SWIFT_TOOL};
 use crate::scan::IndexedFileType;
 
-use super::{Detection, Detector, ScanCtx};
+use super::{CandidateBuilder, Detection, Detector, ScanCtx};
 
 pub struct SwiftDetector;
 
@@ -159,24 +159,24 @@ fn run_candidates(project: &SwiftProject, targets: &BTreeMap<String, PathBuf>) -
             if multiple {
                 args.push(OsString::from(target));
             }
-            let mut candidate = Candidate::new(
-                format!("swift:{}:run:{target}", project.scope),
-                SWIFT,
+            let description = "Conventional SwiftPM executable target".to_owned();
+            CandidateBuilder::direct_target(
                 SWIFT_SOURCE,
                 Intent::Run,
-                target,
-                "swift",
-                args,
                 project.directory.clone(),
-                if multiple { 85 } else { 95 },
-                SelectionPolicy::Automatic,
-            );
-            candidate.lifecycle = Lifecycle::Finite;
-            candidate.layer = CommandLayer::DirectTarget;
-            candidate.label = format!("Swift executable {target}");
-            candidate.description = "Conventional SwiftPM executable target".to_owned();
-            add_project_evidence(&mut candidate, project, "run");
-            candidate.evidence.push(Evidence {
+                target,
+            )
+            .action_key(format!("swift:{}:run:{target}", project.scope))
+            .tool(SWIFT_TOOL)
+            .args(args)
+            .cwd(project.directory.clone())
+            .selection(SelectionPolicy::Automatic)
+            .base_points(if multiple { 85 } else { 95 })
+            .lifecycle(Lifecycle::Finite)
+            .label(format!("Swift executable {target}"))
+            .description(&description)
+            .evidence_all(project_evidence(project))
+            .evidence(Evidence {
                 kind: EvidenceKind::Convention,
                 reason: format!(
                     "{} is a conventional executable entrypoint",
@@ -184,10 +184,16 @@ fn run_candidates(project: &SwiftProject, targets: &BTreeMap<String, PathBuf>) -
                 ),
                 points: 0,
                 source: Some(source.clone()),
-            });
-            candidate.search.identities.push(target.clone());
-            candidate.search.target_paths.push(source.clone());
-            candidate
+            })
+            .search(SearchDocument {
+                identities: vec!["run".to_owned(), target.clone()],
+                target_paths: vec![project.manifest_path.clone(), source.clone()],
+                scopes: vec![project.scope.clone()],
+                tags: vec!["swift".to_owned(), "spm".to_owned()],
+                text: vec![description],
+            })
+            .build()
+            .expect("Swift run candidate registration is valid")
         })
         .collect()
 }
@@ -199,34 +205,39 @@ fn package_action(
     args: Vec<OsString>,
     base_points: i32,
 ) -> Candidate {
-    let mut candidate = Candidate::new(
-        format!("swift:{}:{action}", project.scope),
-        SWIFT,
-        SWIFT_SOURCE,
-        intent,
-        action,
-        "swift",
-        args,
-        project.directory.clone(),
-        base_points,
-        SelectionPolicy::Automatic,
-    );
-    candidate.label = format!("Swift package {action}");
-    candidate.description = format!("SwiftPM {action} command");
-    add_project_evidence(&mut candidate, project, action);
+    let description = format!("SwiftPM {action} command");
+    let mut evidence = project_evidence(project);
     if intent == Intent::Test && project.directory.join("Tests").is_dir() {
-        candidate.evidence.push(Evidence {
+        evidence.push(Evidence {
             kind: EvidenceKind::Convention,
             reason: "package contains a Tests directory".to_owned(),
             points: 10,
             source: Some(project.relative_directory.join("Tests")),
         });
     }
-    candidate
+    CandidateBuilder::tool_default(SWIFT_SOURCE, intent, project.directory.clone(), action)
+        .action_key(format!("swift:{}:{action}", project.scope))
+        .tool(SWIFT_TOOL)
+        .args(args)
+        .cwd(project.directory.clone())
+        .selection(SelectionPolicy::Automatic)
+        .base_points(base_points)
+        .label(format!("Swift package {action}"))
+        .description(&description)
+        .evidence_all(evidence)
+        .search(SearchDocument {
+            identities: vec![action.to_owned()],
+            target_paths: vec![project.manifest_path.clone()],
+            scopes: vec![project.scope.clone()],
+            tags: vec!["swift".to_owned(), "spm".to_owned()],
+            text: vec![description],
+        })
+        .build()
+        .expect("Swift package candidate registration is valid")
 }
 
-fn add_project_evidence(candidate: &mut Candidate, project: &SwiftProject, action: &str) {
-    candidate.evidence.extend([
+fn project_evidence(project: &SwiftProject) -> Vec<Evidence> {
+    vec![
         Evidence {
             kind: EvidenceKind::Manifest,
             reason: "project contains Package.swift".to_owned(),
@@ -239,14 +250,7 @@ fn add_project_evidence(candidate: &mut Candidate, project: &SwiftProject, actio
             points: 0,
             source: Some(project.manifest_path.clone()),
         },
-    ]);
-    candidate.search = SearchDocument {
-        identities: vec![action.to_owned()],
-        target_paths: vec![project.manifest_path.clone()],
-        scopes: vec![project.scope.clone()],
-        tags: vec!["swift".to_owned(), "spm".to_owned()],
-        text: vec![candidate.description.clone()],
-    };
+    ]
 }
 
 fn xcode_diagnostics(context: &ScanCtx<'_>) -> Vec<Diagnostic> {

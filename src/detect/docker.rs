@@ -9,10 +9,10 @@ use crate::candidate::{
 };
 use crate::diagnostic::Diagnostic;
 use crate::intent::Intent;
-use crate::registry::{DOCKER, DOCKER_SOURCE};
+use crate::registry::{DOCKER, DOCKER_SOURCE, DOCKER_TOOL};
 use crate::scan::IndexedFileType;
 
-use super::{Detection, Detector, ScanCtx};
+use super::{CandidateBuilder, Detection, Detector, ScanCtx};
 
 const COMPOSE_FILES: &[&str] = &[
     "compose.yaml",
@@ -154,60 +154,58 @@ fn compose_up_candidate(
         },
     );
     let action = service.map_or("compose", String::as_str);
-    let mut candidate = Candidate::new(
-        action_key,
-        DOCKER,
-        DOCKER_SOURCE,
-        Intent::Run,
-        action,
-        "docker",
-        args,
-        directory,
-        if service.is_some() { 45 } else { 40 },
-        SelectionPolicy::ExplicitHint,
-    );
-    candidate.lifecycle = Lifecycle::MultiProcess;
-    candidate.label = service.map_or_else(
+    let label = service.map_or_else(
         || "Compose up".to_owned(),
         |service| format!("Compose service {service}"),
     );
-    candidate.description = service.map_or_else(
+    let description = service.map_or_else(
         || "Starts the services declared by the Compose application".to_owned(),
         |service| format!("Starts declared Compose service `{service}`"),
     );
-    candidate.evidence.push(Evidence {
-        kind: EvidenceKind::Manifest,
-        reason: service.map_or_else(
-            || {
-                format!(
-                    "{} is a standard Compose manifest",
-                    relative_manifest.display()
-                )
-            },
-            |service| {
-                format!(
-                    "{} declares service `{service}`",
-                    relative_manifest.display()
-                )
-            },
-        ),
-        points: 0,
-        source: Some(relative_manifest.to_path_buf()),
-    });
-    candidate.search = SearchDocument {
-        identities: service.map_or_else(
-            || vec!["compose".to_owned(), "up".to_owned()],
-            |service| vec![service.clone()],
-        ),
-        target_paths: service.map_or_else(
-            || vec![relative_manifest.to_path_buf()],
-            |service| vec![PathBuf::from(service)],
-        ),
-        scopes: vec![scope],
-        tags: vec!["docker".to_owned(), "compose".to_owned()],
-        text: vec![candidate.description.clone()],
-    };
-    candidate
+    CandidateBuilder::tool_default(DOCKER_SOURCE, Intent::Run, directory.clone(), action)
+        .action_key(action_key)
+        .tool(DOCKER_TOOL)
+        .args(args)
+        .cwd(directory)
+        .selection(SelectionPolicy::ExplicitHint)
+        .base_points(if service.is_some() { 45 } else { 40 })
+        .lifecycle(Lifecycle::MultiProcess)
+        .label(label)
+        .description(&description)
+        .evidence(Evidence {
+            kind: EvidenceKind::Manifest,
+            reason: service.map_or_else(
+                || {
+                    format!(
+                        "{} is a standard Compose manifest",
+                        relative_manifest.display()
+                    )
+                },
+                |service| {
+                    format!(
+                        "{} declares service `{service}`",
+                        relative_manifest.display()
+                    )
+                },
+            ),
+            points: 0,
+            source: Some(relative_manifest.to_path_buf()),
+        })
+        .search(SearchDocument {
+            identities: service.map_or_else(
+                || vec!["compose".to_owned(), "up".to_owned()],
+                |service| vec![service.clone()],
+            ),
+            target_paths: service.map_or_else(
+                || vec![relative_manifest.to_path_buf()],
+                |service| vec![PathBuf::from(service)],
+            ),
+            scopes: vec![scope],
+            tags: vec!["docker".to_owned(), "compose".to_owned()],
+            text: vec![description],
+        })
+        .build()
+        .expect("Docker Compose candidate registration is valid")
 }
 
 fn dockerfile_candidates(context: &ScanCtx<'_>) -> Vec<Candidate> {
@@ -228,35 +226,35 @@ fn dockerfile_candidates(context: &ScanCtx<'_>) -> Vec<Candidate> {
                 || "docker-project".to_owned(),
                 |name| name.to_string_lossy().into_owned(),
             );
-            let mut candidate = Candidate::new(
-                format!("docker:{}:build", normalized_parent(&entry.relative_path)),
-                DOCKER,
-                DOCKER_SOURCE,
-                Intent::Build,
-                "build",
-                "docker",
-                vec![OsString::from("build"), OsString::from(".")],
-                directory,
-                40,
-                SelectionPolicy::ExplicitHint,
-            );
-            candidate.label = "Dockerfile build".to_owned();
-            candidate.description =
+            let description =
                 "Builds the Dockerfile with the current directory as context".to_owned();
-            candidate.evidence.push(Evidence {
-                kind: EvidenceKind::Manifest,
-                reason: "project contains Dockerfile".to_owned(),
-                points: 0,
-                source: Some(entry.relative_path.clone()),
-            });
-            candidate.search = SearchDocument {
-                identities: vec!["dockerfile".to_owned(), "build".to_owned()],
-                target_paths: vec![entry.relative_path.clone()],
-                scopes: vec![scope],
-                tags: vec!["docker".to_owned(), "container".to_owned()],
-                text: vec![candidate.description.clone()],
-            };
-            candidate
+            CandidateBuilder::tool_default(DOCKER_SOURCE, Intent::Build, directory.clone(), "build")
+                .action_key(format!(
+                    "docker:{}:build",
+                    normalized_parent(&entry.relative_path)
+                ))
+                .tool(DOCKER_TOOL)
+                .args([OsString::from("build"), OsString::from(".")])
+                .cwd(directory)
+                .selection(SelectionPolicy::ExplicitHint)
+                .base_points(40)
+                .label("Dockerfile build")
+                .description(&description)
+                .evidence(Evidence {
+                    kind: EvidenceKind::Manifest,
+                    reason: "project contains Dockerfile".to_owned(),
+                    points: 0,
+                    source: Some(entry.relative_path.clone()),
+                })
+                .search(SearchDocument {
+                    identities: vec!["dockerfile".to_owned(), "build".to_owned()],
+                    target_paths: vec![entry.relative_path.clone()],
+                    scopes: vec![scope],
+                    tags: vec!["docker".to_owned(), "container".to_owned()],
+                    text: vec![description],
+                })
+                .build()
+                .expect("Dockerfile candidate registration is valid")
         })
         .collect()
 }

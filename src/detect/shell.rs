@@ -2,16 +2,15 @@ use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
 use crate::candidate::{
-    Candidate, CandidateOrigin, CommandLayer, Evidence, EvidenceKind, Lifecycle, SearchDocument,
-    SelectionPolicy,
+    Candidate, CandidateOrigin, Evidence, EvidenceKind, Lifecycle, SearchDocument, SelectionPolicy,
 };
 use crate::intent::Intent;
-use crate::registry::{SHELL, SHELL_SOURCE};
+use crate::registry::SHELL_SOURCE;
 use crate::scan::{IndexEntry, IndexedFileType};
 
 use super::script::{read_shebang, Shebang};
 use super::target::{explicitly_anchored, target_scope};
-use super::{Detection, Detector, ScanCtx, TargetRunner};
+use super::{CandidateBuilder, Detection, Detector, ScanCtx, TargetRunner};
 
 pub struct ShellDetector;
 
@@ -182,43 +181,40 @@ fn script_candidate(
     if !executable {
         args.push(filename.clone());
     }
-    let mut candidate = Candidate::new(
-        format!(
+    let description = format!("Script target using {runner_reason}");
+    let candidate = CandidateBuilder::direct_target(SHELL_SOURCE, intent, directory.clone(), &stem)
+        .action_key(format!(
             "shell:{}:{}",
             intent,
             relative_to_scan.to_string_lossy().replace(['/', '\\'], ":")
-        ),
-        SHELL,
-        SHELL_SOURCE,
-        intent,
-        &stem,
-        program,
-        args,
-        directory,
-        base_points,
-        selection,
-    );
-    candidate.origin = origin;
-    candidate.layer = CommandLayer::DirectTarget;
-    candidate.lifecycle = Lifecycle::Finite;
-    candidate.label = format!("Script {}", relative_to_scan.display());
-    candidate.description = format!("Script target using {runner_reason}");
-    candidate.evidence.push(Evidence {
-        kind: if origin == CandidateOrigin::Conventional {
-            EvidenceKind::Convention
-        } else {
-            EvidenceKind::Rule
-        },
-        reason: format!("selected {runner_reason} for script target"),
-        points: 0,
-        source: Some(relative_to_scan.to_path_buf()),
-    });
-    candidate.search = SearchDocument {
-        identities: vec![stem, filename.to_string_lossy().into_owned()],
-        target_paths: vec![PathBuf::from(&filename), relative_to_scan.to_path_buf()],
-        scopes: vec![target_scope(relative_to_scan)],
-        tags: vec!["shell".to_owned(), "script".to_owned()],
-        text: vec![candidate.description.clone()],
-    };
+        ))
+        .program_path(program)
+        .args(args)
+        .cwd(directory)
+        .selection(selection)
+        .base_points(base_points)
+        .origin(origin)
+        .lifecycle(Lifecycle::Finite)
+        .label(format!("Script {}", relative_to_scan.display()))
+        .description(&description)
+        .evidence(Evidence {
+            kind: if origin == CandidateOrigin::Conventional {
+                EvidenceKind::Convention
+            } else {
+                EvidenceKind::Rule
+            },
+            reason: format!("selected {runner_reason} for script target"),
+            points: 0,
+            source: Some(relative_to_scan.to_path_buf()),
+        })
+        .search(SearchDocument {
+            identities: vec![stem, filename.to_string_lossy().into_owned()],
+            target_paths: vec![PathBuf::from(&filename), relative_to_scan.to_path_buf()],
+            scopes: vec![target_scope(relative_to_scan)],
+            tags: vec!["shell".to_owned(), "script".to_owned()],
+            text: vec![description],
+        })
+        .build()
+        .expect("shell candidate registration is valid");
     Some(candidate)
 }

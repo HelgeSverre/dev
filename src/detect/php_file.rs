@@ -3,15 +3,14 @@ use std::io::Read as _;
 use std::path::{Path, PathBuf};
 
 use crate::candidate::{
-    Candidate, CandidateOrigin, CommandLayer, Evidence, EvidenceKind, SearchDocument,
-    SelectionPolicy,
+    Candidate, CandidateOrigin, Evidence, EvidenceKind, SearchDocument, SelectionPolicy,
 };
 use crate::intent::Intent;
-use crate::registry::{PHP_FILE, PHP_FILE_SOURCE};
+use crate::registry::PHP_FILE_SOURCE;
 use crate::scan::{IndexEntry, IndexedFileType};
 
 use super::target::{explicitly_anchored, target_scope};
-use super::{Detection, Detector, ScanCtx, TargetRunner};
+use super::{CandidateBuilder, Detection, Detector, ScanCtx, TargetRunner};
 
 pub struct PhpFileDetector;
 
@@ -65,47 +64,43 @@ fn file_candidate(
             "resolved PHP interpreter",
         )
     };
-    let mut candidate = Candidate::new(
-        format!(
+    let description = format!("Standalone PHP target using {runner_reason}");
+    CandidateBuilder::direct_target(PHP_FILE_SOURCE, Intent::Run, directory.clone(), &stem)
+        .action_key(format!(
             "php-file:{}",
             relative_to_scan.to_string_lossy().replace(['/', '\\'], ":")
-        ),
-        PHP_FILE,
-        PHP_FILE_SOURCE,
-        Intent::Run,
-        &stem,
-        program,
-        args,
-        directory,
-        if explicitly_anchored { 90 } else { 25 },
-        if explicitly_anchored {
+        ))
+        .program_path(program)
+        .args(args)
+        .cwd(directory)
+        .selection(if explicitly_anchored {
             SelectionPolicy::Automatic
         } else {
             SelectionPolicy::ExplicitHint
-        },
-    );
-    candidate.origin = if explicitly_anchored {
-        CandidateOrigin::Declared
-    } else {
-        CandidateOrigin::Synthetic
-    };
-    candidate.layer = CommandLayer::DirectTarget;
-    candidate.label = format!("PHP file {}", relative_to_scan.display());
-    candidate.description = format!("Standalone PHP target using {runner_reason}");
-    candidate.evidence.push(Evidence {
-        kind: EvidenceKind::Rule,
-        reason: format!("selected {runner_reason} for PHP target"),
-        points: 0,
-        source: Some(relative_to_scan.to_path_buf()),
-    });
-    candidate.search = SearchDocument {
-        identities: vec![stem, filename.to_string_lossy().into_owned()],
-        target_paths: vec![PathBuf::from(&filename), relative_to_scan.to_path_buf()],
-        scopes: vec![target_scope(relative_to_scan)],
-        tags: vec!["php".to_owned()],
-        text: vec![candidate.description.clone()],
-    };
-    candidate
+        })
+        .base_points(if explicitly_anchored { 90 } else { 25 })
+        .origin(if explicitly_anchored {
+            CandidateOrigin::Declared
+        } else {
+            CandidateOrigin::Synthetic
+        })
+        .label(format!("PHP file {}", relative_to_scan.display()))
+        .description(&description)
+        .evidence(Evidence {
+            kind: EvidenceKind::Rule,
+            reason: format!("selected {runner_reason} for PHP target"),
+            points: 0,
+            source: Some(relative_to_scan.to_path_buf()),
+        })
+        .search(SearchDocument {
+            identities: vec![stem, filename.to_string_lossy().into_owned()],
+            target_paths: vec![PathBuf::from(&filename), relative_to_scan.to_path_buf()],
+            scopes: vec![target_scope(relative_to_scan)],
+            tags: vec!["php".to_owned()],
+            text: vec![description],
+        })
+        .build()
+        .expect("PHP file candidate registration is valid")
 }
 
 fn is_php_file(entry: &IndexEntry) -> bool {

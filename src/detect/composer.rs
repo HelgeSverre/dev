@@ -5,15 +5,15 @@ use std::path::PathBuf;
 use serde::Deserialize;
 
 use crate::candidate::{
-    Candidate, CandidateOrigin, CommandLayer, Evidence, EvidenceKind, Lifecycle, PassthroughStyle,
+    Candidate, CandidateOrigin, Evidence, EvidenceKind, Lifecycle, PassthroughStyle,
     SearchDocument, SelectionPolicy,
 };
 use crate::diagnostic::Diagnostic;
 use crate::intent::Intent;
-use crate::registry::{COMPOSER, COMPOSER_SOURCE};
+use crate::registry::{COMPOSER, COMPOSER_SOURCE, COMPOSER_TOOL};
 use crate::scan::IndexedFileType;
 
-use super::{Detection, Detector, ScanCtx};
+use super::{CandidateBuilder, Detection, Detector, ScanCtx};
 
 pub struct ComposerDetector;
 
@@ -164,21 +164,7 @@ fn script_candidate(
     selection: SelectionPolicy,
 ) -> Candidate {
     let scope = project_scope(project);
-    let mut candidate = Candidate::new(
-        format!("composer:{scope}:script:{name}"),
-        COMPOSER,
-        COMPOSER_SOURCE,
-        context.invocation.intent,
-        name,
-        "composer",
-        vec![OsString::from("run-script"), OsString::from(name)],
-        project.directory.clone(),
-        base_points,
-        selection,
-    );
-    candidate.passthrough = PassthroughStyle::DoubleDash;
-    candidate.layer = CommandLayer::EcosystemTask;
-    candidate.lifecycle =
+    let lifecycle =
         if context.invocation.intent == Intent::Run && name == "dev" && is_multi_process(script) {
             Lifecycle::MultiProcess
         } else if context.invocation.intent == Intent::Run
@@ -188,40 +174,59 @@ fn script_candidate(
         } else {
             Lifecycle::Finite
         };
-    candidate.label = format!("Composer script `{name}`");
-    candidate.description = "Declared root Composer script".to_owned();
-    candidate.evidence.push(Evidence {
+    let description = "Declared root Composer script".to_owned();
+    let mut evidence = vec![Evidence {
         kind: EvidenceKind::Manifest,
         reason: format!("composer.json declares script `{name}`"),
         points: 0,
         source: Some(project.manifest_path.clone()),
-    });
-    if candidate.lifecycle == Lifecycle::MultiProcess {
-        candidate.evidence.push(Evidence {
+    }];
+    if lifecycle == Lifecycle::MultiProcess {
+        evidence.push(Evidence {
             kind: EvidenceKind::Rule,
             reason: "development script conventionally starts multiple processes".to_owned(),
             points: 0,
             source: Some(project.manifest_path.clone()),
         });
     }
-    candidate.search = SearchDocument {
-        identities: vec![name.to_owned()],
-        target_paths: vec![project.manifest_path.clone()],
-        scopes: vec![scope],
-        tags: vec!["php".to_owned(), "composer".to_owned()],
-        text: vec![candidate.description.clone()],
-    };
+    let mut scopes = vec![scope];
+    let mut tags = vec!["php".to_owned(), "composer".to_owned()];
     if has_laravel_evidence(&project.manifest) {
-        candidate.search.scopes.push("laravel".to_owned());
-        candidate.search.tags.push("laravel".to_owned());
-        candidate.evidence.push(Evidence {
+        scopes.push("laravel".to_owned());
+        tags.push("laravel".to_owned());
+        evidence.push(Evidence {
             kind: EvidenceKind::Manifest,
             reason: "composer.json declares Laravel framework support".to_owned(),
             points: 0,
             source: Some(project.manifest_path.clone()),
         });
     }
-    candidate
+    CandidateBuilder::ecosystem_task(
+        COMPOSER_SOURCE,
+        context.invocation.intent,
+        project.directory.clone(),
+        name,
+    )
+    .action_key(format!("composer:{}:script:{name}", project_scope(project)))
+    .tool(COMPOSER_TOOL)
+    .args([OsString::from("run-script"), OsString::from(name)])
+    .cwd(project.directory.clone())
+    .selection(selection)
+    .base_points(base_points)
+    .passthrough(PassthroughStyle::DoubleDash)
+    .lifecycle(lifecycle)
+    .label(format!("Composer script `{name}`"))
+    .description(&description)
+    .evidence_all(evidence)
+    .search(SearchDocument {
+        identities: vec![name.to_owned()],
+        target_paths: vec![project.manifest_path.clone()],
+        scopes,
+        tags,
+        text: vec![description],
+    })
+    .build()
+    .expect("Composer script candidate registration is valid")
 }
 
 fn vendor_test_candidates(context: &ScanCtx<'_>, project: &ComposerProject) -> Vec<Candidate> {
@@ -259,31 +264,47 @@ fn vendor_test_candidates(context: &ScanCtx<'_>, project: &ComposerProject) -> V
                         || runner.to_owned(),
                         |name| name.to_string_lossy().into_owned(),
                     );
-                let mut candidate = Candidate::new(
-                    format!("composer:{scope}:vendor-test:{runner}{action_suffix}"),
-                    COMPOSER,
-                    COMPOSER_SOURCE,
-                    Intent::Test,
-                    action_name,
-                    PathBuf::from(".").join(&relative).into_os_string(),
-                    bound_target
-                        .iter()
-                        .map(|target| target.as_os_str().to_owned())
-                        .collect(),
-                    project.directory.clone(),
-                    [85, 80][index],
-                    SelectionPolicy::Automatic,
-                );
-                candidate.origin = CandidateOrigin::Conventional;
-                candidate.label = format!("Project-local {runner}");
-                candidate.description = format!("Explicit vendor/bin/{runner} test runner");
-                candidate.evidence.push(Evidence {
+                let description = format!("Explicit vendor/bin/{runner} test runner");
+                let mut evidence = vec![Evidence {
                     kind: EvidenceKind::Convention,
                     reason: format!("found project-local vendor/bin/{runner}"),
                     points: 0,
                     source: Some(relative.clone()),
-                });
-                candidate.search = SearchDocument {
+                }];
+                if let Some(target) = &bound_target {
+                    evidence.push(Evidence {
+                        kind: EvidenceKind::Rule,
+                        reason: format!(
+                            "bound project-local {runner} provider to {}",
+                            target.display()
+                        ),
+                        points: 20,
+                        source: Some(target.clone()),
+                    });
+                }
+                CandidateBuilder::tool_default(
+                    COMPOSER_SOURCE,
+                    Intent::Test,
+                    project.directory.clone(),
+                    action_name,
+                )
+                .action_key(format!(
+                    "composer:{scope}:vendor-test:{runner}{action_suffix}"
+                ))
+                .program_path(PathBuf::from(".").join(&relative).into_os_string())
+                .args(
+                    bound_target
+                        .iter()
+                        .map(|target| target.as_os_str().to_owned()),
+                )
+                .cwd(project.directory.clone())
+                .selection(SelectionPolicy::Automatic)
+                .base_points([85, 80][index])
+                .origin(CandidateOrigin::Conventional)
+                .label(format!("Project-local {runner}"))
+                .description(&description)
+                .evidence_all(evidence)
+                .search(SearchDocument {
                     identities: bound_target
                         .as_deref()
                         .and_then(std::path::Path::file_stem)
@@ -298,20 +319,10 @@ fn vendor_test_candidates(context: &ScanCtx<'_>, project: &ComposerProject) -> V
                         .collect(),
                     scopes: vec![scope],
                     tags: vec!["php".to_owned(), "composer".to_owned()],
-                    text: vec![candidate.description.clone()],
-                };
-                if let Some(target) = &bound_target {
-                    candidate.evidence.push(Evidence {
-                        kind: EvidenceKind::Rule,
-                        reason: format!(
-                            "bound project-local {runner} provider to {}",
-                            target.display()
-                        ),
-                        points: 20,
-                        source: Some(target.clone()),
-                    });
-                }
-                candidate
+                    text: vec![description],
+                })
+                .build()
+                .expect("Composer vendor test candidate registration is valid")
             })
         })
         .collect()

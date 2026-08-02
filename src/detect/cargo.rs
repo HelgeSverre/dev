@@ -4,15 +4,16 @@ use std::path::{Path, PathBuf};
 use serde::Deserialize;
 
 use crate::candidate::{
-    Candidate, CandidateOrigin, CommandLayer, Evidence, EvidenceKind, SearchDocument,
-    SelectionPolicy,
+    Candidate, CandidateOrigin, Evidence, EvidenceKind, SearchDocument, SelectionPolicy,
 };
 use crate::diagnostic::Diagnostic;
 use crate::intent::Intent;
-use crate::registry::{WorkspaceContribution, WorkspaceContributor, CARGO, CARGO_SOURCE};
+use crate::registry::{
+    WorkspaceContribution, WorkspaceContributor, CARGO, CARGO_SOURCE, CARGO_TOOL,
+};
 use crate::scan::IndexedFileType;
 
-use super::{Detection, Detector, ScanCtx};
+use super::{CandidateBuilder, Detection, Detector, ScanCtx};
 
 pub struct CargoDetector;
 pub struct CargoWorkspaceContributor;
@@ -391,6 +392,7 @@ fn run_candidates(
         .map(|target| {
             let in_workspace = workspace_root.is_some_and(|root| root != package_directory);
             let cwd = workspace_root.unwrap_or(package_directory).to_path_buf();
+            let scope_root = cwd.clone();
             let mut args = vec![OsString::from("run")];
             if in_workspace {
                 args.extend([OsString::from("-p"), OsString::from(&package.name)]);
@@ -412,32 +414,13 @@ fn run_candidates(
                 (points, SelectionPolicy::Automatic)
             };
             let kind = if target.example { "example" } else { "bin" };
-            let mut candidate = Candidate::new(
-                format!("cargo:{}:{kind}:{}", package.name, target.name),
-                CARGO,
-                CARGO_SOURCE,
-                Intent::Run,
-                &target.name,
-                "cargo",
-                args,
-                cwd,
-                base_points,
-                selection,
-            );
-            candidate.origin = if target.example {
-                CandidateOrigin::Conventional
-            } else {
-                CandidateOrigin::Declared
-            };
-            candidate.layer = CommandLayer::DirectTarget;
-            candidate.passthrough = crate::candidate::PassthroughStyle::DoubleDash;
-            candidate.label = if target.example {
+            let label = if target.example {
                 format!("Cargo example `{}`", target.name)
             } else {
                 format!("Cargo binary `{}`", target.name)
             };
-            candidate.description = format!("Rust package `{}` {kind}", package.name);
-            candidate.evidence.push(Evidence {
+            let description = format!("Rust package `{}` {kind}", package.name);
+            let mut evidence = vec![Evidence {
                 kind: EvidenceKind::Manifest,
                 reason: format!(
                     "Cargo package `{}` exposes {kind} `{}`",
@@ -445,28 +428,45 @@ fn run_candidates(
                 ),
                 points: 0,
                 source: Some(manifest_path.to_path_buf()),
-            });
+            }];
             if package.default_run.as_deref() == Some(&target.name) {
-                candidate.evidence.push(Evidence {
+                evidence.push(Evidence {
                     kind: EvidenceKind::Rule,
                     reason: "matches package.default-run".to_owned(),
                     points: 10,
                     source: Some(manifest_path.to_path_buf()),
                 });
             }
-            candidate.search = SearchDocument {
-                identities: vec![target.name],
-                target_paths: vec![target.path],
-                scopes: vec![package.name.clone()],
-                tags: vec![
-                    "rust".to_owned(),
-                    "rs".to_owned(),
-                    "cargo".to_owned(),
-                    "crate".to_owned(),
-                ],
-                text: vec![candidate.description.clone()],
-            };
-            candidate
+            CandidateBuilder::direct_target(CARGO_SOURCE, Intent::Run, scope_root, &target.name)
+                .action_key(format!("cargo:{}:{kind}:{}", package.name, target.name))
+                .tool(CARGO_TOOL)
+                .args(args)
+                .cwd(cwd)
+                .selection(selection)
+                .base_points(base_points)
+                .origin(if target.example {
+                    CandidateOrigin::Conventional
+                } else {
+                    CandidateOrigin::Declared
+                })
+                .passthrough(crate::candidate::PassthroughStyle::DoubleDash)
+                .label(label)
+                .description(&description)
+                .evidence_all(evidence)
+                .search(SearchDocument {
+                    identities: vec![target.name],
+                    target_paths: vec![target.path],
+                    scopes: vec![package.name.clone()],
+                    tags: vec![
+                        "rust".to_owned(),
+                        "rs".to_owned(),
+                        "cargo".to_owned(),
+                        "crate".to_owned(),
+                    ],
+                    text: vec![description],
+                })
+                .build()
+                .expect("Cargo run candidate registration is valid")
         })
         .collect()
 }
@@ -478,28 +478,29 @@ fn package_action_candidate(
     package_directory: &Path,
 ) -> Candidate {
     let action = intent.to_string();
-    let mut candidate = Candidate::new(
-        format!("cargo:{}:{action}", package.name),
-        CARGO,
+    let description = format!("Cargo {action} for package `{}`", package.name);
+    CandidateBuilder::tool_default(
         CARGO_SOURCE,
         intent,
-        &action,
-        "cargo",
-        vec![OsString::from(&action)],
         package_directory.to_path_buf(),
-        95,
-        SelectionPolicy::Automatic,
-    );
-    candidate.passthrough = crate::candidate::PassthroughStyle::Append;
-    candidate.label = format!("Cargo {action} `{}`", package.name);
-    candidate.description = format!("Cargo {action} for package `{}`", package.name);
-    candidate.evidence.push(Evidence {
+        &action,
+    )
+    .action_key(format!("cargo:{}:{action}", package.name))
+    .tool(CARGO_TOOL)
+    .args([OsString::from(&action)])
+    .cwd(package_directory.to_path_buf())
+    .selection(SelectionPolicy::Automatic)
+    .base_points(95)
+    .passthrough(crate::candidate::PassthroughStyle::Append)
+    .label(format!("Cargo {action} `{}`", package.name))
+    .description(&description)
+    .evidence(Evidence {
         kind: EvidenceKind::Manifest,
         reason: format!("Cargo.toml declares package `{}`", package.name),
         points: 0,
         source: Some(manifest_path.to_path_buf()),
-    });
-    candidate.search = SearchDocument {
+    })
+    .search(SearchDocument {
         identities: vec![action],
         target_paths: vec![manifest_path.to_path_buf()],
         scopes: vec![package.name.clone()],
@@ -509,9 +510,10 @@ fn package_action_candidate(
             "cargo".to_owned(),
             "crate".to_owned(),
         ],
-        text: vec![candidate.description.clone()],
-    };
-    candidate
+        text: vec![description],
+    })
+    .build()
+    .expect("Cargo package candidate registration is valid")
 }
 
 fn virtual_workspace_candidates(
@@ -526,27 +528,28 @@ fn virtual_workspace_candidates(
         return Vec::new();
     }
     let action = context.invocation.intent.to_string();
-    let mut candidate = Candidate::new(
-        format!("cargo:workspace:{action}"),
-        CARGO,
+    let description = format!("Cargo {action} for the virtual workspace");
+    let candidate = CandidateBuilder::tool_default(
         CARGO_SOURCE,
         context.invocation.intent,
-        &action,
-        "cargo",
-        vec![OsString::from(&action), OsString::from("--workspace")],
         workspace_directory.to_path_buf(),
-        95,
-        SelectionPolicy::Automatic,
-    );
-    candidate.label = format!("Cargo {action} workspace");
-    candidate.description = format!("Cargo {action} for the virtual workspace");
-    candidate.evidence.push(Evidence {
+        &action,
+    )
+    .action_key(format!("cargo:workspace:{action}"))
+    .tool(CARGO_TOOL)
+    .args([OsString::from(&action), OsString::from("--workspace")])
+    .cwd(workspace_directory.to_path_buf())
+    .selection(SelectionPolicy::Automatic)
+    .base_points(95)
+    .label(format!("Cargo {action} workspace"))
+    .description(&description)
+    .evidence(Evidence {
         kind: EvidenceKind::Manifest,
         reason: "Cargo.toml declares a virtual workspace".to_owned(),
         points: 0,
         source: Some(manifest_path.to_path_buf()),
-    });
-    candidate.search = SearchDocument {
+    })
+    .search(SearchDocument {
         identities: vec![action],
         target_paths: vec![manifest_path.to_path_buf()],
         scopes: vec!["workspace".to_owned()],
@@ -555,7 +558,9 @@ fn virtual_workspace_candidates(
             "cargo".to_owned(),
             "workspace".to_owned(),
         ],
-        text: vec![candidate.description.clone()],
-    };
+        text: vec![description],
+    })
+    .build()
+    .expect("Cargo workspace candidate registration is valid");
     vec![candidate]
 }

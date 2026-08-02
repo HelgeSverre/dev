@@ -3,14 +3,14 @@ use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
 use crate::candidate::{
-    Candidate, CommandLayer, Evidence, EvidenceKind, Lifecycle, SearchDocument, SelectionPolicy,
+    Candidate, Evidence, EvidenceKind, Lifecycle, SearchDocument, SelectionPolicy,
 };
 use crate::diagnostic::Diagnostic;
 use crate::intent::Intent;
-use crate::registry::{MAKE, MAKE_SOURCE};
+use crate::registry::{MAKE, MAKE_SOURCE, MAKE_TOOL};
 use crate::scan::IndexedFileType;
 
-use super::{Detection, Detector, ScanCtx};
+use super::{CandidateBuilder, Detection, Detector, ScanCtx};
 
 const MAKEFILES: &[&str] = &["GNUmakefile", "makefile", "Makefile"];
 
@@ -115,60 +115,57 @@ fn target_candidate(
         || "make-project".to_owned(),
         |name| name.to_string_lossy().into_owned(),
     );
-    let mut candidate = Candidate::new(
-        format!(
-            "make:{}:{}",
-            normalized_parent(relative_manifest),
-            target.name
-        ),
-        MAKE,
-        MAKE_SOURCE,
-        intent,
-        &target.name,
-        "make",
-        vec![OsString::from(&target.name)],
-        directory.to_path_buf(),
-        base_points,
-        selection,
-    );
-    candidate.lifecycle =
-        if intent == Intent::Run && matches!(target.name.as_str(), "dev" | "serve" | "start") {
-            Lifecycle::LongRunning
-        } else {
-            Lifecycle::Finite
-        };
-    candidate.layer = CommandLayer::ProjectFacade;
-    candidate.label = format!("Make target {}", target.name);
-    candidate.description = target
+    let description = target
         .help
         .clone()
         .unwrap_or_else(|| format!("Literal target from {}", relative_manifest.display()));
-    candidate.evidence.extend([
-        Evidence {
-            kind: EvidenceKind::Manifest,
-            reason: format!(
-                "{} declares literal target `{}`",
-                relative_manifest.display(),
-                target.name
-            ),
-            points: 0,
-            source: Some(relative_manifest.to_path_buf()),
-        },
-        Evidence {
-            kind: EvidenceKind::Convention,
-            reason: convention,
-            points: 0,
-            source: Some(relative_manifest.to_path_buf()),
-        },
-    ]);
-    candidate.search = SearchDocument {
-        identities: vec![target.name.clone()],
-        target_paths: vec![relative_manifest.to_path_buf()],
-        scopes: vec![scope],
-        tags: vec!["make".to_owned(), "makefile".to_owned()],
-        text: vec![candidate.description.clone()],
-    };
-    candidate
+    CandidateBuilder::project_facade(MAKE_SOURCE, intent, directory.to_path_buf(), &target.name)
+        .action_key(format!(
+            "make:{}:{}",
+            normalized_parent(relative_manifest),
+            target.name
+        ))
+        .tool(MAKE_TOOL)
+        .args([OsString::from(&target.name)])
+        .cwd(directory.to_path_buf())
+        .selection(selection)
+        .base_points(base_points)
+        .lifecycle(
+            if intent == Intent::Run && matches!(target.name.as_str(), "dev" | "serve" | "start") {
+                Lifecycle::LongRunning
+            } else {
+                Lifecycle::Finite
+            },
+        )
+        .label(format!("Make target {}", target.name))
+        .description(&description)
+        .evidence_all([
+            Evidence {
+                kind: EvidenceKind::Manifest,
+                reason: format!(
+                    "{} declares literal target `{}`",
+                    relative_manifest.display(),
+                    target.name
+                ),
+                points: 0,
+                source: Some(relative_manifest.to_path_buf()),
+            },
+            Evidence {
+                kind: EvidenceKind::Convention,
+                reason: convention,
+                points: 0,
+                source: Some(relative_manifest.to_path_buf()),
+            },
+        ])
+        .search(SearchDocument {
+            identities: vec![target.name.clone()],
+            target_paths: vec![relative_manifest.to_path_buf()],
+            scopes: vec![scope],
+            tags: vec!["make".to_owned(), "makefile".to_owned()],
+            text: vec![description],
+        })
+        .build()
+        .expect("Make candidate registration is valid")
 }
 
 fn normalized_parent(path: &Path) -> String {

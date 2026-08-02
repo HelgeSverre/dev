@@ -6,10 +6,11 @@ use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
 use dev_launcher::cache::CacheLookup;
-use dev_launcher::candidate::{Candidate, SearchDocument, SelectionPolicy};
+use dev_launcher::candidate::{Candidate, Evidence, EvidenceKind, SearchDocument, SelectionPolicy};
+use dev_launcher::detect::CandidateBuilder;
 use dev_launcher::intent::{Intent, Invocation, Target};
 use dev_launcher::query::{match_candidate, normalize_query};
-use dev_launcher::registry::{NODE, NODE_SOURCE};
+use dev_launcher::registry::NODE_SOURCE;
 use dev_launcher::scan::{resolve_roots, FileIndex, ScanOptions};
 
 const FILE_COUNT: usize = 10_000;
@@ -106,20 +107,27 @@ fn benchmark_remembered_hit(root: &Path) -> anyhow::Result<Measurement> {
     };
     let roots = resolve_roots(&invocation.target);
     let index = FileIndex::build(&roots, ScanOptions::default());
-    let mut candidate = Candidate::new(
-        "bench:remembered",
-        NODE,
-        NODE_SOURCE,
-        Intent::Run,
-        "dev",
-        "sh",
-        Vec::new(),
-        project,
-        95,
-        SelectionPolicy::Automatic,
-    );
-    candidate.label = "remembered benchmark".to_owned();
-    candidate.refresh_id();
+    let mut candidate =
+        CandidateBuilder::tool_default(NODE_SOURCE, Intent::Run, project.clone(), "dev")
+            .action_key("bench:remembered")
+            .program_path("sh")
+            .args(Vec::<OsString>::new())
+            .cwd(project)
+            .selection(SelectionPolicy::Automatic)
+            .base_points(95)
+            .label("remembered benchmark")
+            .description("remembered benchmark fixture")
+            .evidence(Evidence {
+                kind: EvidenceKind::Rule,
+                reason: "benchmark fixture".to_owned(),
+                points: 0,
+                source: None,
+            })
+            .search(SearchDocument {
+                identities: vec!["dev".to_owned()],
+                ..SearchDocument::default()
+            })
+            .build()?;
     dev_launcher::score::finalize(&mut candidate, &invocation.target);
     dev_launcher::cache::remember(&invocation, &roots, &index, &candidate)?;
 
@@ -227,26 +235,38 @@ fn release_binary() -> anyhow::Result<PathBuf> {
 
 fn query_candidate(index: usize, count: usize) -> Candidate {
     let identity = format!("participant-{index}");
-    let mut candidate = Candidate::new(
-        format!("bench:query:{index}"),
-        NODE,
+    CandidateBuilder::tool_default(
         NODE_SOURCE,
         Intent::Run,
-        &identity,
-        "tool",
-        vec![OsString::from(format!("scope-{}", index % 100))],
         PathBuf::from(format!("/fixture/member-{}", index % count.max(1))),
-        15,
-        SelectionPolicy::ExplicitHint,
-    );
-    candidate.search = SearchDocument {
+        &identity,
+    )
+    .action_key(format!("bench:query:{index}"))
+    .program_path("tool")
+    .args([OsString::from(format!("scope-{}", index % 100))])
+    .cwd(PathBuf::from(format!(
+        "/fixture/member-{}",
+        index % count.max(1)
+    )))
+    .selection(SelectionPolicy::ExplicitHint)
+    .base_points(15)
+    .label(&identity)
+    .description("generated query benchmark candidate")
+    .evidence(Evidence {
+        kind: EvidenceKind::Rule,
+        reason: "benchmark fixture".to_owned(),
+        points: 0,
+        source: None,
+    })
+    .search(SearchDocument {
         identities: vec![identity],
         scopes: vec![format!("member-{}", index % 100)],
         tags: vec!["node".to_owned(), "test".to_owned()],
         text: vec!["generated query benchmark candidate".to_owned()],
         ..SearchDocument::default()
-    };
-    candidate
+    })
+    .build()
+    .expect("query benchmark uses a registered source")
 }
 
 fn roots(repository: &Path) -> dev_launcher::scan::RootInfo {

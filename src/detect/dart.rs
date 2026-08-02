@@ -11,11 +11,11 @@ use crate::candidate::{
 use crate::diagnostic::Diagnostic;
 use crate::intent::{Intent, Target};
 use crate::query::{match_candidate, normalize_query, MatchClass};
-use crate::registry::{DART, DART_SOURCE, FLUTTER_SOURCE};
+use crate::registry::{DART, DART_SOURCE, DART_TOOL, FLUTTER_SOURCE, FLUTTER_TOOL};
 use crate::scan::{IndexEntry, IndexedFileType};
 
 use super::target::{explicitly_anchored, target_scope};
-use super::{Detection, Detector, ScanCtx, TargetRunner};
+use super::{CandidateBuilder, Detection, Detector, ScanCtx, TargetRunner};
 
 pub struct DartDetector;
 
@@ -307,44 +307,46 @@ fn base_project_candidate(
     } else {
         DART_SOURCE
     };
-    let mut candidate = Candidate::new(
-        format!("{source_name}:{scope}:{action}"),
-        DART,
-        source,
-        intent,
-        action,
-        source_name,
-        args,
-        project.directory.clone(),
-        base_points,
-        selection,
-    );
-    candidate.label = format!("{source_name} {action}");
-    candidate.description = format!("{source_name} project command");
-    candidate.evidence.push(Evidence {
-        kind: EvidenceKind::Manifest,
-        reason: format!(
-            "pubspec.yaml declares a {} project",
-            if project.flutter { "Flutter" } else { "Dart" }
-        ),
-        points: 0,
-        source: Some(project.manifest_path.clone()),
-    });
-    candidate.search = SearchDocument {
-        identities: vec![action.to_owned()],
-        target_paths: vec![project.manifest_path.clone()],
-        scopes: vec![scope],
-        tags: vec![
-            "dart".to_owned(),
-            if project.flutter {
-                "flutter".to_owned()
-            } else {
-                "pub".to_owned()
-            },
-        ],
-        text: vec![candidate.description.clone()],
+    let tool = if source_name == "flutter" {
+        FLUTTER_TOOL
+    } else {
+        DART_TOOL
     };
-    candidate
+    let description = format!("{source_name} project command");
+    CandidateBuilder::tool_default(source, intent, project.directory.clone(), action)
+        .action_key(format!("{source_name}:{scope}:{action}"))
+        .tool(tool)
+        .args(args)
+        .cwd(project.directory.clone())
+        .selection(selection)
+        .base_points(base_points)
+        .label(format!("{source_name} {action}"))
+        .description(&description)
+        .evidence(Evidence {
+            kind: EvidenceKind::Manifest,
+            reason: format!(
+                "pubspec.yaml declares a {} project",
+                if project.flutter { "Flutter" } else { "Dart" }
+            ),
+            points: 0,
+            source: Some(project.manifest_path.clone()),
+        })
+        .search(SearchDocument {
+            identities: vec![action.to_owned()],
+            target_paths: vec![project.manifest_path.clone()],
+            scopes: vec![scope],
+            tags: vec![
+                "dart".to_owned(),
+                if project.flutter {
+                    "flutter".to_owned()
+                } else {
+                    "pub".to_owned()
+                },
+            ],
+            text: vec![description],
+        })
+        .build()
+        .expect("Dart project candidate registration is valid")
 }
 
 fn bind_test_target(candidate: &mut Candidate, target: Option<&Path>) {
@@ -461,44 +463,40 @@ fn standalone_without_pubspec(target: &Path, explicit: bool) -> Candidate {
         || "main".to_owned(),
         |name| name.to_string_lossy().into_owned(),
     );
-    let mut candidate = Candidate::new(
-        format!("dart:file:{}", normalized_target_suffix(target)),
-        DART,
-        DART_SOURCE,
-        Intent::Run,
-        &identity,
-        "dart",
-        vec![OsString::from("run"), filename.clone()],
-        directory,
-        if explicit { 95 } else { 25 },
-        if explicit {
+    let description = "Standalone Dart source target".to_owned();
+    CandidateBuilder::direct_target(DART_SOURCE, Intent::Run, directory.clone(), &identity)
+        .action_key(format!("dart:file:{}", normalized_target_suffix(target)))
+        .tool(DART_TOOL)
+        .args([OsString::from("run"), filename.clone()])
+        .cwd(directory)
+        .selection(if explicit {
             SelectionPolicy::Automatic
         } else {
             SelectionPolicy::ExplicitHint
-        },
-    );
-    candidate.origin = if explicit {
-        CandidateOrigin::Declared
-    } else {
-        CandidateOrigin::Synthetic
-    };
-    candidate.layer = CommandLayer::DirectTarget;
-    candidate.label = format!("Dart file {}", target.display());
-    candidate.description = "Standalone Dart source target".to_owned();
-    candidate.evidence.push(Evidence {
-        kind: EvidenceKind::Rule,
-        reason: "selected dart run for a standalone .dart target".to_owned(),
-        points: 0,
-        source: Some(target.to_path_buf()),
-    });
-    candidate.search = SearchDocument {
-        identities: vec![identity, filename.to_string_lossy().into_owned()],
-        target_paths: vec![PathBuf::from(filename), target.to_path_buf()],
-        scopes: vec![target_scope(target)],
-        tags: vec!["dart".to_owned()],
-        text: vec![candidate.description.clone()],
-    };
-    candidate
+        })
+        .base_points(if explicit { 95 } else { 25 })
+        .origin(if explicit {
+            CandidateOrigin::Declared
+        } else {
+            CandidateOrigin::Synthetic
+        })
+        .label(format!("Dart file {}", target.display()))
+        .description(&description)
+        .evidence(Evidence {
+            kind: EvidenceKind::Rule,
+            reason: "selected dart run for a standalone .dart target".to_owned(),
+            points: 0,
+            source: Some(target.to_path_buf()),
+        })
+        .search(SearchDocument {
+            identities: vec![identity, filename.to_string_lossy().into_owned()],
+            target_paths: vec![PathBuf::from(filename), target.to_path_buf()],
+            scopes: vec![target_scope(target)],
+            tags: vec!["dart".to_owned()],
+            text: vec![description],
+        })
+        .build()
+        .expect("Dart file candidate registration is valid")
 }
 
 fn normalized_target_suffix(target: &Path) -> String {

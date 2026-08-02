@@ -3,16 +3,16 @@ use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
 
 use crate::candidate::{
-    Availability, Candidate, CandidateOrigin, CommandLayer, Evidence, EvidenceKind, SearchDocument,
+    Availability, Candidate, CandidateOrigin, Evidence, EvidenceKind, SearchDocument,
     SelectionPolicy,
 };
 use crate::intent::Intent;
 use crate::path::resolve_program;
-use crate::registry::{PYTHON_FILE, PYTHON_FILE_SOURCE};
+use crate::registry::PYTHON_FILE_SOURCE;
 use crate::scan::{IndexEntry, IndexedFileType};
 
 use super::target::{explicitly_anchored, target_scope};
-use super::{Detection, Detector, ScanCtx, TargetRunner};
+use super::{CandidateBuilder, Detection, Detector, ScanCtx, TargetRunner};
 
 pub struct PythonFileDetector;
 
@@ -47,47 +47,43 @@ fn file_candidate(absolute: &Path, relative_to_scan: &Path, explicit: bool) -> C
         |name| name.to_string_lossy().into_owned(),
     );
     let (program, runner_reason) = python_interpreter(&directory);
-    let mut candidate = Candidate::new(
-        format!(
+    let description = format!("Standalone Python target using {runner_reason}");
+    CandidateBuilder::direct_target(PYTHON_FILE_SOURCE, Intent::Run, directory.clone(), &stem)
+        .action_key(format!(
             "python-file:{}",
             relative_to_scan.to_string_lossy().replace(['/', '\\'], ":")
-        ),
-        PYTHON_FILE,
-        PYTHON_FILE_SOURCE,
-        Intent::Run,
-        &stem,
-        program,
-        vec![filename.clone()],
-        directory,
-        if explicit { 90 } else { 25 },
-        if explicit {
+        ))
+        .program_path(program)
+        .args([filename.clone()])
+        .cwd(directory)
+        .selection(if explicit {
             SelectionPolicy::Automatic
         } else {
             SelectionPolicy::ExplicitHint
-        },
-    );
-    candidate.origin = if explicit {
-        CandidateOrigin::Declared
-    } else {
-        CandidateOrigin::Synthetic
-    };
-    candidate.layer = CommandLayer::DirectTarget;
-    candidate.label = format!("Python file {}", relative_to_scan.display());
-    candidate.description = format!("Standalone Python target using {runner_reason}");
-    candidate.evidence.push(Evidence {
-        kind: EvidenceKind::Rule,
-        reason: format!("selected {runner_reason} for Python target"),
-        points: 0,
-        source: Some(relative_to_scan.to_path_buf()),
-    });
-    candidate.search = SearchDocument {
-        identities: vec![stem, filename.to_string_lossy().into_owned()],
-        target_paths: vec![PathBuf::from(&filename), relative_to_scan.to_path_buf()],
-        scopes: vec![target_scope(relative_to_scan)],
-        tags: vec!["python".to_owned(), "py".to_owned()],
-        text: vec![candidate.description.clone()],
-    };
-    candidate
+        })
+        .base_points(if explicit { 90 } else { 25 })
+        .origin(if explicit {
+            CandidateOrigin::Declared
+        } else {
+            CandidateOrigin::Synthetic
+        })
+        .label(format!("Python file {}", relative_to_scan.display()))
+        .description(&description)
+        .evidence(Evidence {
+            kind: EvidenceKind::Rule,
+            reason: format!("selected {runner_reason} for Python target"),
+            points: 0,
+            source: Some(relative_to_scan.to_path_buf()),
+        })
+        .search(SearchDocument {
+            identities: vec![stem, filename.to_string_lossy().into_owned()],
+            target_paths: vec![PathBuf::from(&filename), relative_to_scan.to_path_buf()],
+            scopes: vec![target_scope(relative_to_scan)],
+            tags: vec!["python".to_owned(), "py".to_owned()],
+            text: vec![description],
+        })
+        .build()
+        .expect("Python file candidate registration is valid")
 }
 
 fn python_interpreter(cwd: &Path) -> (OsString, String) {

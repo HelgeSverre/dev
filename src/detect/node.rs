@@ -5,17 +5,18 @@ use std::path::{Path, PathBuf};
 use serde::Deserialize;
 
 use crate::candidate::{
-    Candidate, CandidateOrigin, CommandLayer, Evidence, EvidenceKind, Lifecycle, PassthroughStyle,
+    Availability, Candidate, CandidateOrigin, Evidence, EvidenceKind, Lifecycle, PassthroughStyle,
     SearchDocument, SelectionPolicy,
 };
 use crate::diagnostic::Diagnostic;
 use crate::intent::Intent;
 use crate::registry::{
-    WorkspaceContribution, WorkspaceContributor, NEXT_SOURCE, NODE, NODE_SOURCE, VITE_SOURCE,
+    ToolId, WorkspaceContribution, WorkspaceContributor, BUN_TOOL, NEXT_SOURCE, NODE, NODE_SOURCE,
+    NODE_TOOL, NPM_TOOL, PNPM_TOOL, VITE_SOURCE, YARN_TOOL,
 };
 use crate::scan::{IndexEntry, IndexedFileType};
 
-use super::{Detection, Detector, ScanCtx, TargetBinder};
+use super::{CandidateBuilder, Detection, Detector, ScanCtx, TargetBinder};
 
 pub struct NodeDetector;
 pub struct NodeWorkspaceContributor;
@@ -160,6 +161,15 @@ impl PackageManager {
         }
     }
 
+    fn tool(self) -> ToolId {
+        match self {
+            Self::Npm => NPM_TOOL,
+            Self::Pnpm => PNPM_TOOL,
+            Self::Yarn => YARN_TOOL,
+            Self::Bun => BUN_TOOL,
+        }
+    }
+
     fn script_args(self, script: &str, workspace: Option<&WorkspaceMember>) -> Vec<OsString> {
         let Some(workspace) = workspace else {
             return vec![OsString::from("run"), OsString::from(script)];
@@ -236,13 +246,15 @@ impl PackageManager {
         output
     }
 
-    fn apply_local_exec_safety(self, candidate: &mut Candidate) {
+    fn local_exec_env(self) -> BTreeMap<OsString, OsString> {
+        let mut env = BTreeMap::new();
         if self == Self::Pnpm {
-            candidate.env.insert(
+            env.insert(
                 OsString::from("npm_config_verify_deps_before_run"),
                 OsString::from("false"),
             );
         }
+        env
     }
 }
 
@@ -418,49 +430,45 @@ fn script_candidates(
                 Some("next") => NEXT_SOURCE,
                 _ => NODE_SOURCE,
             };
-            let mut candidate = Candidate::new(
-                format!("node:{}:script:{script}", action_scope),
-                NODE,
-                source,
-                context.invocation.intent,
-                script,
-                manager.program(),
-                manager.script_args(script, workspace.as_ref()),
-                workspace.as_ref().map_or_else(
-                    || package_directory.to_path_buf(),
-                    |member| member.root.clone(),
-                ),
-                base_points,
-                selection,
+            let cwd = workspace.as_ref().map_or_else(
+                || package_directory.to_path_buf(),
+                |member| member.root.clone(),
             );
-            candidate.scope_root = package_directory.to_path_buf();
-            candidate.layer = CommandLayer::EcosystemTask;
-            candidate.passthrough = manager.passthrough();
-            candidate.lifecycle = if context.invocation.intent == Intent::Run {
+            let lifecycle = if context.invocation.intent == Intent::Run {
                 Lifecycle::LongRunning
             } else {
                 Lifecycle::Finite
             };
-            candidate.label = detector.map_or_else(
+            let label = detector.map_or_else(
                 || format!("{} script `{script}`", manager.program()),
                 |framework| format!("{framework} {script}"),
             );
-            candidate.description = format!(
+            let mut description = format!(
                 "Declared package script using {}; {manager_reason}",
                 manager.program()
             );
-            candidate.evidence.push(Evidence {
+            if framework == Some("next")
+                && context.invocation.intent == Intent::Run
+                && script == "start"
+            {
+                description.push_str("; requires a prior Next build");
+            }
+            if framework == Some("vite")
+                && context.invocation.intent == Intent::Run
+                && script == "preview"
+            {
+                description.push_str("; requires a prior Vite build");
+            }
+            let mut evidence = vec![Evidence {
                 kind: EvidenceKind::Manifest,
                 reason: format!("package.json declares script `{script}`"),
                 points: 0,
                 source: Some(manifest_path.to_path_buf()),
-            });
+            }];
             if let Some(workspace) = &workspace {
-                candidate
-                    .evidence
-                    .push(workspace.evidence(manager, manifest_path));
+                evidence.push(workspace.evidence(manager, manifest_path));
             }
-            candidate.evidence.push(Evidence {
+            evidence.push(Evidence {
                 kind: EvidenceKind::Rule,
                 reason: manager_reason.to_owned(),
                 points: if manager_reason.starts_with("defaulted") {
@@ -471,30 +479,31 @@ fn script_candidates(
                 source: None,
             });
             if let Some(framework) = detector {
-                candidate.evidence.push(Evidence {
+                evidence.push(Evidence {
                     kind: EvidenceKind::Manifest,
                     reason: format!("package declares {framework}"),
                     points: 10,
                     source: Some(manifest_path.to_path_buf()),
                 });
             }
-            if framework == Some("next")
-                && context.invocation.intent == Intent::Run
-                && script == "start"
-            {
-                candidate
-                    .description
-                    .push_str("; requires a prior Next build");
-            }
-            if framework == Some("vite")
-                && context.invocation.intent == Intent::Run
-                && script == "preview"
-            {
-                candidate
-                    .description
-                    .push_str("; requires a prior Vite build");
-            }
-            candidate.search = SearchDocument {
+            let candidate = CandidateBuilder::ecosystem_task(
+                source,
+                context.invocation.intent,
+                package_directory.to_path_buf(),
+                script,
+            )
+            .action_key(format!("node:{}:script:{script}", action_scope))
+            .tool(manager.tool())
+            .args(manager.script_args(script, workspace.as_ref()))
+            .cwd(cwd)
+            .selection(selection)
+            .base_points(base_points)
+            .passthrough(manager.passthrough())
+            .lifecycle(lifecycle)
+            .label(label)
+            .description(&description)
+            .evidence_all(evidence)
+            .search(SearchDocument {
                 identities: vec![script.clone()],
                 target_paths: vec![manifest_path.to_path_buf()],
                 scopes: manifest
@@ -513,8 +522,10 @@ fn script_candidates(
                     .map(|value| (*value).to_owned())
                     .chain(detector.into_iter().map(str::to_owned))
                     .collect(),
-                text: vec![candidate.description.clone()],
-            };
+                text: vec![description],
+            })
+            .build()
+            .expect("Node script candidate registration is valid");
             Some(candidate)
         })
         .collect()
@@ -683,38 +694,39 @@ fn bin_candidates(
     };
     bins.into_iter()
         .map(|(name, path)| {
-            let mut candidate = Candidate::new(
-                format!(
-                    "node:{}:bin:{name}",
-                    package_scope(manifest, package_directory)
-                ),
-                NODE,
+            let description = "Explicit package.json bin entry".to_owned();
+            CandidateBuilder::direct_target(
                 NODE_SOURCE,
                 Intent::Run,
-                &name,
-                "node",
-                vec![OsString::from(&path)],
                 package_directory.to_path_buf(),
-                35,
-                SelectionPolicy::ExplicitHint,
-            );
-            candidate.label = format!("Node binary `{name}`");
-            candidate.layer = CommandLayer::DirectTarget;
-            candidate.description = "Explicit package.json bin entry".to_owned();
-            candidate.evidence.push(Evidence {
+                &name,
+            )
+            .action_key(format!(
+                "node:{}:bin:{name}",
+                package_scope(manifest, package_directory)
+            ))
+            .tool(NODE_TOOL)
+            .args([OsString::from(&path)])
+            .cwd(package_directory.to_path_buf())
+            .selection(SelectionPolicy::ExplicitHint)
+            .base_points(35)
+            .label(format!("Node binary `{name}`"))
+            .description(&description)
+            .evidence(Evidence {
                 kind: EvidenceKind::Manifest,
                 reason: format!("package.json declares bin `{name}`"),
                 points: 0,
                 source: Some(manifest_path.to_path_buf()),
-            });
-            candidate.search = SearchDocument {
+            })
+            .search(SearchDocument {
                 identities: vec![name],
                 target_paths: vec![PathBuf::from(path)],
                 scopes: vec![package_scope(manifest, package_directory)],
                 tags: synonyms.iter().map(|value| (*value).to_owned()).collect(),
-                text: vec![candidate.description.clone()],
-            };
-            candidate
+                text: vec![description],
+            })
+            .build()
+            .expect("Node bin candidate registration is valid")
         })
         .collect()
 }
@@ -729,34 +741,39 @@ fn conventional_file_candidates(
         .into_iter()
         .filter(|filename| package_directory.join(filename).is_file())
         .map(|filename| {
-            let mut candidate = Candidate::new(
-                format!("node:{}:file:{filename}", package_directory.display()),
-                NODE,
+            let description = "Conventional Node entry file".to_owned();
+            CandidateBuilder::direct_target(
                 NODE_SOURCE,
                 Intent::Run,
-                filename,
-                "node",
-                vec![OsString::from(filename)],
                 package_directory.to_path_buf(),
-                25,
+                filename,
+            )
+            .action_key(format!(
+                "node:{}:file:{filename}",
+                package_directory.display()
+            ))
+            .tool(NODE_TOOL)
+            .args([OsString::from(filename)])
+            .cwd(package_directory.to_path_buf())
+            .selection(
                 if context.invocation.target.path() == package_directory.join(filename) {
                     SelectionPolicy::Automatic
                 } else {
                     SelectionPolicy::ExplicitHint
                 },
-            );
-            candidate.origin = CandidateOrigin::Conventional;
-            candidate.layer = CommandLayer::DirectTarget;
-            candidate.lifecycle = Lifecycle::LongRunning;
-            candidate.label = format!("Node file `{filename}`");
-            candidate.description = "Conventional Node entry file".to_owned();
-            candidate.evidence.push(Evidence {
+            )
+            .base_points(25)
+            .origin(CandidateOrigin::Conventional)
+            .lifecycle(Lifecycle::LongRunning)
+            .label(format!("Node file `{filename}`"))
+            .description(&description)
+            .evidence(Evidence {
                 kind: EvidenceKind::Convention,
                 reason: format!("found conventional entry file `{filename}`"),
                 points: 0,
                 source: Some(manifest_path.with_file_name(filename)),
-            });
-            candidate.search = SearchDocument {
+            })
+            .search(SearchDocument {
                 identities: vec![
                     filename.trim_end_matches(".js").to_owned(),
                     filename.to_owned(),
@@ -764,9 +781,10 @@ fn conventional_file_candidates(
                 target_paths: vec![PathBuf::from(filename)],
                 scopes: vec![package_scope_from_directory(package_directory)],
                 tags: synonyms.iter().map(|value| (*value).to_owned()).collect(),
-                text: vec![candidate.description.clone()],
-            };
-            candidate
+                text: vec![description],
+            })
+            .build()
+            .expect("Node file candidate registration is valid")
         })
         .collect()
 }
@@ -836,60 +854,58 @@ fn framework_fallbacks(
     actions
         .into_iter()
         .map(|(name, arguments, base_points, selection, requires_build)| {
-            let mut candidate = Candidate::new(
-                format!(
-                    "{framework}:{}:{name}",
-                    package_scope(manifest, package_directory)
-                ),
-                NODE,
-                if framework == "vite" {
-                    VITE_SOURCE
-                } else {
-                    NEXT_SOURCE
-                },
-                context.invocation.intent,
-                name,
-                manager.program(),
-                manager.local_binary_args(framework, &arguments),
-                package_directory.to_path_buf(),
-                base_points,
-                selection,
-            );
-            manager.apply_local_exec_safety(&mut candidate);
-            if local_binary.is_none() {
-                candidate.availability = crate::candidate::Availability::UnsupportedHost {
-                    reason: format!(
-                        "project-local {framework} binary is not installed; dev will not download it"
-                    ),
-                };
-            }
-            candidate.lifecycle = if context.invocation.intent == Intent::Run {
-                Lifecycle::LongRunning
+            let source = if framework == "vite" {
+                VITE_SOURCE
             } else {
-                Lifecycle::Finite
+                NEXT_SOURCE
             };
-            candidate.label = format!("{framework} {name}");
-            candidate.description = format!(
+            let mut description = format!(
                 "Project-local {framework} through {} without installation",
                 manager.program()
             );
             if requires_build {
-                candidate
-                    .description
-                    .push_str(&format!(
-                        "; requires a prior {} build",
-                        framework_display(framework)
-                    ));
+                description.push_str(&format!(
+                    "; requires a prior {} build",
+                    framework_display(framework)
+                ));
             }
-            candidate.evidence.push(Evidence {
+            let availability = local_binary.is_none().then(|| Availability::UnsupportedHost {
+                    reason: format!(
+                        "project-local {framework} binary is not installed; dev will not download it"
+                    ),
+            });
+            let mut builder = CandidateBuilder::tool_default(
+                source,
+                context.invocation.intent,
+                package_directory.to_path_buf(),
+                name,
+            )
+            .action_key(format!(
+                "{framework}:{}:{name}",
+                package_scope(manifest, package_directory)
+            ))
+            .tool(manager.tool())
+            .args(manager.local_binary_args(framework, &arguments))
+            .cwd(package_directory.to_path_buf())
+            .env(manager.local_exec_env())
+            .selection(selection)
+            .base_points(base_points)
+            .lifecycle(if context.invocation.intent == Intent::Run {
+                Lifecycle::LongRunning
+            } else {
+                Lifecycle::Finite
+            })
+            .label(format!("{framework} {name}"))
+            .description(&description)
+            .evidence(Evidence {
                 kind: EvidenceKind::Manifest,
                 reason: format!(
                     "package declares {framework} without a canonical `{name}` script"
                 ),
                 points: 10,
                 source: Some(manifest_path.to_path_buf()),
-            });
-            candidate.evidence.push(local_binary.as_ref().map_or_else(
+            })
+            .evidence(local_binary.as_ref().map_or_else(
                 || Evidence {
                     kind: EvidenceKind::Rule,
                     reason: format!(
@@ -905,8 +921,8 @@ fn framework_fallbacks(
                     points: 0,
                     source: Some(path.clone()),
                 },
-            ));
-            candidate.search = SearchDocument {
+            ))
+            .search(SearchDocument {
                 identities: vec![name.to_owned(), framework.to_owned()],
                 target_paths: vec![manifest_path.to_path_buf()],
                 scopes: vec![package_scope(manifest, package_directory)],
@@ -915,9 +931,14 @@ fn framework_fallbacks(
                     .map(|value| (*value).to_owned())
                     .chain(std::iter::once(framework.to_owned()))
                     .collect(),
-                text: vec![candidate.description.clone(), manager.program().to_owned()],
-            };
-            candidate
+                text: vec![description, manager.program().to_owned()],
+            });
+            if let Some(availability) = availability {
+                builder = builder.availability(availability);
+            }
+            builder
+                .build()
+                .expect("Node framework candidate registration is valid")
         })
         .collect()
 }
@@ -1108,23 +1129,9 @@ mod tests {
 
     #[test]
     fn pnpm_local_exec_disables_dependency_auto_install_preflight() {
-        let mut candidate = Candidate::new(
-            "vite:test",
-            NODE,
-            VITE_SOURCE,
-            Intent::Run,
-            "dev",
-            "pnpm",
-            Vec::new(),
-            PathBuf::from("/tmp"),
-            80,
-            SelectionPolicy::Automatic,
-        );
-        PackageManager::Pnpm.apply_local_exec_safety(&mut candidate);
+        let env = PackageManager::Pnpm.local_exec_env();
         assert_eq!(
-            candidate
-                .env
-                .get(&OsString::from("npm_config_verify_deps_before_run")),
+            env.get(&OsString::from("npm_config_verify_deps_before_run")),
             Some(&OsString::from("false"))
         );
     }

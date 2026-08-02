@@ -1,6 +1,9 @@
 use std::path::PathBuf;
 
-use dev_launcher::candidate::{Availability, Candidate, SearchDocument, SelectionPolicy};
+use dev_launcher::candidate::{
+    Availability, Candidate, Evidence, EvidenceKind, SearchDocument, SelectionPolicy,
+};
+use dev_launcher::detect::CandidateBuilder;
 use dev_launcher::intent::Intent;
 use dev_launcher::query::{
     match_candidate, normalize_query, MatchClass, MatchStrategy, QueryMatch,
@@ -14,30 +17,32 @@ fn candidate(
     identity: &str,
     policy: SelectionPolicy,
 ) -> Candidate {
-    let (registration, source) = source_by_name(detector)
+    let (_, source) = source_by_name(detector)
         .unwrap_or_else(|| panic!("query fixture uses registered source `{detector}`"));
-    let mut candidate = Candidate::new(
-        key,
-        registration.id,
-        source.id,
-        Intent::Run,
-        identity,
-        "tool",
-        Vec::new(),
-        PathBuf::from("/fixture"),
-        80,
-        policy,
-    );
-    candidate.label = identity.to_owned();
-    candidate.search = SearchDocument {
-        identities: vec![identity.to_owned()],
-        ..SearchDocument::default()
-    };
-    candidate.availability = Availability::Available {
-        resolved_program: PathBuf::from("/fixture/tool"),
-    };
-    candidate.structural_points = 80;
-    candidate
+    CandidateBuilder::tool_default(source.id, Intent::Run, PathBuf::from("/fixture"), identity)
+        .action_key(key)
+        .program_path("tool")
+        .args(Vec::<std::ffi::OsString>::new())
+        .cwd(PathBuf::from("/fixture"))
+        .selection(policy)
+        .base_points(80)
+        .label(identity)
+        .description("query corpus fixture")
+        .evidence(Evidence {
+            kind: EvidenceKind::Rule,
+            reason: "query corpus fixture".to_owned(),
+            points: 0,
+            source: None,
+        })
+        .search(SearchDocument {
+            identities: vec![identity.to_owned()],
+            ..SearchDocument::default()
+        })
+        .availability(Availability::Available {
+            resolved_program: PathBuf::from("/fixture/tool"),
+        })
+        .build()
+        .expect("query corpus fixture is complete")
 }
 
 fn matched(candidate: &Candidate, hints: &[&str], chaos: u8) -> QueryMatch {

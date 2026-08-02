@@ -207,7 +207,7 @@ pub struct Candidate {
 impl Candidate {
     #[must_use]
     #[allow(clippy::too_many_arguments)]
-    pub fn new(
+    pub(crate) fn new(
         action_key: impl Into<String>,
         detector: DetectorId,
         source: CandidateSourceId,
