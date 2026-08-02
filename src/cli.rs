@@ -4,9 +4,36 @@ use std::path::{Path, PathBuf};
 
 use clap::{Args, CommandFactory, Parser, Subcommand, ValueEnum};
 use clap_complete::Shell;
+use clap_complete_nushell::Nushell as NushellGenerator;
 
 use crate::intent::{Intent, Invocation, Target};
 use crate::path::logical_absolute;
+
+/// Shell to generate completion scripts for.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
+pub enum ShellChoice {
+    Bash,
+    Elvish,
+    Fish,
+    #[value(name = "nushell", alias = "nu")]
+    Nushell,
+    #[value(name = "powershell", alias = "pwsh")]
+    PowerShell,
+    Zsh,
+}
+
+impl ShellChoice {
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Bash => "bash",
+            Self::Elvish => "elvish",
+            Self::Fish => "fish",
+            Self::Nushell => "nushell",
+            Self::PowerShell => "powershell",
+            Self::Zsh => "zsh",
+        }
+    }
+}
 
 /// Parsed top-level command line.
 #[derive(Clone, Debug)]
@@ -14,7 +41,10 @@ pub enum Request {
     Resolve(ResolveRequest),
     Cache(CacheRequest),
     Doctor,
-    Completions { shell: Option<Shell>, install: bool },
+    Completions {
+        shell: Option<ShellChoice>,
+        install: bool,
+    },
 }
 
 #[derive(Clone, Debug)]
@@ -92,12 +122,13 @@ enum RawCommand {
     #[command(after_help = "Examples:
   dev completions --install
   dev completions zsh --install
+  dev completions nushell --install
   dev completions bash > ~/.local/share/bash-completion/completions/dev
   dev completions powershell >> $PROFILE")]
     Completions {
         /// Shell to generate completions for.
         #[arg(value_enum, required_unless_present = "install")]
-        shell: Option<Shell>,
+        shell: Option<ShellChoice>,
         /// Install the script, detecting the shell when it is omitted.
         #[arg(long)]
         install: bool,
@@ -234,8 +265,20 @@ where
 }
 
 /// Write a completion script for `dev` to the supplied writer.
-pub fn write_completions(shell: Shell, writer: &mut impl Write) {
-    clap_complete::generate(shell, &mut RawCli::command(), "dev", writer);
+pub fn write_completions(shell: ShellChoice, writer: &mut impl Write) {
+    let mut cmd = RawCli::command();
+    match shell {
+        ShellChoice::Bash => clap_complete::generate(Shell::Bash, &mut cmd, "dev", writer),
+        ShellChoice::Elvish => clap_complete::generate(Shell::Elvish, &mut cmd, "dev", writer),
+        ShellChoice::Fish => clap_complete::generate(Shell::Fish, &mut cmd, "dev", writer),
+        ShellChoice::Nushell => {
+            clap_complete::generate(NushellGenerator, &mut cmd, "dev", writer);
+        }
+        ShellChoice::PowerShell => {
+            clap_complete::generate(Shell::PowerShell, &mut cmd, "dev", writer);
+        }
+        ShellChoice::Zsh => clap_complete::generate(Shell::Zsh, &mut cmd, "dev", writer),
+    }
 }
 
 fn resolve_request(
@@ -425,7 +468,7 @@ mod tests {
         assert!(matches!(
             request,
             Request::Completions {
-                shell: Some(Shell::Fish),
+                shell: Some(ShellChoice::Fish),
                 install: false
             }
         ));
@@ -449,11 +492,12 @@ mod tests {
     #[test]
     fn every_supported_completion_script_is_generated() {
         for shell in [
-            Shell::Bash,
-            Shell::Elvish,
-            Shell::Fish,
-            Shell::PowerShell,
-            Shell::Zsh,
+            ShellChoice::Bash,
+            ShellChoice::Elvish,
+            ShellChoice::Fish,
+            ShellChoice::Nushell,
+            ShellChoice::PowerShell,
+            ShellChoice::Zsh,
         ] {
             let mut output = Vec::new();
             write_completions(shell, &mut output);

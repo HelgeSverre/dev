@@ -1,8 +1,7 @@
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
-use clap_complete::Shell;
-
+use crate::cli::ShellChoice;
 use crate::cli::write_completions;
 
 /// Details about an installed completion script.
@@ -40,7 +39,7 @@ pub enum InstallError {
 }
 
 /// Install a completion script for an explicit shell or the shell named by `$SHELL`.
-pub fn install(shell: Option<Shell>) -> Result<Installation, InstallError> {
+pub fn install(shell: Option<ShellChoice>) -> Result<Installation, InstallError> {
     let shell = shell
         .or_else(|| {
             std::env::var_os("SHELL")
@@ -67,14 +66,14 @@ fn absolute_environment_path(name: &str) -> Option<PathBuf> {
 }
 
 fn install_at(
-    shell: Shell,
+    shell: ShellChoice,
     config: &Path,
     data: &Path,
     zsh: &Path,
 ) -> Result<Installation, InstallError> {
     let (shell_name, path, hint) = match shell {
-        Shell::Bash => ("bash", data.join("bash-completion/completions/dev"), None),
-        Shell::Zsh => (
+        ShellChoice::Bash => ("bash", data.join("bash-completion/completions/dev"), None),
+        ShellChoice::Zsh => (
             "zsh",
             zsh.join("completions/_dev"),
             Some(format!(
@@ -83,8 +82,8 @@ fn install_at(
                 zsh.join("completions").display()
             )),
         ),
-        Shell::Fish => ("fish", config.join("fish/completions/dev.fish"), None),
-        Shell::Elvish => (
+        ShellChoice::Fish => ("fish", config.join("fish/completions/dev.fish"), None),
+        ShellChoice::Elvish => (
             "elvish",
             config.join("elvish/lib/dev.elv"),
             Some(format!(
@@ -92,8 +91,8 @@ fn install_at(
                 config.join("elvish/rc.elv").display()
             )),
         ),
-        Shell::PowerShell => return Err(InstallError::PowerShellProfile),
-        _ => return Err(InstallError::ShellDetection),
+        ShellChoice::PowerShell => return Err(InstallError::PowerShellProfile),
+        ShellChoice::Nushell => ("nushell", config.join("nushell/completions/dev.nu"), None),
     };
 
     let parent = path.parent().ok_or(InstallError::HomeDirectory)?;
@@ -115,21 +114,23 @@ fn install_at(
     })
 }
 
-fn shell_from_program(program: &OsStr) -> Option<Shell> {
+fn shell_from_program(program: &OsStr) -> Option<ShellChoice> {
     let name = Path::new(program).file_name()?.to_str()?;
     if name.eq_ignore_ascii_case("bash") {
-        Some(Shell::Bash)
+        Some(ShellChoice::Bash)
     } else if name.eq_ignore_ascii_case("zsh") {
-        Some(Shell::Zsh)
+        Some(ShellChoice::Zsh)
     } else if name.eq_ignore_ascii_case("fish") {
-        Some(Shell::Fish)
+        Some(ShellChoice::Fish)
     } else if name.eq_ignore_ascii_case("elvish") {
-        Some(Shell::Elvish)
+        Some(ShellChoice::Elvish)
     } else if name.eq_ignore_ascii_case("pwsh")
         || name.eq_ignore_ascii_case("powershell")
         || name.eq_ignore_ascii_case("powershell.exe")
     {
-        Some(Shell::PowerShell)
+        Some(ShellChoice::PowerShell)
+    } else if name.eq_ignore_ascii_case("nu") {
+        Some(ShellChoice::Nushell)
     } else {
         None
     }
@@ -143,18 +144,18 @@ mod tests {
     fn detects_supported_shell_program_names() {
         assert_eq!(
             shell_from_program(OsStr::new("/bin/bash")),
-            Some(Shell::Bash)
+            Some(ShellChoice::Bash)
         );
         assert_eq!(
             shell_from_program(OsStr::new("/opt/homebrew/bin/zsh")),
-            Some(Shell::Zsh)
+            Some(ShellChoice::Zsh)
         );
-        assert_eq!(shell_from_program(OsStr::new("fish")), Some(Shell::Fish));
+        assert_eq!(shell_from_program(OsStr::new("fish")), Some(ShellChoice::Fish));
         assert_eq!(
             shell_from_program(OsStr::new("pwsh")),
-            Some(Shell::PowerShell)
+            Some(ShellChoice::PowerShell)
         );
-        assert_eq!(shell_from_program(OsStr::new("nu")), None);
+        assert_eq!(shell_from_program(OsStr::new("nu")), Some(ShellChoice::Nushell));
     }
 
     #[test]
@@ -165,17 +166,22 @@ mod tests {
         let zsh = temporary.path().join("zsh");
         let cases = [
             (
-                Shell::Bash,
+                ShellChoice::Bash,
                 "bash",
                 data.join("bash-completion/completions/dev"),
             ),
-            (Shell::Zsh, "zsh", zsh.join("completions/_dev")),
+            (ShellChoice::Zsh, "zsh", zsh.join("completions/_dev")),
             (
-                Shell::Fish,
+                ShellChoice::Fish,
                 "fish",
                 config.join("fish/completions/dev.fish"),
             ),
-            (Shell::Elvish, "elvish", config.join("elvish/lib/dev.elv")),
+            (ShellChoice::Elvish, "elvish", config.join("elvish/lib/dev.elv")),
+            (
+                ShellChoice::Nushell,
+                "nushell",
+                config.join("nushell/completions/dev.nu"),
+            ),
         ];
 
         for (shell, shell_name, expected_path) in cases {
@@ -192,7 +198,7 @@ mod tests {
     #[test]
     fn powershell_install_requires_its_profile_path() {
         let error = install_at(
-            Shell::PowerShell,
+            ShellChoice::PowerShell,
             Path::new("config"),
             Path::new("data"),
             Path::new("zsh"),

@@ -189,17 +189,19 @@ dev cache clear
 ## Shell completions
 
 Generate completion scripts from the installed binary for Bash, Zsh, Fish,
-Elvish, or PowerShell:
+Elvish, Nushell, or PowerShell:
 
 ```console
 dev completions --install
 
 # Or generate/install a specific shell explicitly:
 dev completions zsh --install
+dev completions nushell --install
 dev completions bash > ~/.local/share/bash-completion/completions/dev
 dev completions zsh > ~/.zsh/completions/_dev
 dev completions fish > ~/.config/fish/completions/dev.fish
 dev completions elvish > ~/.config/elvish/lib/dev.elv
+dev completions nushell > ~/.config/nushell/completions/dev.nu
 dev completions powershell >> $PROFILE
 ```
 
