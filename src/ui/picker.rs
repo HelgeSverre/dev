@@ -43,10 +43,11 @@ struct PickerApp<'a> {
     visible: Vec<(usize, QueryMatch)>,
     state: ListState,
     show_details: bool,
+    colors: bool,
 }
 
 impl<'a> PickerApp<'a> {
-    fn new(resolution: &'a Resolution, hints: &[String], chaos: u8) -> Self {
+    fn new(resolution: &'a Resolution, hints: &[String], chaos: u8, colors: bool) -> Self {
         let mut app = Self {
             resolution,
             query: if resolution.status == crate::resolve::ResolutionStatus::HintNoMatch {
@@ -58,6 +59,7 @@ impl<'a> PickerApp<'a> {
             visible: Vec::new(),
             state: ListState::default(),
             show_details: true,
+            colors,
         };
         app.refresh();
         app
@@ -214,12 +216,13 @@ pub fn pick(
     resolution: &Resolution,
     hints: &[String],
     chaos: u8,
+    colors: bool,
 ) -> Result<PickerOutcome, PickerError> {
     if !io::stdin().is_terminal() || !io::stderr().is_terminal() {
         return Err(PickerError::NotInteractive);
     }
     let mut session = TerminalSession::start()?;
-    let mut app = PickerApp::new(resolution, hints, chaos);
+    let mut app = PickerApp::new(resolution, hints, chaos, colors);
     loop {
         session.terminal.draw(|frame| render(frame, &mut app))?;
         if !event::poll(Duration::from_millis(250))? {
@@ -271,8 +274,9 @@ fn render(frame: &mut Frame<'_>, app: &mut PickerApp<'_>) {
         }
     }
     frame.render_widget(
-        Paragraph::new("↵ run  ^R run+remember  ^D print  tab details  esc cancel")
-            .style(Style::default().fg(Color::DarkGray)),
+        Paragraph::new("↵ run  ^R run+remember  ^D print  tab details  esc cancel").style(
+            color_style(app.colors, Style::default().fg(Color::DarkGray)),
+        ),
         footer,
     );
 }
@@ -286,7 +290,7 @@ fn render_list(frame: &mut Frame<'_>, app: &mut PickerApp<'_>, area: Rect) {
             let available = candidate.availability.is_available();
             let warning = if available { "" } else { "⚠ " };
             let score = candidate.structural_points + matched.total_points;
-            let style = if available {
+            let style = if !app.colors || available {
                 Style::default()
             } else {
                 Style::default().fg(Color::DarkGray)
@@ -296,11 +300,14 @@ fn render_list(frame: &mut Frame<'_>, app: &mut PickerApp<'_>, area: Rect) {
                     Span::raw(warning),
                     Span::styled(
                         &candidate.label,
-                        Style::default().add_modifier(Modifier::BOLD),
+                        color_style(app.colors, Style::default().add_modifier(Modifier::BOLD)),
                     ),
                     Span::raw(format!("  {score}")),
                 ]),
-                Line::styled(&candidate.description, Style::default().fg(Color::DarkGray)),
+                Line::styled(
+                    &candidate.description,
+                    color_style(app.colors, Style::default().fg(Color::DarkGray)),
+                ),
             ])
             .style(style)
         })
@@ -312,11 +319,12 @@ fn render_list(frame: &mut Frame<'_>, app: &mut PickerApp<'_>, area: Rect) {
             if app.visible.len() == 1 { "" } else { "s" }
         )))
         .highlight_symbol("● ")
-        .highlight_style(
+        .highlight_style(color_style(
+            app.colors,
             Style::default()
                 .fg(Color::Cyan)
                 .add_modifier(Modifier::BOLD),
-        );
+        ));
     frame.render_stateful_widget(list, area, &mut app.state);
 }
 
@@ -336,7 +344,7 @@ fn render_details(frame: &mut Frame<'_>, app: &PickerApp<'_>, area: Rect) {
     let mut lines = vec![
         Line::styled(
             command_display::diagnostic(candidate, &[]),
-            Style::default().fg(Color::Cyan),
+            color_style(app.colors, Style::default().fg(Color::Cyan)),
         ),
         Line::from(format!("cwd: {}", candidate.cwd.display())),
         Line::from(format!("availability: {:?}", candidate.availability)),
@@ -348,7 +356,7 @@ fn render_details(frame: &mut Frame<'_>, app: &PickerApp<'_>, area: Rect) {
                 "Query match — coverage {}/{}",
                 query.matched_meaningful_terms, query.meaningful_terms
             ),
-            Style::default().add_modifier(Modifier::BOLD),
+            color_style(app.colors, Style::default().add_modifier(Modifier::BOLD)),
         ));
         lines.extend(query.terms.iter().map(|matched| {
             Line::from(format!(
@@ -360,7 +368,7 @@ fn render_details(frame: &mut Frame<'_>, app: &PickerApp<'_>, area: Rect) {
     }
     lines.push(Line::styled(
         "Structural evidence",
-        Style::default().add_modifier(Modifier::BOLD),
+        color_style(app.colors, Style::default().add_modifier(Modifier::BOLD)),
     ));
     lines.extend(
         candidate
@@ -368,10 +376,14 @@ fn render_details(frame: &mut Frame<'_>, app: &PickerApp<'_>, area: Rect) {
             .iter()
             .map(|evidence| Line::from(format!("{:+4} {}", evidence.points, evidence.reason))),
     );
-    let availability_style = match candidate.availability {
-        Availability::Available { .. } => Style::default(),
-        Availability::MissingProgram { .. } | Availability::UnsupportedHost { .. } => {
-            Style::default().fg(Color::Yellow)
+    let availability_style = if !app.colors {
+        Style::default()
+    } else {
+        match candidate.availability {
+            Availability::Available { .. } => Style::default(),
+            Availability::MissingProgram { .. } | Availability::UnsupportedHost { .. } => {
+                Style::default().fg(Color::Yellow)
+            }
         }
     };
     frame.render_widget(
@@ -381,6 +393,14 @@ fn render_details(frame: &mut Frame<'_>, app: &PickerApp<'_>, area: Rect) {
             .block(Block::default().borders(Borders::ALL).title(" Details ")),
         area,
     );
+}
+
+fn color_style(enabled: bool, style: Style) -> Style {
+    if enabled {
+        style
+    } else {
+        Style::default()
+    }
 }
 
 #[cfg(test)]
@@ -434,7 +454,7 @@ mod tests {
     #[test]
     fn interactive_filter_uses_shared_matcher_and_clear_reveals_all() {
         let resolution = resolution();
-        let mut app = PickerApp::new(&resolution, &["beta".to_owned()], 1);
+        let mut app = PickerApp::new(&resolution, &["beta".to_owned()], 1, false);
         assert_eq!(app.visible.len(), 1);
         assert_eq!(app.selected_index(), Some(1));
         app.query.clear();
@@ -445,7 +465,7 @@ mod tests {
     #[test]
     fn control_actions_return_the_selected_candidate() {
         let resolution = resolution();
-        let mut app = PickerApp::new(&resolution, &[], 1);
+        let mut app = PickerApp::new(&resolution, &[], 1, false);
         let remembered = app.handle_key(KeyEvent::new(KeyCode::Char('r'), KeyModifiers::CONTROL));
         assert_eq!(
             remembered,
@@ -471,7 +491,7 @@ mod tests {
         let mut resolution = resolution();
         resolution.status = ResolutionStatus::HintNoMatch;
         resolution.reason = ResolutionReason::HintNoMatch;
-        let app = PickerApp::new(&resolution, &["purple-monkey".to_owned()], 1);
+        let app = PickerApp::new(&resolution, &["purple-monkey".to_owned()], 1, false);
         assert!(app.query.is_empty());
         assert_eq!(app.visible.len(), 2);
     }

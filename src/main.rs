@@ -3,9 +3,10 @@ use std::process::ExitCode;
 
 use dev_launcher::cache::{CacheLookup, QueryCacheKey};
 use dev_launcher::candidate::{Availability, Candidate};
-use dev_launcher::cli::{CacheRequest, Request, ResolveRequest};
+use dev_launcher::cli::{CacheRequest, ColorMode, Request, ResolveRequest};
 use dev_launcher::detect::{detect_all, ScanCtx};
-use dev_launcher::resolve::{Resolution, ResolutionReason, ResolutionStatus};
+use dev_launcher::query::{MatchClass, TermMatch};
+use dev_launcher::resolve::{RankedCandidate, Resolution, ResolutionReason, ResolutionStatus};
 use dev_launcher::scan::{resolve_roots, FileIndex, ScanOptions};
 use dev_launcher::ui::picker::PickerOutcome;
 
@@ -69,7 +70,7 @@ fn run_resolution(request: ResolveRequest) -> anyhow::Result<i32> {
                         eprintln!("dev: warning: could not refresh remembered choice: {error}");
                     }
                 }
-                return execute_candidate(&candidate, &request);
+                return execute_candidate(&candidate, &request, None);
             }
         }
     }
@@ -144,7 +145,16 @@ fn run_resolution(request: ResolveRequest) -> anyhow::Result<i32> {
 
     let choice = choose_candidate(&resolution, &request)?;
     let Some(choice) = choice else {
-        eprint!("{}", dev_launcher::ui::error::candidate_table(&resolution));
+        eprint!(
+            "{}",
+            dev_launcher::ui::error::candidate_table(
+                &resolution,
+                &request.invocation,
+                &roots,
+                &index,
+                &detection.diagnostics,
+            )
+        );
         return Ok(resolution_exit_code(resolution.status));
     };
     let (index_in_resolution, remember, print_only) = match choice {
@@ -177,7 +187,10 @@ fn run_resolution(request: ResolveRequest) -> anyhow::Result<i32> {
         print_shell_command(candidate, &request.invocation.passthrough)?;
         return Ok(0);
     }
-    execute_candidate(candidate, &request)
+    let decisive = (!request.invocation.hints.is_empty())
+        .then(|| decisive_match(&resolution.candidates[index_in_resolution]))
+        .flatten();
+    execute_candidate(candidate, &request, decisive)
 }
 
 fn fast_cache_allowed(request: &ResolveRequest) -> bool {
@@ -257,6 +270,7 @@ fn choose_candidate(
         resolution,
         &request.invocation.hints,
         request.invocation.chaos,
+        colors_enabled(request.color),
     ) {
         Ok(outcome) => Ok(Some(outcome)),
         Err(dev_launcher::ui::picker::PickerError::NotInteractive) => Ok(None),
@@ -267,13 +281,43 @@ fn choose_candidate(
     }
 }
 
-fn execute_candidate(candidate: &Candidate, request: &ResolveRequest) -> anyhow::Result<i32> {
-    match dev_launcher::exec::execute(candidate, &request.invocation.passthrough, request.quiet) {
+fn execute_candidate(
+    candidate: &Candidate,
+    request: &ResolveRequest,
+    decisive_match: Option<&TermMatch>,
+) -> anyhow::Result<i32> {
+    let options = dev_launcher::exec::ExecutionOptions {
+        quiet: request.quiet,
+        colors: colors_enabled(request.color),
+        decisive_match,
+    };
+    match dev_launcher::exec::execute(candidate, &request.invocation.passthrough, options) {
         Ok(code) => Ok(code),
         Err(error) => {
             eprintln!("dev: {error}");
             Ok(error.exit_code())
         }
+    }
+}
+
+fn decisive_match(ranked: &RankedCandidate) -> Option<&TermMatch> {
+    ranked.query.terms.iter().max_by(|left, right| {
+        (left.class == MatchClass::Identity)
+            .cmp(&(right.class == MatchClass::Identity))
+            .then_with(|| left.class.cmp(&right.class))
+            .then_with(|| left.quality_millis.cmp(&right.quality_millis))
+            .then_with(|| left.points.cmp(&right.points))
+    })
+}
+
+fn colors_enabled(mode: ColorMode) -> bool {
+    if std::env::var_os("NO_COLOR").is_some() {
+        return false;
+    }
+    match mode {
+        ColorMode::Always => true,
+        ColorMode::Never => false,
+        ColorMode::Auto => io::stderr().is_terminal(),
     }
 }
 

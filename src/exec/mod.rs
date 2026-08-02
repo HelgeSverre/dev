@@ -4,7 +4,15 @@ use std::path::Path;
 use std::process::Command;
 
 use crate::candidate::{Availability, Candidate};
+use crate::query::TermMatch;
 use crate::ui::command_display;
+
+#[derive(Copy, Clone, Debug)]
+pub struct ExecutionOptions<'a> {
+    pub quiet: bool,
+    pub colors: bool,
+    pub decisive_match: Option<&'a TermMatch>,
+}
 
 #[derive(Debug, thiserror::Error)]
 pub enum ExecutionError {
@@ -34,7 +42,7 @@ impl ExecutionError {
 pub fn execute(
     candidate: &Candidate,
     passthrough: &[OsString],
-    quiet: bool,
+    options: ExecutionOptions<'_>,
 ) -> Result<i32, ExecutionError> {
     let resolved_program = match &candidate.availability {
         Availability::Available { resolved_program } => resolved_program,
@@ -50,13 +58,32 @@ pub fn execute(
     };
     check_recursion(resolved_program)?;
 
-    if !quiet {
-        eprintln!(
-            "› {}  ({}, {})",
-            command_display::diagnostic(candidate, passthrough),
-            candidate.detector,
-            candidate.cwd.display()
-        );
+    if !options.quiet {
+        let command = command_display::diagnostic(candidate, passthrough);
+        if options.colors {
+            eprintln!(
+                "\x1b[36m›\x1b[0m {command}  ({}, {})",
+                candidate.detector,
+                candidate.cwd.display()
+            );
+        } else {
+            eprintln!(
+                "› {command}  ({}, {})",
+                candidate.detector,
+                candidate.cwd.display()
+            );
+        }
+        if let Some(matched) = options.decisive_match {
+            let detail = format!(
+                "  matched: {:?} -> {:?}",
+                matched.hint, matched.candidate_value
+            );
+            if options.colors {
+                eprintln!("\x1b[2m{detail}\x1b[0m");
+            } else {
+                eprintln!("{detail}");
+            }
+        }
         let _ = std::io::stderr().flush();
     }
     let mut command = Command::new(&candidate.program);

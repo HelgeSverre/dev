@@ -1679,3 +1679,71 @@ fn node_test_provider_binds_explicit_and_hinted_test_files_once() -> anyhow::Res
     ));
     Ok(())
 }
+
+#[test]
+fn empty_project_error_includes_scan_context_and_actionable_alternatives() -> anyhow::Result<()> {
+    let temp = tempfile::tempdir()?;
+    let project = temp.path().join("empty-project");
+    fs::create_dir(&project)?;
+    let mut command = cargo_bin_cmd!("dev");
+    command.args(["run", "--at"]).arg(&project);
+    command
+        .assert()
+        .code(4)
+        .stdout("")
+        .stderr(predicates::str::contains("nothing runnable found for Run"))
+        .stderr(predicates::str::contains("scanned:"))
+        .stderr(predicates::str::contains("Try:"))
+        .stderr(predicates::str::contains("dev test --at"));
+    Ok(())
+}
+
+#[test]
+fn hinted_preamble_names_decisive_match_and_honors_color_controls() -> anyhow::Result<()> {
+    let temp = tempfile::tempdir()?;
+    let project = temp.path().join("preamble-project");
+    fs::create_dir(&project)?;
+    fs::write(
+        project.join("package.json"),
+        r#"{"scripts":{"refresh-search-index":"ignored"}}"#,
+    )?;
+    let bin = fake_program(temp.path(), "npm")?;
+
+    let run = |color: &str, no_color: bool| -> anyhow::Result<std::process::Output> {
+        let mut command = cargo_bin_cmd!("dev");
+        command
+            .args(["run", "refresh-search-index", "--color", color, "--at"])
+            .arg(&project)
+            .env("PATH", &bin);
+        if no_color {
+            command.env("NO_COLOR", "1");
+        } else {
+            command.env_remove("NO_COLOR");
+        }
+        Ok(command.output()?)
+    };
+
+    let plain = run("never", false)?;
+    anyhow::ensure!(plain.status.success(), "plain execution failed: {plain:?}");
+    let plain_stderr = String::from_utf8(plain.stderr)?;
+    assert!(plain_stderr.contains("matched: \"refresh-search-index\""));
+    assert!(!plain_stderr.contains('\u{1b}'));
+
+    let colored = run("always", false)?;
+    anyhow::ensure!(
+        colored.status.success(),
+        "colored execution failed: {colored:?}"
+    );
+    assert!(colored
+        .stderr
+        .windows(5)
+        .any(|window| window == b"\x1b[36m"));
+
+    let suppressed = run("always", true)?;
+    anyhow::ensure!(
+        suppressed.status.success(),
+        "NO_COLOR execution failed: {suppressed:?}"
+    );
+    assert!(!suppressed.stderr.contains(&0x1b));
+    Ok(())
+}
