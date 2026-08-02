@@ -6,6 +6,7 @@ pub mod cli;
 pub mod dedupe;
 pub mod detect;
 pub mod diagnostic;
+pub mod doctor;
 pub mod exec;
 pub mod intent;
 pub mod path;

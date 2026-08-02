@@ -1617,3 +1617,19 @@ fn shell_candidates_respect_shebang_permissions_and_conventional_names() -> anyh
     release.assert().success().stdout("release-ran\n");
     Ok(())
 }
+
+#[test]
+fn doctor_reports_local_toolchains_without_treating_missing_tools_as_failure() -> anyhow::Result<()>
+{
+    let temp = tempfile::tempdir()?;
+    let bin = fake_program(temp.path(), "npm")?;
+    let mut command = cargo_bin_cmd!("dev");
+    command.env("PATH", &bin).arg("doctor");
+    command
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("dev doctor"))
+        .stdout(predicates::str::contains("ok npm"))
+        .stdout(predicates::str::contains("cargo     not found on PATH"));
+    Ok(())
+}

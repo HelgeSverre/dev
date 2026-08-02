@@ -36,7 +36,15 @@ fn run() -> anyhow::Result<i32> {
     match request {
         Request::Resolve(request) => run_resolution(request),
         Request::Cache(request) => run_cache(request),
+        Request::Doctor => run_doctor(),
     }
+}
+
+fn run_doctor() -> anyhow::Result<i32> {
+    let current_directory = std::env::current_dir()?;
+    let reports = dev_launcher::doctor::inspect(&current_directory);
+    print!("{}", dev_launcher::doctor::render(&reports));
+    Ok(0)
 }
 
 fn run_resolution(request: ResolveRequest) -> anyhow::Result<i32> {

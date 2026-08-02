@@ -11,6 +11,7 @@ use crate::path::logical_absolute;
 pub enum Request {
     Resolve(ResolveRequest),
     Cache(CacheRequest),
+    Doctor,
 }
 
 #[derive(Clone, Debug)]
@@ -82,6 +83,8 @@ enum RawCommand {
         #[command(subcommand)]
         command: CacheCommand,
     },
+    /// Check locally available toolchains with bounded version probes.
+    Doctor,
 }
 
 #[derive(Clone, Debug, Args)]
@@ -193,6 +196,14 @@ where
                 CacheCommand::List => Ok(Request::Cache(CacheRequest::List)),
                 CacheCommand::Clear { yes } => Ok(Request::Cache(CacheRequest::Clear { yes })),
             }
+        }
+        RawCommand::Doctor => {
+            if !passthrough.is_empty() {
+                return Err(CliError::Usage(
+                    "doctor does not accept passthrough arguments".to_owned(),
+                ));
+            }
+            Ok(Request::Doctor)
         }
     }
 }
