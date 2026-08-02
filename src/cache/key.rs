@@ -98,4 +98,12 @@ mod tests {
         assert!(matches!(unhinted.query, QueryCacheKey::Unhinted));
         assert!(matches!(filler.query, QueryCacheKey::Hinted(_)));
     }
+
+    #[test]
+    fn chaos_levels_never_share_cache_entries() {
+        let first = invocation(&["participant"]);
+        let mut second = first.clone();
+        second.chaos = 2;
+        assert_ne!(cache_key(&first, &roots()), cache_key(&second, &roots()));
+    }
 }

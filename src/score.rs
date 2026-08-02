@@ -80,6 +80,13 @@ pub fn recompute(candidate: &mut Candidate) {
             evidence.source.clone(),
         ))
     });
+    candidate.evidence.sort_by(|left, right| {
+        left.kind
+            .cmp(&right.kind)
+            .then_with(|| left.reason.cmp(&right.reason))
+            .then_with(|| left.source.cmp(&right.source))
+            .then_with(|| left.points.cmp(&right.points))
+    });
     candidate.structural_points = candidate.base_points
         + candidate
             .evidence

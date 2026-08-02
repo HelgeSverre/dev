@@ -65,7 +65,11 @@ pub trait Detector: Send + Sync {
 /// Run the static detector registry.
 #[must_use]
 pub fn detect_all(context: &ScanCtx<'_>) -> Detection {
-    let detectors: [&dyn Detector; 13] = [
+    detect_with_registry(context, &detector_registry())
+}
+
+fn detector_registry() -> [&'static dyn Detector; 13] {
+    [
         &NodeDetector,
         &CargoDetector,
         &ComposerDetector,
@@ -79,7 +83,10 @@ pub fn detect_all(context: &ScanCtx<'_>) -> Detection {
         &ShellDetector,
         &MakeDetector,
         &DockerDetector,
-    ];
+    ]
+}
+
+fn detect_with_registry(context: &ScanCtx<'_>, detectors: &[&dyn Detector]) -> Detection {
     let mut output = Detection::default();
     for detector in detectors {
         output.append(detector.detect(context));
@@ -97,4 +104,64 @@ pub fn detect_all(context: &ScanCtx<'_>) -> Detection {
             .then_with(|| left.message.cmp(&right.message))
     });
     output
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::dedupe::deduplicate;
+    use crate::intent::{Intent, Invocation, Target};
+    use crate::scan::{resolve_roots, FileIndex, ScanOptions};
+
+    use super::*;
+
+    #[test]
+    fn detector_registration_order_does_not_change_results() -> anyhow::Result<()> {
+        let temp = tempfile::tempdir()?;
+        std::fs::write(
+            temp.path().join("package.json"),
+            r#"{"name":"web","scripts":{"dev":"vite"},"dependencies":{"vite":"1"}}"#,
+        )?;
+        std::fs::write(
+            temp.path().join("Cargo.toml"),
+            "[package]\nname = \"web\"\nversion = \"0.1.0\"\n",
+        )?;
+        std::fs::create_dir(temp.path().join("src"))?;
+        std::fs::write(temp.path().join("src/main.rs"), "fn main() {}\n")?;
+        let invocation = Invocation {
+            intent: Intent::Run,
+            target: Target::Directory(temp.path().to_path_buf()),
+            hints: Vec::new(),
+            passthrough: Vec::new(),
+            chaos: 0,
+        };
+        let roots = resolve_roots(&invocation.target);
+        let index = FileIndex::build(&roots, ScanOptions::default());
+        let context = ScanCtx {
+            invocation: &invocation,
+            roots: &roots,
+            index: &index,
+        };
+        let forward = detector_registry();
+        let mut reverse = detector_registry();
+        reverse.reverse();
+        let summarize = |detection: Detection| {
+            deduplicate(detection.candidates, &invocation.target)
+                .into_iter()
+                .map(|candidate| {
+                    (
+                        candidate.id,
+                        candidate.action_key,
+                        candidate.detector,
+                        candidate.structural_points,
+                        candidate.evidence,
+                    )
+                })
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(
+            summarize(detect_with_registry(&context, &forward)),
+            summarize(detect_with_registry(&context, &reverse))
+        );
+        Ok(())
+    }
 }

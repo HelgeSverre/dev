@@ -71,6 +71,8 @@ pub fn normalize_query(hints: &[String]) -> Vec<QueryTerm> {
 
 #[cfg(test)]
 mod tests {
+    use proptest::prelude::*;
+
     use super::*;
 
     #[test]
@@ -85,5 +87,20 @@ mod tests {
     fn duplicate_hints_count_once() {
         let terms = normalize_query(&["foo-bar".to_owned(), "FooBar".to_owned()]);
         assert_eq!(terms.len(), 1);
+    }
+
+    proptest! {
+        #[test]
+        fn compact_normalization_is_idempotent(value in any::<String>()) {
+            let normalized = normalize(&value);
+            prop_assert_eq!(normalize(&normalized.compact).compact, normalized.compact);
+        }
+
+        #[test]
+        fn duplicate_hints_do_not_change_normalized_query(value in any::<String>()) {
+            let once = normalize_query(std::slice::from_ref(&value));
+            let duplicate = normalize_query(&[value.clone(), value]);
+            prop_assert_eq!(once, duplicate);
+        }
     }
 }

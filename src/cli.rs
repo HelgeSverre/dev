@@ -334,6 +334,21 @@ mod tests {
     }
 
     #[test]
+    fn bare_name_parses_identically_when_no_matching_path_exists() -> anyhow::Result<()> {
+        let directory = tempfile::tempdir()?;
+        let without_path = parse_from(["dev", "run", "test"], directory.path())?;
+        std::fs::create_dir(directory.path().join("test"))?;
+        let with_path = parse_from(["dev", "run", "test"], directory.path())?;
+        let (Request::Resolve(without_path), Request::Resolve(with_path)) =
+            (without_path, with_path)
+        else {
+            anyhow::bail!("expected resolve requests");
+        };
+        assert_eq!(without_path.invocation, with_path.invocation);
+        Ok(())
+    }
+
+    #[test]
     fn delimiter_preserves_opaque_arguments() -> anyhow::Result<()> {
         let directory = tempfile::tempdir()?;
         let request = parse_from(

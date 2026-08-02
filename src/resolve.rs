@@ -364,4 +364,29 @@ mod tests {
         );
         assert_eq!(result.status, ResolutionStatus::Ambiguous);
     }
+
+    #[test]
+    fn explicit_hint_candidate_does_not_auto_run_from_scope_only() {
+        let mut candidate = available("participant-sync", 80, SelectionPolicy::ExplicitHint);
+        candidate.search.scopes.push("laravel".to_owned());
+        let result = resolve(vec![candidate], &["laravel".to_owned()], 2, false);
+        assert_eq!(result.status, ResolutionStatus::Ambiguous);
+        assert_eq!(
+            result.candidates[0].query.highest_class,
+            Some(MatchClass::Scope)
+        );
+    }
+
+    #[test]
+    fn chaos_two_does_not_relax_the_automatic_identity_gate() {
+        let result = resolve(
+            vec![available("abcdefghij", 80, SelectionPolicy::ExplicitHint)],
+            &["abcdzzzzij".to_owned()],
+            2,
+            false,
+        );
+        assert_eq!(result.status, ResolutionStatus::Ambiguous);
+        assert!(!result.candidates[0].query.terms.is_empty());
+        assert!(result.candidates[0].query.best_identity_quality < 860);
+    }
 }

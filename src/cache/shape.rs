@@ -167,3 +167,58 @@ fn digest_file(path: &Path) -> Option<String> {
     let bytes = std::fs::read(path).ok()?;
     Some(blake3::hash(&bytes).to_hex().to_string())
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::candidate::{Candidate, SelectionPolicy};
+    use crate::intent::{Intent, Target};
+    use crate::scan::{resolve_roots, FileIndex, ScanOptions};
+
+    use super::*;
+
+    fn candidate(cwd: &Path) -> Candidate {
+        Candidate::new(
+            "test:run",
+            "node",
+            Intent::Run,
+            "run",
+            "missing-test-program",
+            Vec::new(),
+            cwd.to_path_buf(),
+            80,
+            SelectionPolicy::Automatic,
+        )
+    }
+
+    #[test]
+    fn semantic_manifest_content_changes_invalidate_snapshot() -> anyhow::Result<()> {
+        let temp = tempfile::tempdir()?;
+        let manifest = temp.path().join("package.json");
+        std::fs::write(&manifest, r#"{"scripts":{"dev":"vite"}}"#)?;
+        let target = Target::Directory(temp.path().to_path_buf());
+        let roots = resolve_roots(&target);
+        let index = FileIndex::build(&roots, ScanOptions::default());
+        index.manifests.read(&manifest)?;
+        let snapshot = ShapeSnapshot::capture(&roots, &index, &candidate(temp.path()), &target)?;
+        assert!(snapshot.is_current());
+
+        std::fs::write(&manifest, r#"{"scripts":{"dev":"next"}}"#)?;
+        assert!(!snapshot.is_current());
+        Ok(())
+    }
+
+    #[test]
+    fn adding_a_root_config_invalidates_watched_missing_path() -> anyhow::Result<()> {
+        let temp = tempfile::tempdir()?;
+        std::fs::create_dir(temp.path().join(".git"))?;
+        let target = Target::Directory(temp.path().to_path_buf());
+        let roots = resolve_roots(&target);
+        let index = FileIndex::build(&roots, ScanOptions::default());
+        let snapshot = ShapeSnapshot::capture(&roots, &index, &candidate(temp.path()), &target)?;
+        assert!(snapshot.is_current());
+
+        std::fs::write(temp.path().join("package.json"), "{}")?;
+        assert!(!snapshot.is_current());
+        Ok(())
+    }
+}

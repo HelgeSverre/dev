@@ -59,12 +59,13 @@ pub fn deduplicate(candidates: Vec<Candidate>, target: &Target) -> Vec<Candidate
 }
 
 fn merge_into(existing: &mut Candidate, incoming: Candidate) {
+    let use_incoming_metadata = preferred_metadata(&incoming, existing);
     existing.base_points = existing.base_points.max(incoming.base_points);
     existing.selection = existing.selection.strictest(incoming.selection);
     existing.evidence.extend(incoming.evidence);
     merge_search(&mut existing.search, incoming.search);
 
-    if detector_specificity(incoming.detector) > detector_specificity(existing.detector) {
+    if use_incoming_metadata {
         existing.detector = incoming.detector;
         existing.action_key = incoming.action_key;
         existing.action_name = incoming.action_name;
@@ -73,6 +74,14 @@ fn merge_into(existing: &mut Candidate, incoming: Candidate) {
         existing.lifecycle = incoming.lifecycle;
         existing.origin = incoming.origin;
     }
+}
+
+fn preferred_metadata(incoming: &Candidate, existing: &Candidate) -> bool {
+    detector_specificity(incoming.detector)
+        .cmp(&detector_specificity(existing.detector))
+        .then_with(|| existing.detector.cmp(incoming.detector))
+        .then_with(|| existing.action_key.cmp(&incoming.action_key))
+        .is_gt()
 }
 
 fn merge_search(existing: &mut SearchDocument, incoming: SearchDocument) {
@@ -144,5 +153,17 @@ mod tests {
         assert_eq!(twice.len(), 1);
         assert_eq!(once[0].id, twice[0].id);
         assert_eq!(once[0].structural_points, twice[0].structural_points);
+    }
+
+    #[test]
+    fn dedupe_metadata_and_evidence_are_input_order_independent() {
+        let target = Target::Directory(PathBuf::from("/tmp"));
+        let forward = deduplicate(vec![candidate("node", 80), candidate("vite", 90)], &target);
+        let reverse = deduplicate(vec![candidate("vite", 90), candidate("node", 80)], &target);
+        assert_eq!(forward[0].id, reverse[0].id);
+        assert_eq!(forward[0].detector, reverse[0].detector);
+        assert_eq!(forward[0].action_key, reverse[0].action_key);
+        assert_eq!(forward[0].evidence, reverse[0].evidence);
+        assert_eq!(forward[0].structural_points, reverse[0].structural_points);
     }
 }
