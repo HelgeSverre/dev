@@ -24,6 +24,17 @@ jobs:
       - name: Enforce detector contracts
         run: cargo nextest run --locked --test detector_contract_test
 
+  performance:
+    name: Performance ceilings
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build release launcher
+        run: cargo build --release --locked --bin dev
+      - name: Enforce release benchmark ceilings
+        run: cargo bench --locked --bench performance
+
   quality:
     runs-on: ubuntu-latest
     steps:

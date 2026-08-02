@@ -72,7 +72,7 @@ Before opening a pull request:
 
 CI repeats formatting and Clippy checks, runs nextest on Linux, macOS, and
 Windows, validates the Rust 1.85 minimum supported version, and exposes the
-detector contract as a separately named required check.
+detector contract and release performance ceilings as separately named checks.
 
 ## Adding or changing a detector
 

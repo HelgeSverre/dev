@@ -39,3 +39,10 @@ structural scan and 788.463 ms p95 for the chaos-1 hinted CLI path; the final
 implementation measures 46.606 ms and 247.159 ms respectively. No benchmark
 ceiling regressed. Clipboard startup is not measured because this build has no
 clipboard feature; the minimal build has no desktop dependency.
+
+The remembered benchmark inserts a synthetic candidate through the production
+`cache::remember` API, then measures production cache lookup, shape validation,
+and candidate reconstruction. It does not measure the complete CLI fast path.
+CI runs this same release suite on Linux to enforce the ceilings; the table
+above remains the recorded M2 baseline rather than pretending unlike machines
+produce directly comparable timings.
