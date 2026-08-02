@@ -2,9 +2,14 @@ mod artisan;
 mod cargo;
 mod composer;
 mod dart;
+mod docker;
 mod go;
+mod make;
 mod node;
 mod php_file;
+mod python_file;
+mod script;
+mod shell;
 mod swift;
 mod zig;
 
@@ -17,9 +22,13 @@ pub use artisan::ArtisanDetector;
 pub use cargo::CargoDetector;
 pub use composer::ComposerDetector;
 pub use dart::DartDetector;
+pub use docker::DockerDetector;
 pub use go::GoDetector;
+pub use make::MakeDetector;
 pub use node::NodeDetector;
 pub use php_file::PhpFileDetector;
+pub use python_file::PythonFileDetector;
+pub use shell::ShellDetector;
 pub use swift::SwiftDetector;
 pub use zig::ZigDetector;
 
@@ -54,7 +63,7 @@ pub trait Detector: Send + Sync {
 /// Run the static detector registry.
 #[must_use]
 pub fn detect_all(context: &ScanCtx<'_>) -> Detection {
-    let detectors: [&dyn Detector; 9] = [
+    let detectors: [&dyn Detector; 13] = [
         &NodeDetector,
         &CargoDetector,
         &ComposerDetector,
@@ -64,6 +73,10 @@ pub fn detect_all(context: &ScanCtx<'_>) -> Detection {
         &ZigDetector,
         &SwiftDetector,
         &DartDetector,
+        &PythonFileDetector,
+        &ShellDetector,
+        &MakeDetector,
+        &DockerDetector,
     ];
     let mut output = Detection::default();
     for detector in detectors {

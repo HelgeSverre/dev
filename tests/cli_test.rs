@@ -1406,3 +1406,214 @@ fn dart_package_and_explicit_test_file_use_current_cli_forms() -> anyhow::Result
     ));
     Ok(())
 }
+
+#[test]
+fn python_files_prefer_active_virtual_environment_then_python3() -> anyhow::Result<()> {
+    let temp = tempfile::tempdir()?;
+    let project = temp.path().join("python-files");
+    let script = project.join("tools/report.py");
+    fs::create_dir_all(script.parent().unwrap_or(&project))?;
+    fs::write(&script, "print('report')\n")?;
+
+    let virtual_environment = temp.path().join("active-venv");
+    let virtual_bin = fake_program(&virtual_environment, "python")?;
+    let mut explicit = cargo_bin_cmd!("dev");
+    explicit
+        .args(["run", "--quiet", "--at"])
+        .arg(&script)
+        .env("VIRTUAL_ENV", &virtual_environment)
+        .env("PATH", &virtual_bin);
+    explicit.assert().success().stdout(format!(
+        "cwd=<{}>\narg0=<report.py>\n",
+        script.parent().unwrap_or(&project).display()
+    ));
+
+    let python3_bin = fake_program(temp.path(), "python3")?;
+    let mut hinted = cargo_bin_cmd!("dev");
+    hinted
+        .args(["run", "report", "--quiet", "--at"])
+        .arg(&project)
+        .env_remove("VIRTUAL_ENV")
+        .env("PATH", &python3_bin);
+    hinted.assert().success().stdout(format!(
+        "cwd=<{}>\narg0=<report.py>\n",
+        script.parent().unwrap_or(&project).display()
+    ));
+    Ok(())
+}
+
+#[test]
+fn make_scanner_maps_conventional_and_explicit_literal_targets() -> anyhow::Result<()> {
+    let temp = tempfile::tempdir()?;
+    let project = temp.path().join("make-project");
+    fs::create_dir_all(project.join("src"))?;
+    fs::write(
+        project.join("Makefile"),
+        "## Local server\ndev: ## Serve locally\n\t@echo ignored\nbuild:\ntest:\ndeploy:\n%.o: %.c\n.PHONY: dev build test deploy\n",
+    )?;
+    let bin = fake_program(temp.path(), "make")?;
+
+    for (intent, target) in [("run", "dev"), ("build", "build"), ("test", "test")] {
+        let mut command = cargo_bin_cmd!("dev");
+        command
+            .args([intent, "--quiet", "--at"])
+            .arg(project.join("src"))
+            .env("PATH", &bin);
+        command
+            .assert()
+            .success()
+            .stdout(format!("cwd=<{}>\narg0=<{target}>\n", project.display()));
+    }
+
+    let mut deploy = cargo_bin_cmd!("dev");
+    deploy
+        .args(["run", "deploy", "--quiet", "--at"])
+        .arg(&project)
+        .env("PATH", &bin);
+    deploy
+        .assert()
+        .success()
+        .stdout(format!("cwd=<{}>\narg0=<deploy>\n", project.display()));
+    Ok(())
+}
+
+#[test]
+fn compose_is_hint_only_but_service_identity_can_beat_native_default() -> anyhow::Result<()> {
+    let temp = tempfile::tempdir()?;
+    let project = temp.path().join("compose-and-node");
+    fs::create_dir(&project)?;
+    fs::write(
+        project.join("package.json"),
+        r#"{"scripts":{"dev":"vite"}}"#,
+    )?;
+    fs::write(
+        project.join("compose.yaml"),
+        "services:\n  api:\n    image: example/api\n  database:\n    image: postgres\n",
+    )?;
+    fs::write(project.join("Dockerfile"), "FROM scratch\n")?;
+    let bin = fake_program(temp.path(), "npm")?;
+    fake_program(temp.path(), "docker")?;
+
+    let mut unhinted = cargo_bin_cmd!("dev");
+    unhinted
+        .args(["run", "--quiet", "--at"])
+        .arg(&project)
+        .env("PATH", &bin);
+    unhinted.assert().success().stdout(format!(
+        "cwd=<{}>\narg0=<run>\narg1=<dev>\n",
+        project.display()
+    ));
+
+    let mut service = cargo_bin_cmd!("dev");
+    service
+        .args(["run", "api", "--quiet", "--at"])
+        .arg(&project)
+        .env("PATH", &bin);
+    service.assert().success().stdout(format!(
+        "cwd=<{}>\narg0=<compose>\narg1=<up>\narg2=<api>\n",
+        project.display()
+    ));
+
+    let mut build = cargo_bin_cmd!("dev");
+    build
+        .args(["build", "dockerfile", "--quiet", "--at"])
+        .arg(&project)
+        .env("PATH", &bin);
+    build.assert().success().stdout(format!(
+        "cwd=<{}>\narg0=<build>\narg1=<.>\n",
+        project.display()
+    ));
+    Ok(())
+}
+
+#[test]
+fn every_standard_compose_filename_is_recognized() -> anyhow::Result<()> {
+    let temp = tempfile::tempdir()?;
+    let bin = fake_program(temp.path(), "docker")?;
+    for filename in [
+        "compose.yml",
+        "compose.yaml",
+        "docker-compose.yml",
+        "docker-compose.yaml",
+    ] {
+        let project = temp.path().join(filename.replace('.', "-"));
+        fs::create_dir(&project)?;
+        fs::write(
+            project.join(filename),
+            "services:\n  web:\n    image: example/web\n",
+        )?;
+        let mut command = cargo_bin_cmd!("dev");
+        let output = command
+            .args(["run", "compose", "--json", "--at"])
+            .arg(&project)
+            .env("PATH", &bin)
+            .output()?;
+        anyhow::ensure!(
+            output.status.success(),
+            "{filename} was not recognized: {output:?}"
+        );
+        let json: serde_json::Value = serde_json::from_slice(&output.stdout)?;
+        assert!(json["candidates"].as_array().is_some_and(|candidates| {
+            candidates.iter().any(|candidate| {
+                candidate["structural_evidence"]
+                    .as_array()
+                    .is_some_and(|evidence| {
+                        evidence.iter().any(|item| {
+                            item["source"]
+                                .as_str()
+                                .is_some_and(|source| source == filename)
+                        })
+                    })
+            })
+        }));
+    }
+    Ok(())
+}
+
+#[test]
+fn shell_candidates_respect_shebang_permissions_and_conventional_names() -> anyhow::Result<()> {
+    let temp = tempfile::tempdir()?;
+    let project = temp.path().join("shell-project");
+    let scripts = project.join("scripts");
+    fs::create_dir_all(&scripts)?;
+    let interpreted = scripts.join("probe");
+    fs::write(
+        &interpreted,
+        "#!/usr/bin/env bash -e\nprintf 'ignored\\n'\n",
+    )?;
+    let conventional = project.join("test.sh");
+    fs::write(&conventional, "printf 'ignored\\n'\n")?;
+    let executable = scripts.join("release");
+    fs::write(&executable, "#!/bin/sh\nprintf 'release-ran\\n'\n")?;
+    let mut permissions = executable.metadata()?.permissions();
+    permissions.set_mode(0o755);
+    fs::set_permissions(&executable, permissions)?;
+    let bin = fake_program(temp.path(), "bash")?;
+    fake_program(temp.path(), "sh")?;
+
+    let mut shebang = cargo_bin_cmd!("dev");
+    shebang
+        .args(["run", "--quiet", "--at"])
+        .arg(&interpreted)
+        .env("PATH", &bin);
+    shebang.assert().success().stdout(format!(
+        "cwd=<{}>\narg0=<-e>\narg1=<probe>\n",
+        scripts.display()
+    ));
+
+    let mut test = cargo_bin_cmd!("dev");
+    test.args(["test", "--quiet", "--at"])
+        .arg(&project)
+        .env("PATH", &bin);
+    test.assert()
+        .success()
+        .stdout(format!("cwd=<{}>\narg0=<test.sh>\n", project.display()));
+
+    let mut release = cargo_bin_cmd!("dev");
+    release
+        .args(["run", "release", "--quiet", "--at"])
+        .arg(&project)
+        .env("PATH", &bin);
+    release.assert().success().stdout("release-ran\n");
+    Ok(())
+}

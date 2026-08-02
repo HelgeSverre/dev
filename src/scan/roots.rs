@@ -13,6 +13,14 @@ const PACKAGE_MARKERS: &[&str] = &[
     "build.zig",
     "Package.swift",
     "pubspec.yaml",
+    "GNUmakefile",
+    "makefile",
+    "Makefile",
+    "compose.yaml",
+    "compose.yml",
+    "docker-compose.yaml",
+    "docker-compose.yml",
+    "Dockerfile",
 ];
 
 #[derive(Clone, Debug, Eq, PartialEq)]
