@@ -63,7 +63,7 @@ clippy:
 # Type-check every target.
 [group('qa')]
 check:
-    cargo check --all-targets
+    cargo check --locked --all-targets
 
 # Full non-mutating quality gate.
 [group('qa')]
