@@ -168,6 +168,11 @@ pub struct Candidate {
     pub program: OsString,
     pub args: Vec<OsString>,
     pub cwd: PathBuf,
+    /// Directory the candidate belongs to for proximity scoring.
+    ///
+    /// This differs from `cwd` for commands that execute from a workspace root
+    /// while selecting a nested member through package-manager arguments.
+    pub scope_root: PathBuf,
     pub env: BTreeMap<OsString, OsString>,
     pub passthrough: PassthroughStyle,
     pub lifecycle: Lifecycle,
@@ -205,6 +210,7 @@ impl Candidate {
             action_name: action_name.into(),
             program: program.into(),
             args,
+            scope_root: cwd.clone(),
             cwd,
             env: BTreeMap::new(),
             passthrough: PassthroughStyle::Append,

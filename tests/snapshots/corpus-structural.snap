@@ -273,14 +273,16 @@ resolution status=NoCandidates reason=NoCandidates selected=-
 roots package=. workspace=. scan=.
 scan structural=4 targets=0 truncated=false
 resolution status=Resolved reason=UniqueAutomaticCandidate selected=node:@acme/web:script:dev
-candidate action=node:@acme/web:script:dev detector=node origin=Declared policy=Automatic base=95 total=98 distance=2 cwd=apps/web program="npm" args=["run","dev"] availability=available
+candidate action=node:@acme/web:script:dev detector=node origin=Declared policy=Automatic base=95 total=98 distance=2 cwd=. program="npm" args=["run","dev","--workspace","@acme/web"] availability=available
   evidence kind=Manifest points=0 source=apps/web/package.json reason=package.json declares script `dev`
   evidence kind=Proximity points=8 source=apps/web reason=2 directory edges from target
   evidence kind=Rule points=-5 source=- reason=defaulted to npm because no package-manager marker was found
-candidate action=node:@acme/web:script:test detector=node origin=Declared policy=ExplicitHint base=15 total=18 distance=2 cwd=apps/web program="npm" args=["run","test"] availability=available
+  evidence kind=Rule points=0 source=apps/web/package.json reason=workspace member `@acme/web` at `apps/web` selected with npm --workspace
+candidate action=node:@acme/web:script:test detector=node origin=Declared policy=ExplicitHint base=15 total=18 distance=2 cwd=. program="npm" args=["run","test","--workspace","@acme/web"] availability=available
   evidence kind=Manifest points=0 source=apps/web/package.json reason=package.json declares script `test`
   evidence kind=Proximity points=8 source=apps/web reason=2 directory edges from target
   evidence kind=Rule points=-5 source=- reason=defaulted to npm because no package-manager marker was found
+  evidence kind=Rule points=0 source=apps/web/package.json reason=workspace member `@acme/web` at `apps/web` selected with npm --workspace
 
 ## 09-npm-workspace-named/build
 roots package=. workspace=. scan=.
@@ -291,32 +293,36 @@ resolution status=NoCandidates reason=NoCandidates selected=-
 roots package=. workspace=. scan=.
 scan structural=4 targets=0 truncated=false
 resolution status=Resolved reason=UniqueAutomaticCandidate selected=node:@acme/web:script:test
-candidate action=node:@acme/web:script:test detector=node origin=Declared policy=Automatic base=95 total=98 distance=2 cwd=apps/web program="npm" args=["run","test"] availability=available
+candidate action=node:@acme/web:script:test detector=node origin=Declared policy=Automatic base=95 total=98 distance=2 cwd=. program="npm" args=["run","test","--workspace","@acme/web"] availability=available
   evidence kind=Manifest points=0 source=apps/web/package.json reason=package.json declares script `test`
   evidence kind=Proximity points=8 source=apps/web reason=2 directory edges from target
   evidence kind=Rule points=-5 source=- reason=defaulted to npm because no package-manager marker was found
+  evidence kind=Rule points=0 source=apps/web/package.json reason=workspace member `@acme/web` at `apps/web` selected with npm --workspace
 
 ## 10-npm-workspace-unnamed/run
 roots package=. workspace=. scan=.
 scan structural=4 targets=0 truncated=false
-resolution status=Resolved reason=UniqueAutomaticCandidate selected=node:web:script:dev
-candidate action=node:web:script:dev detector=node origin=Declared policy=Automatic base=95 total=98 distance=2 cwd=apps/web program="npm" args=["run","dev"] availability=available
+resolution status=Resolved reason=UniqueAutomaticCandidate selected=node:apps:web:script:dev
+candidate action=node:apps:web:script:dev detector=node origin=Declared policy=Automatic base=95 total=98 distance=2 cwd=. program="npm" args=["run","dev","--workspace","./apps/web"] availability=available
   evidence kind=Manifest points=0 source=apps/web/package.json reason=package.json declares script `dev`
   evidence kind=Proximity points=8 source=apps/web reason=2 directory edges from target
   evidence kind=Rule points=-5 source=- reason=defaulted to npm because no package-manager marker was found
-candidate action=node:web:script:build detector=node origin=Declared policy=ExplicitHint base=15 total=18 distance=2 cwd=apps/web program="npm" args=["run","build"] availability=available
+  evidence kind=Rule points=0 source=apps/web/package.json reason=unnamed workspace member `apps/web` selected with npm --workspace
+candidate action=node:apps:web:script:build detector=node origin=Declared policy=ExplicitHint base=15 total=18 distance=2 cwd=. program="npm" args=["run","build","--workspace","./apps/web"] availability=available
   evidence kind=Manifest points=0 source=apps/web/package.json reason=package.json declares script `build`
   evidence kind=Proximity points=8 source=apps/web reason=2 directory edges from target
   evidence kind=Rule points=-5 source=- reason=defaulted to npm because no package-manager marker was found
+  evidence kind=Rule points=0 source=apps/web/package.json reason=unnamed workspace member `apps/web` selected with npm --workspace
 
 ## 10-npm-workspace-unnamed/build
 roots package=. workspace=. scan=.
 scan structural=4 targets=0 truncated=false
-resolution status=Resolved reason=UniqueAutomaticCandidate selected=node:web:script:build
-candidate action=node:web:script:build detector=node origin=Declared policy=Automatic base=95 total=98 distance=2 cwd=apps/web program="npm" args=["run","build"] availability=available
+resolution status=Resolved reason=UniqueAutomaticCandidate selected=node:apps:web:script:build
+candidate action=node:apps:web:script:build detector=node origin=Declared policy=Automatic base=95 total=98 distance=2 cwd=. program="npm" args=["run","build","--workspace","./apps/web"] availability=available
   evidence kind=Manifest points=0 source=apps/web/package.json reason=package.json declares script `build`
   evidence kind=Proximity points=8 source=apps/web reason=2 directory edges from target
   evidence kind=Rule points=-5 source=- reason=defaulted to npm because no package-manager marker was found
+  evidence kind=Rule points=0 source=apps/web/package.json reason=unnamed workspace member `apps/web` selected with npm --workspace
 
 ## 10-npm-workspace-unnamed/test
 roots package=. workspace=. scan=.
@@ -326,15 +332,12 @@ resolution status=NoCandidates reason=NoCandidates selected=-
 ## 11-pnpm-workspace/run
 roots package=. workspace=. scan=.
 scan structural=8 targets=0 truncated=false
-resolution status=Ambiguous reason=CloseCandidates selected=-
-candidate action=node:ignored:script:dev detector=node origin=Declared policy=Automatic base=95 total=103 distance=2 cwd=apps/ignored program="pnpm" args=["run","dev"] availability=available
-  evidence kind=Manifest points=0 source=apps/ignored/package.json reason=package.json declares script `dev`
-  evidence kind=Proximity points=8 source=apps/ignored reason=2 directory edges from target
-  evidence kind=Rule points=0 source=- reason=selected by <fixture>/pnpm-lock.yaml
-candidate action=node:web:script:dev detector=node origin=Declared policy=Automatic base=95 total=103 distance=2 cwd=apps/web program="pnpm" args=["run","dev"] availability=available
+resolution status=Resolved reason=UniqueAutomaticCandidate selected=node:web:script:dev
+candidate action=node:web:script:dev detector=node origin=Declared policy=Automatic base=95 total=103 distance=2 cwd=. program="pnpm" args=["--filter","web","run","dev"] availability=available
   evidence kind=Manifest points=0 source=apps/web/package.json reason=package.json declares script `dev`
   evidence kind=Proximity points=8 source=apps/web reason=2 directory edges from target
   evidence kind=Rule points=0 source=- reason=selected by <fixture>/pnpm-lock.yaml
+  evidence kind=Rule points=0 source=apps/web/package.json reason=workspace member `web` at `apps/web` selected with pnpm --filter
 
 ## 11-pnpm-workspace/build
 roots package=. workspace=. scan=.

@@ -307,6 +307,25 @@ fn workspace_manifest_patterns(root: &Path) -> WorkspacePatterns {
             }
         }
     }
+    let node = node_workspace_manifest_patterns(root);
+    output.includes.extend(node.includes);
+    output.excludes.extend(node.excludes);
+    if let Ok(contents) = std::fs::read_to_string(root.join("go.work")) {
+        output.includes.extend(
+            go_work_uses(&contents)
+                .into_iter()
+                .map(|directory| append_manifest(&directory, "go.mod")),
+        );
+    }
+    output.includes.sort();
+    output.includes.dedup();
+    output.excludes.sort();
+    output.excludes.dedup();
+    output
+}
+
+fn node_workspace_manifest_patterns(root: &Path) -> WorkspacePatterns {
+    let mut output = WorkspacePatterns::default();
     if let Ok(contents) = std::fs::read_to_string(root.join("package.json")) {
         if let Ok(manifest) = serde_json::from_str::<serde_json::Value>(&contents) {
             let workspaces = manifest.get("workspaces");
@@ -342,18 +361,32 @@ fn workspace_manifest_patterns(root: &Path) -> WorkspacePatterns {
             }
         }
     }
-    if let Ok(contents) = std::fs::read_to_string(root.join("go.work")) {
-        output.includes.extend(
-            go_work_uses(&contents)
-                .into_iter()
-                .map(|directory| append_manifest(&directory, "go.mod")),
-        );
-    }
     output.includes.sort();
     output.includes.dedup();
     output.excludes.sort();
     output.excludes.dedup();
     output
+}
+
+#[must_use]
+pub(crate) fn has_declared_node_workspace(root: &Path) -> bool {
+    !node_workspace_manifest_patterns(root).includes.is_empty()
+}
+
+#[must_use]
+pub(crate) fn is_declared_node_workspace_manifest(root: &Path, relative_manifest: &Path) -> bool {
+    matches_workspace_patterns(node_workspace_manifest_patterns(root), relative_manifest)
+}
+
+fn matches_workspace_patterns(patterns: WorkspacePatterns, relative_manifest: &Path) -> bool {
+    let Ok(includes) = compile_globs(&patterns.includes) else {
+        return false;
+    };
+    let excludes = compile_globs(&patterns.excludes).ok();
+    includes.is_match(relative_manifest)
+        && !excludes
+            .as_ref()
+            .is_some_and(|patterns| patterns.is_match(relative_manifest))
 }
 
 fn go_work_uses(contents: &str) -> Vec<String> {

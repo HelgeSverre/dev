@@ -291,11 +291,75 @@ fn node_workspace_member_uses_the_workspace_package_manager() -> anyhow::Result<
     let json: serde_json::Value = serde_json::from_slice(&output.stdout)?;
     assert_eq!(json["resolution"]["status"], "resolved");
     assert_eq!(json["candidates"][0]["program"]["display"], "pnpm");
+    assert_eq!(
+        json["candidates"][0]["cwd"],
+        project.to_string_lossy().as_ref()
+    );
+    let arguments = json["candidates"][0]["args"]
+        .as_array()
+        .context("candidate args must be an array")?
+        .iter()
+        .map(|argument| argument["display"].as_str().unwrap_or_default())
+        .collect::<Vec<_>>();
+    assert_eq!(arguments, ["--filter", "web", "run", "dev"]);
     assert!(json["candidates"][0]["structural_evidence"]
         .as_array()
         .is_some_and(|evidence| evidence.iter().any(|item| item["reason"]
             .as_str()
             .is_some_and(|reason| reason.contains("pnpm-lock.yaml")))));
+    Ok(())
+}
+
+#[test]
+fn excluded_pnpm_workspace_package_is_not_treated_as_a_member() -> anyhow::Result<()> {
+    let temp = tempfile::tempdir()?;
+    let project = temp.path().join("pnpm-exclusion");
+    let included = project.join("apps/web");
+    let excluded = project.join("apps/ignored");
+    fs::create_dir_all(&included)?;
+    fs::create_dir_all(&excluded)?;
+    fs::write(project.join("package.json"), r#"{"private":true}"#)?;
+    fs::write(project.join("pnpm-lock.yaml"), "lockfileVersion: '9.0'\n")?;
+    fs::write(
+        project.join("pnpm-workspace.yaml"),
+        "packages:\n  - apps/*\n  - '!apps/ignored'\n",
+    )?;
+    fs::write(
+        included.join("package.json"),
+        r#"{"name":"web","scripts":{"dev":"probe"}}"#,
+    )?;
+    fs::write(
+        excluded.join("package.json"),
+        r#"{"name":"ignored","scripts":{"dev":"probe"}}"#,
+    )?;
+    let bin = fake_program(temp.path(), "pnpm")?;
+    let _ = fake_program(temp.path(), "npm")?;
+
+    let mut from_root = cargo_bin_cmd!("dev");
+    let output = from_root
+        .args(["run", "--json", "--at"])
+        .arg(&project)
+        .env("PATH", &bin)
+        .output()?;
+    anyhow::ensure!(output.status.success(), "root discovery failed: {output:?}");
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout)?;
+    let candidates = json["candidates"]
+        .as_array()
+        .context("candidates must be an array")?;
+    assert_eq!(candidates.len(), 1);
+    assert_eq!(candidates[0]["action_key"], "node:web:script:dev");
+
+    let mut from_excluded = cargo_bin_cmd!("dev");
+    from_excluded
+        .args(["run", "--quiet", "--at"])
+        .arg(&excluded)
+        .env("PATH", &bin)
+        .assert()
+        .success()
+        .stdout(format!(
+            "cwd=<{}>\narg0=<run>\narg1=<dev>\n",
+            excluded.display()
+        ));
     Ok(())
 }
 
@@ -698,6 +762,106 @@ fn package_managers_receive_their_declared_passthrough_shape() -> anyhow::Result
             assert!(stdout.contains("arg3=<value>"), "{manager}: {stdout}");
             assert!(!stdout.contains("arg4="), "{manager}: {stdout}");
         }
+    }
+    Ok(())
+}
+
+#[test]
+fn package_managers_use_their_documented_workspace_selector_order() -> anyhow::Result<()> {
+    let cases: [(&str, &str, Option<&str>, &[&str]); 8] = [
+        (
+            "npm",
+            "11.16.0",
+            Some("@acme/web"),
+            &["run", "dev", "--workspace", "@acme/web", "--", "--flag"],
+        ),
+        (
+            "npm",
+            "11.16.0",
+            None,
+            &["run", "dev", "--workspace", "./apps/web", "--", "--flag"],
+        ),
+        (
+            "pnpm",
+            "11.15.1",
+            Some("@acme/web"),
+            &["--filter", "@acme/web", "run", "dev", "--", "--flag"],
+        ),
+        (
+            "pnpm",
+            "11.15.1",
+            None,
+            &["--filter", "./apps/web", "run", "dev", "--", "--flag"],
+        ),
+        (
+            "yarn",
+            "4.9.2",
+            Some("@acme/web"),
+            &["workspace", "@acme/web", "run", "dev", "--flag"],
+        ),
+        (
+            "yarn",
+            "4.9.2",
+            None,
+            &["--cwd", "./apps/web", "run", "dev", "--flag"],
+        ),
+        (
+            "bun",
+            "1.3.14",
+            Some("@acme/web"),
+            &["run", "--filter", "@acme/web", "dev", "--flag"],
+        ),
+        (
+            "bun",
+            "1.3.14",
+            None,
+            &["run", "--filter", "./apps/web", "dev", "--flag"],
+        ),
+    ];
+
+    for (manager, version, member_name, expected_arguments) in cases {
+        let temp = tempfile::tempdir()?;
+        let project = temp.path().join(format!(
+            "{manager}-{}-workspace",
+            if member_name.is_some() {
+                "named"
+            } else {
+                "unnamed"
+            }
+        ));
+        let member = project.join("apps/web");
+        fs::create_dir_all(&member)?;
+        fs::write(
+            project.join("package.json"),
+            serde_json::to_vec(&serde_json::json!({
+                "private": true,
+                "packageManager": format!("{manager}@{version}"),
+                "workspaces": ["apps/*"]
+            }))?,
+        )?;
+        let mut member_manifest = serde_json::json!({"scripts": {"dev": "probe"}});
+        if let Some(name) = member_name {
+            member_manifest["name"] = serde_json::Value::String(name.to_owned());
+        }
+        fs::write(
+            member.join("package.json"),
+            serde_json::to_vec(&member_manifest)?,
+        )?;
+        let bin = fake_program(temp.path(), manager)?;
+
+        let mut command = cargo_bin_cmd!("dev");
+        let output = command
+            .args(["run", "--quiet", "--at"])
+            .arg(&member)
+            .args(["--", "--flag"])
+            .env("PATH", &bin)
+            .output()?;
+        anyhow::ensure!(output.status.success(), "{manager} case failed: {output:?}");
+        let mut expected = format!("cwd=<{}>\n", project.display());
+        for (index, argument) in expected_arguments.iter().enumerate() {
+            expected.push_str(&format!("arg{index}=<{argument}>\n"));
+        }
+        assert_eq!(String::from_utf8(output.stdout)?, expected, "{manager}");
     }
     Ok(())
 }

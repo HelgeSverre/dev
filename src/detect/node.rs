@@ -39,6 +39,57 @@ enum PackageManager {
     Bun,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct WorkspaceMember {
+    root: PathBuf,
+    relative_path: PathBuf,
+    name: Option<String>,
+}
+
+impl WorkspaceMember {
+    fn selector(&self) -> OsString {
+        self.name.as_ref().map(OsString::from).unwrap_or_else(|| {
+            PathBuf::from(".")
+                .join(&self.relative_path)
+                .into_os_string()
+        })
+    }
+
+    fn scope(&self) -> String {
+        self.name.clone().unwrap_or_else(|| {
+            self.relative_path
+                .to_string_lossy()
+                .replace(['/', '\\'], ":")
+        })
+    }
+
+    fn evidence(&self, manager: PackageManager, manifest_path: &Path) -> Evidence {
+        let member = self.name.as_ref().map_or_else(
+            || {
+                format!(
+                    "unnamed workspace member `{}`",
+                    self.relative_path.display()
+                )
+            },
+            |name| {
+                format!(
+                    "workspace member `{name}` at `{}`",
+                    self.relative_path.display()
+                )
+            },
+        );
+        Evidence {
+            kind: EvidenceKind::Rule,
+            reason: format!(
+                "{member} selected with {}",
+                manager.workspace_selector_description(self.name.is_some())
+            ),
+            points: 0,
+            source: Some(manifest_path.to_path_buf()),
+        }
+    }
+}
+
 impl PackageManager {
     fn program(self) -> &'static str {
         match self {
@@ -49,8 +100,53 @@ impl PackageManager {
         }
     }
 
-    fn script_args(self, script: &str) -> Vec<OsString> {
-        vec![OsString::from("run"), OsString::from(script)]
+    fn script_args(self, script: &str, workspace: Option<&WorkspaceMember>) -> Vec<OsString> {
+        let Some(workspace) = workspace else {
+            return vec![OsString::from("run"), OsString::from(script)];
+        };
+        let selector = workspace.selector();
+        match (self, workspace.name.is_some()) {
+            (Self::Npm, _) => vec![
+                OsString::from("run"),
+                OsString::from(script),
+                OsString::from("--workspace"),
+                selector,
+            ],
+            (Self::Pnpm, _) => vec![
+                OsString::from("--filter"),
+                selector,
+                OsString::from("run"),
+                OsString::from(script),
+            ],
+            (Self::Yarn, true) => vec![
+                OsString::from("workspace"),
+                selector,
+                OsString::from("run"),
+                OsString::from(script),
+            ],
+            (Self::Yarn, false) => vec![
+                OsString::from("--cwd"),
+                selector,
+                OsString::from("run"),
+                OsString::from(script),
+            ],
+            (Self::Bun, _) => vec![
+                OsString::from("run"),
+                OsString::from("--filter"),
+                selector,
+                OsString::from(script),
+            ],
+        }
+    }
+
+    fn workspace_selector_description(self, named: bool) -> &'static str {
+        match (self, named) {
+            (Self::Npm, _) => "npm --workspace",
+            (Self::Pnpm, _) => "pnpm --filter",
+            (Self::Yarn, true) => "yarn workspace",
+            (Self::Yarn, false) => "yarn --cwd",
+            (Self::Bun, _) => "bun --filter",
+        }
     }
 
     fn passthrough(self) -> PassthroughStyle {
@@ -192,15 +288,41 @@ impl Detector for NodeDetector {
 }
 
 fn package_manifests(context: &ScanCtx<'_>) -> Vec<PathBuf> {
+    let node_workspace_root = context
+        .roots
+        .workspace_root
+        .as_ref()
+        .filter(|root| crate::scan::index::has_declared_node_workspace(root));
     let mut paths = context
         .index
         .all_entries()
         .filter(|entry| {
-            entry.file_type == IndexedFileType::File
-                && entry
+            if entry.file_type != IndexedFileType::File
+                || !entry
                     .relative_path
                     .file_name()
                     .is_some_and(|name| name == "package.json")
+            {
+                return false;
+            }
+            let Some(workspace_root) = node_workspace_root else {
+                return true;
+            };
+            let absolute_manifest = context.roots.scan_root.join(&entry.relative_path);
+            let package_directory = absolute_manifest.parent();
+            if package_directory == Some(workspace_root.as_path())
+                || package_directory == context.roots.package_root.as_deref()
+            {
+                return true;
+            }
+            absolute_manifest
+                .strip_prefix(workspace_root)
+                .is_ok_and(|relative| {
+                    crate::scan::index::is_declared_node_workspace_manifest(
+                        workspace_root,
+                        relative,
+                    )
+                })
         })
         .map(|entry| entry.relative_path.clone())
         .collect::<Vec<_>>();
@@ -220,6 +342,11 @@ fn script_candidates(
     framework: Option<&'static str>,
     synonyms: &[&str],
 ) -> Vec<Candidate> {
+    let workspace = workspace_member(context, manifest, manifest_path, package_directory);
+    let action_scope = workspace.as_ref().map_or_else(
+        || package_scope(manifest, package_directory),
+        WorkspaceMember::scope,
+    );
     manifest
         .scripts
         .iter()
@@ -251,19 +378,20 @@ fn script_candidates(
             });
             let detector_name = detector.unwrap_or("node");
             let mut candidate = Candidate::new(
-                format!(
-                    "node:{}:script:{script}",
-                    package_scope(manifest, package_directory)
-                ),
+                format!("node:{}:script:{script}", action_scope),
                 detector_name,
                 context.invocation.intent,
                 script,
                 manager.program(),
-                manager.script_args(script),
-                package_directory.to_path_buf(),
+                manager.script_args(script, workspace.as_ref()),
+                workspace.as_ref().map_or_else(
+                    || package_directory.to_path_buf(),
+                    |member| member.root.clone(),
+                ),
                 base_points,
                 selection,
             );
+            candidate.scope_root = package_directory.to_path_buf();
             candidate.passthrough = manager.passthrough();
             candidate.lifecycle = if context.invocation.intent == Intent::Run {
                 Lifecycle::LongRunning
@@ -284,6 +412,11 @@ fn script_candidates(
                 points: 0,
                 source: Some(manifest_path.to_path_buf()),
             });
+            if let Some(workspace) = &workspace {
+                candidate
+                    .evidence
+                    .push(workspace.evidence(manager, manifest_path));
+            }
             candidate.evidence.push(Evidence {
                 kind: EvidenceKind::Rule,
                 reason: manager_reason.to_owned(),
@@ -325,7 +458,12 @@ fn script_candidates(
                     .name
                     .iter()
                     .cloned()
-                    .chain(std::iter::once(package_scope(manifest, package_directory)))
+                    .chain(std::iter::once(action_scope.clone()))
+                    .chain(
+                        workspace
+                            .iter()
+                            .map(|member| member.relative_path.to_string_lossy().into_owned()),
+                    )
                     .collect(),
                 tags: synonyms
                     .iter()
@@ -362,18 +500,50 @@ fn package_manager(
     scan_root: &Path,
 ) -> (PackageManager, String) {
     if let Some(value) = manifest.package_manager.as_deref() {
-        let name = value.split('@').next().unwrap_or(value);
-        let manager = match name {
-            "pnpm" => PackageManager::Pnpm,
-            "yarn" => PackageManager::Yarn,
-            "bun" => PackageManager::Bun,
-            _ => PackageManager::Npm,
+        return (
+            package_manager_name(value),
+            format!("selected by packageManager `{value}`"),
+        );
+    }
+    let manifest_relative = directory
+        .join("package.json")
+        .strip_prefix(scan_root)
+        .ok()
+        .map(Path::to_path_buf);
+    let manager_root = if directory != scan_root
+        && crate::scan::index::has_declared_node_workspace(scan_root)
+        && !manifest_relative.as_deref().is_some_and(|relative| {
+            crate::scan::index::is_declared_node_workspace_manifest(scan_root, relative)
+        }) {
+        directory
+    } else {
+        scan_root
+    };
+    for ancestor in directory
+        .parent()
+        .into_iter()
+        .flat_map(Path::ancestors)
+        .take_while(|ancestor| ancestor.starts_with(manager_root))
+    {
+        let manifest_path = ancestor.join("package.json");
+        let Some(value) = std::fs::read_to_string(&manifest_path)
+            .ok()
+            .and_then(|contents| serde_json::from_str::<PackageManifest>(&contents).ok())
+            .and_then(|manifest| manifest.package_manager)
+        else {
+            continue;
         };
-        return (manager, format!("selected by packageManager `{value}`"));
+        return (
+            package_manager_name(&value),
+            format!(
+                "selected by packageManager `{value}` in {}",
+                manifest_path.display()
+            ),
+        );
     }
     let ancestors = directory
         .ancestors()
-        .take_while(|ancestor| ancestor.starts_with(scan_root))
+        .take_while(|ancestor| ancestor.starts_with(manager_root))
         .collect::<Vec<_>>();
     for (filename, manager) in [
         ("bun.lock", PackageManager::Bun),
@@ -396,6 +566,38 @@ fn package_manager(
         PackageManager::Npm,
         "defaulted to npm because no package-manager marker was found".to_owned(),
     )
+}
+
+fn package_manager_name(value: &str) -> PackageManager {
+    match value.split('@').next().unwrap_or(value) {
+        "pnpm" => PackageManager::Pnpm,
+        "yarn" => PackageManager::Yarn,
+        "bun" => PackageManager::Bun,
+        _ => PackageManager::Npm,
+    }
+}
+
+fn workspace_member(
+    context: &ScanCtx<'_>,
+    manifest: &PackageManifest,
+    manifest_path: &Path,
+    package_directory: &Path,
+) -> Option<WorkspaceMember> {
+    let root = context.roots.workspace_root.as_ref()?;
+    if package_directory == root {
+        return None;
+    }
+    let absolute_manifest = context.roots.scan_root.join(manifest_path);
+    let relative_manifest = absolute_manifest.strip_prefix(root).ok()?;
+    if !crate::scan::index::is_declared_node_workspace_manifest(root, relative_manifest) {
+        return None;
+    }
+    let relative_path = package_directory.strip_prefix(root).ok()?.to_path_buf();
+    (!relative_path.as_os_str().is_empty()).then(|| WorkspaceMember {
+        root: root.clone(),
+        relative_path,
+        name: manifest.name.clone(),
+    })
 }
 
 fn framework(manifest: &PackageManifest, directory: &Path) -> Option<&'static str> {
@@ -732,8 +934,9 @@ impl TargetBinder for NodeTestBinder {
             return false;
         }
         let absolute = context.roots.scan_root.join(&target.relative_path);
-        absolute.starts_with(&base.cwd)
-            && closest_node_package(context, &absolute).as_deref() == Some(base.cwd.as_path())
+        absolute.starts_with(&base.scope_root)
+            && closest_node_package(context, &absolute).as_deref()
+                == Some(base.scope_root.as_path())
     }
 
     fn bind(
@@ -743,7 +946,7 @@ impl TargetBinder for NodeTestBinder {
         context: &ScanCtx<'_>,
     ) -> Option<Candidate> {
         let absolute = context.roots.scan_root.join(&target.relative_path);
-        let relative = absolute.strip_prefix(&base.cwd).ok()?.to_path_buf();
+        let relative = absolute.strip_prefix(&base.scope_root).ok()?.to_path_buf();
         let mut candidate = base.clone();
         candidate.args = candidate.command_with_passthrough(&[relative.as_os_str().to_owned()]);
         candidate.passthrough = PassthroughStyle::Append;
@@ -757,7 +960,10 @@ impl TargetBinder for NodeTestBinder {
             |name| name.to_string_lossy().into_owned(),
         );
         candidate.search.identities.push(identity);
-        candidate.search.target_paths.push(relative.clone());
+        candidate
+            .search
+            .target_paths
+            .push(target.relative_path.clone());
         candidate.evidence.push(Evidence {
             kind: EvidenceKind::Rule,
             reason: format!(
@@ -866,6 +1072,55 @@ mod tests {
                 .env
                 .get(&OsString::from("npm_config_verify_deps_before_run")),
             Some(&OsString::from("false"))
+        );
+    }
+
+    #[test]
+    fn workspace_script_arguments_are_manager_specific() {
+        let named = WorkspaceMember {
+            root: PathBuf::from("/workspace"),
+            relative_path: PathBuf::from("apps/web"),
+            name: Some("@acme/web".to_owned()),
+        };
+        let unnamed = WorkspaceMember {
+            name: None,
+            ..named.clone()
+        };
+        let arguments = |manager: PackageManager, member: &WorkspaceMember| {
+            manager.script_args("dev", Some(member))
+        };
+
+        assert_eq!(
+            arguments(PackageManager::Npm, &named),
+            ["run", "dev", "--workspace", "@acme/web"].map(OsString::from)
+        );
+        assert_eq!(
+            arguments(PackageManager::Npm, &unnamed),
+            ["run", "dev", "--workspace", "./apps/web"].map(OsString::from)
+        );
+        assert_eq!(
+            arguments(PackageManager::Pnpm, &named),
+            ["--filter", "@acme/web", "run", "dev"].map(OsString::from)
+        );
+        assert_eq!(
+            arguments(PackageManager::Pnpm, &unnamed),
+            ["--filter", "./apps/web", "run", "dev"].map(OsString::from)
+        );
+        assert_eq!(
+            arguments(PackageManager::Yarn, &named),
+            ["workspace", "@acme/web", "run", "dev"].map(OsString::from)
+        );
+        assert_eq!(
+            arguments(PackageManager::Yarn, &unnamed),
+            ["--cwd", "./apps/web", "run", "dev"].map(OsString::from)
+        );
+        assert_eq!(
+            arguments(PackageManager::Bun, &named),
+            ["run", "--filter", "@acme/web", "dev"].map(OsString::from)
+        );
+        assert_eq!(
+            arguments(PackageManager::Bun, &unnamed),
+            ["run", "--filter", "./apps/web", "dev"].map(OsString::from)
         );
     }
 }

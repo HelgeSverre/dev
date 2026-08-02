@@ -13,7 +13,8 @@ pub const MISSING_PROGRAM_POINTS: i32 = -50;
 
 /// Finalize availability and structural score after candidate deduplication.
 pub fn finalize(candidate: &mut Candidate, target: &Target) {
-    candidate.anchor_distance = directory_distance(target.anchor_directory(), &candidate.cwd);
+    candidate.anchor_distance =
+        directory_distance(target.anchor_directory(), &candidate.scope_root);
     if !matches!(candidate.availability, Availability::UnsupportedHost { .. }) {
         candidate.availability =
             resolve_program(&candidate.program, &candidate.cwd, &candidate.env);
@@ -34,7 +35,7 @@ pub fn finalize(candidate: &mut Candidate, target: &Target) {
                 format!("{} directory edges from target", candidate.anchor_distance)
             },
             points,
-            source: Some(candidate.cwd.clone()),
+            source: Some(candidate.scope_root.clone()),
         });
     }
 

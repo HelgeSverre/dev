@@ -69,6 +69,7 @@ fn merge_into(existing: &mut Candidate, incoming: Candidate) {
         existing.detector = incoming.detector;
         existing.action_key = incoming.action_key;
         existing.action_name = incoming.action_name;
+        existing.scope_root = incoming.scope_root;
         existing.label = incoming.label;
         existing.description = incoming.description;
         existing.lifecycle = incoming.lifecycle;
