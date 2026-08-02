@@ -40,6 +40,11 @@ run *ARGS:
 test *ARGS:
     cargo nextest run {{ ARGS }}
 
+# Enforce detector registry and discovery safety contracts.
+[group('qa')]
+detector-check:
+    cargo nextest run --locked --test detector_contract_test
+
 # Format Rust sources.
 [group('qa')]
 fmt:

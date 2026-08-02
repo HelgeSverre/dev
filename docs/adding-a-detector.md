@@ -377,6 +377,15 @@ temporary directories and cover:
 This project does not use doctests. Behavioral examples belong in unit or
 integration tests.
 
+Run `just detector-check` while editing detector code. This named CI gate
+checks that every `Detector`, `WorkspaceContributor`, `TargetBinder`, and
+`TargetRunner` implementation is registered exactly once. It also rejects
+subprocess, network, write, unbounded-walk, and unaudited direct-read APIs in
+production detector code; checks ambient environment reads against cache
+metadata; and validates required registration metadata. The gate enforces
+architectural boundaries, not detector semantics, so the behavioral tests
+below remain required.
+
 ### Structural corpus
 
 Add a small, numbered repository under

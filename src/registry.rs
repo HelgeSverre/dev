@@ -1353,7 +1353,7 @@ pub fn validate() -> Result<(), RegistryError> {
             }
         }
         for key in registration.cache_environment {
-            if key.is_empty() || key.contains(['=', '\0']) {
+            if key.is_empty() || key.contains(['=', '\0']) || key.chars().any(char::is_whitespace) {
                 return Err(RegistryError::InvalidCacheEnvironment {
                     detector: registration.id,
                     key,

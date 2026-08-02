@@ -51,6 +51,7 @@ The project requires Rust 1.85 or newer, `just`, and `cargo-nextest`.
 
 ```console
 just test       # run unit and integration tests with nextest
+just detector-check # enforce detector registration and discovery invariants
 just qa         # formatting check + Clippy -D warnings + nextest
 just bench      # release-mode performance suite
 ```
@@ -70,7 +71,8 @@ Before opening a pull request:
    both what changed and why.
 
 CI repeats formatting and Clippy checks, runs nextest on Linux, macOS, and
-Windows, and validates the Rust 1.85 minimum supported version.
+Windows, validates the Rust 1.85 minimum supported version, and exposes the
+detector contract as a separately named required check.
 
 ## Adding or changing a detector
 
