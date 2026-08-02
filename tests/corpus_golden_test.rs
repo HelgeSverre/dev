@@ -21,6 +21,12 @@ fn structural_corpus_matches_golden_and_is_repeatable() -> anyhow::Result<()> {
     let original_path = std::env::var_os("PATH");
     std::env::set_var("PATH", tool_path.path());
     let _path_guard = EnvironmentGuard::new("PATH", original_path);
+    #[cfg(windows)]
+    let _pathext_guard = {
+        let original = std::env::var_os("PATHEXT");
+        std::env::set_var("PATHEXT", ".CMD");
+        EnvironmentGuard::new("PATHEXT", original)
+    };
     let corpus = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/corpus");
     let source_fixtures = fixture_directories(&corpus)?;
     assert!(
@@ -67,8 +73,6 @@ impl Drop for EnvironmentGuard {
 }
 
 fn install_tool_stubs(directory: &Path) -> anyhow::Result<()> {
-    use std::os::unix::fs::PermissionsExt as _;
-
     let mut programs = dev_launcher::registry::tools()
         .iter()
         .map(|tool| tool.program)
@@ -79,12 +83,32 @@ fn install_tool_stubs(directory: &Path) -> anyhow::Result<()> {
     programs.sort_unstable();
     programs.dedup();
     for program in programs {
-        let stub = directory.join(program);
-        fs::write(&stub, "#!/bin/sh\nexit 0\n")?;
-        let mut permissions = stub.metadata()?.permissions();
-        permissions.set_mode(0o755);
-        fs::set_permissions(stub, permissions)?;
+        install_tool_stub(directory, program)?;
     }
+    Ok(())
+}
+
+#[cfg(unix)]
+fn install_tool_stub(directory: &Path, program: &str) -> anyhow::Result<()> {
+    use std::os::unix::fs::PermissionsExt as _;
+
+    let stub = directory.join(program);
+    fs::write(&stub, "#!/bin/sh\nexit 0\n")?;
+    let mut permissions = stub.metadata()?.permissions();
+    permissions.set_mode(0o755);
+    fs::set_permissions(stub, permissions)?;
+    Ok(())
+}
+
+#[cfg(windows)]
+fn install_tool_stub(directory: &Path, program: &str) -> anyhow::Result<()> {
+    fs::write(directory.join(format!("{program}.cmd")), "@exit /b 0\r\n")?;
+    Ok(())
+}
+
+#[cfg(not(any(unix, windows)))]
+fn install_tool_stub(directory: &Path, program: &str) -> anyhow::Result<()> {
+    fs::write(directory.join(program), "fixture\n")?;
     Ok(())
 }
 
