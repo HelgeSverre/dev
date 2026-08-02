@@ -19,6 +19,14 @@ for argument in "$@"; do
   printf 'arg%s=<%s>\n' "$index" "$argument"
   index=$((index + 1))
 done
+if [ -n "${DEV_FAKE_READ_STDIN:-}" ]; then
+  IFS= read -r line
+  printf 'stdin=<%s>\n' "$line"
+fi
+if [ -n "${DEV_FAKE_STDERR:-}" ]; then
+  printf 'child-stderr=<%s>\n' "$DEV_FAKE_STDERR" >&2
+fi
+exit "${DEV_FAKE_EXIT:-0}"
 "#,
     )?;
     let mut permissions = program.metadata()?.permissions();
@@ -283,5 +291,137 @@ fn next_start_requires_an_explicit_identity_hint() -> anyhow::Result<()> {
     assert!(start["description"]
         .as_str()
         .is_some_and(|description| description.contains("prior Next build")));
+    Ok(())
+}
+
+#[test]
+fn child_stdio_and_exit_status_are_preserved() -> anyhow::Result<()> {
+    let temp = tempfile::tempdir()?;
+    let project = temp.path().join("stdio-project");
+    fs::create_dir(&project)?;
+    fs::write(
+        project.join("package.json"),
+        r#"{"scripts":{"dev":"stdio"}}"#,
+    )?;
+    let bin = fake_program(temp.path(), "npm")?;
+
+    let mut command = cargo_bin_cmd!("dev");
+    command
+        .args(["run", "--quiet", "--at"])
+        .arg(&project)
+        .env("PATH", &bin)
+        .env("DEV_FAKE_READ_STDIN", "1")
+        .env("DEV_FAKE_STDERR", "visible")
+        .env("DEV_FAKE_EXIT", "37")
+        .write_stdin("from-parent\n");
+    command
+        .assert()
+        .code(37)
+        .stdout(predicates::str::contains("stdin=<from-parent>"))
+        .stderr("child-stderr=<visible>\n");
+    Ok(())
+}
+
+#[test]
+fn non_utf8_passthrough_bytes_reach_the_child_unchanged() -> anyhow::Result<()> {
+    use std::ffi::OsString;
+    use std::os::unix::ffi::OsStringExt;
+
+    let temp = tempfile::tempdir()?;
+    let project = temp.path().join("bytes-project");
+    fs::create_dir(&project)?;
+    fs::write(
+        project.join("package.json"),
+        r#"{"scripts":{"dev":"bytes"}}"#,
+    )?;
+    let bin = fake_program(temp.path(), "npm")?;
+    let opaque = OsString::from_vec(vec![b'f', 0x80, b'o']);
+
+    let mut command = cargo_bin_cmd!("dev");
+    let output = command
+        .args(["run", "--quiet", "--at"])
+        .arg(&project)
+        .arg("--")
+        .arg(opaque)
+        .env("PATH", &bin)
+        .output()?;
+    anyhow::ensure!(output.status.success(), "dev failed: {output:?}");
+    let mut expected = format!(
+        "cwd=<{}>\narg0=<run>\narg1=<dev>\narg2=<-->\narg3=<f",
+        project.display()
+    )
+    .into_bytes();
+    expected.extend([0x80, b'o', b'>', b'\n']);
+    assert_eq!(output.stdout, expected);
+    Ok(())
+}
+
+#[test]
+fn recursion_is_rejected_before_exec() -> anyhow::Result<()> {
+    use std::os::unix::fs::symlink;
+
+    let temp = tempfile::tempdir()?;
+    let project = temp.path().join("recursive-project");
+    let bin = temp.path().join("bin");
+    fs::create_dir(&project)?;
+    fs::create_dir(&bin)?;
+    fs::write(
+        project.join("package.json"),
+        r#"{"scripts":{"dev":"recursive"}}"#,
+    )?;
+    symlink(env!("CARGO_BIN_EXE_dev"), bin.join("npm"))?;
+
+    let mut command = cargo_bin_cmd!("dev");
+    command
+        .args(["run", "--quiet", "--at"])
+        .arg(&project)
+        .env("PATH", &bin);
+    command
+        .assert()
+        .code(1)
+        .stdout("")
+        .stderr(predicates::str::contains("refusing to recursively execute"));
+    Ok(())
+}
+
+#[test]
+fn package_managers_receive_their_declared_passthrough_shape() -> anyhow::Result<()> {
+    let cases = [
+        ("npm", "11.16.0", true),
+        ("pnpm", "11.15.1", true),
+        ("yarn", "4.9.2", false),
+        ("bun", "1.3.14", false),
+    ];
+    for (manager, version, inserts_double_dash) in cases {
+        let temp = tempfile::tempdir()?;
+        let project = temp.path().join(format!("{manager}-project"));
+        fs::create_dir(&project)?;
+        fs::write(
+            project.join("package.json"),
+            format!(r#"{{"packageManager":"{manager}@{version}","scripts":{{"dev":"probe"}}}}"#),
+        )?;
+        let bin = fake_program(temp.path(), manager)?;
+
+        let mut command = cargo_bin_cmd!("dev");
+        let output = command
+            .args(["run", "--quiet", "--at"])
+            .arg(&project)
+            .args(["--", "--flag", "value"])
+            .env("PATH", &bin)
+            .output()?;
+        anyhow::ensure!(output.status.success(), "{manager} case failed: {output:?}");
+        let stdout = String::from_utf8(output.stdout)?;
+        assert!(stdout.contains("arg0=<run>"), "{manager}: {stdout}");
+        assert!(stdout.contains("arg1=<dev>"), "{manager}: {stdout}");
+        if inserts_double_dash {
+            assert!(stdout.contains("arg2=<-->"), "{manager}: {stdout}");
+            assert!(stdout.contains("arg3=<--flag>"), "{manager}: {stdout}");
+            assert!(stdout.contains("arg4=<value>"), "{manager}: {stdout}");
+        } else {
+            assert!(stdout.contains("arg2=<--flag>"), "{manager}: {stdout}");
+            assert!(stdout.contains("arg3=<value>"), "{manager}: {stdout}");
+            assert!(!stdout.contains("arg4="), "{manager}: {stdout}");
+        }
+    }
     Ok(())
 }
