@@ -1,9 +1,12 @@
 mod artisan;
 mod cargo;
 mod composer;
+mod dart;
 mod go;
 mod node;
 mod php_file;
+mod swift;
+mod zig;
 
 use crate::candidate::Candidate;
 use crate::diagnostic::Diagnostic;
@@ -13,9 +16,12 @@ use crate::scan::{FileIndex, RootInfo};
 pub use artisan::ArtisanDetector;
 pub use cargo::CargoDetector;
 pub use composer::ComposerDetector;
+pub use dart::DartDetector;
 pub use go::GoDetector;
 pub use node::NodeDetector;
 pub use php_file::PhpFileDetector;
+pub use swift::SwiftDetector;
+pub use zig::ZigDetector;
 
 /// Read-only context shared by all detectors.
 #[derive(Debug)]
@@ -48,13 +54,16 @@ pub trait Detector: Send + Sync {
 /// Run the static detector registry.
 #[must_use]
 pub fn detect_all(context: &ScanCtx<'_>) -> Detection {
-    let detectors: [&dyn Detector; 6] = [
+    let detectors: [&dyn Detector; 9] = [
         &NodeDetector,
         &CargoDetector,
         &ComposerDetector,
         &ArtisanDetector,
         &GoDetector,
         &PhpFileDetector,
+        &ZigDetector,
+        &SwiftDetector,
+        &DartDetector,
     ];
     let mut output = Detection::default();
     for detector in detectors {

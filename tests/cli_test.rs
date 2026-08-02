@@ -1164,3 +1164,245 @@ fn standalone_php_targets_use_the_interpreter_and_hint_widening() -> anyhow::Res
     ));
     Ok(())
 }
+
+#[test]
+fn zig_build_steps_and_standalone_files_preserve_passthrough_placement() -> anyhow::Result<()> {
+    let temp = tempfile::tempdir()?;
+    let project = temp.path().join("zig-project");
+    fs::create_dir(&project)?;
+    fs::write(
+        project.join("build.zig"),
+        "const std = @import(\"std\");\npub fn build(b: *std.Build) void { _ = b; }\n",
+    )?;
+    let standalone = project.join("tools/probe.zig");
+    fs::create_dir_all(standalone.parent().unwrap_or(&project))?;
+    fs::write(&standalone, "pub fn main() void {}\n")?;
+    let bin = fake_program(temp.path(), "zig")?;
+
+    let mut run = cargo_bin_cmd!("dev");
+    run.args(["run", "--quiet", "--at"])
+        .arg(&project)
+        .args(["--", "alpha"])
+        .env("PATH", &bin);
+    run.assert().success().stdout(format!(
+        "cwd=<{}>\narg0=<build>\narg1=<run>\narg2=<-->\narg3=<alpha>\n",
+        project.display()
+    ));
+
+    let mut build = cargo_bin_cmd!("dev");
+    build
+        .args(["build", "--quiet", "--at"])
+        .arg(&project)
+        .env("PATH", &bin);
+    build
+        .assert()
+        .success()
+        .stdout(format!("cwd=<{}>\narg0=<build>\n", project.display()));
+
+    let mut test = cargo_bin_cmd!("dev");
+    test.args(["test", "--quiet", "--at"])
+        .arg(&project)
+        .env("PATH", &bin);
+    test.assert().success().stdout(format!(
+        "cwd=<{}>\narg0=<build>\narg1=<test>\n",
+        project.display()
+    ));
+
+    let mut file = cargo_bin_cmd!("dev");
+    file.args(["run", "--quiet", "--at"])
+        .arg(&standalone)
+        .env("PATH", &bin);
+    file.assert().success().stdout(format!(
+        "cwd=<{}>\narg0=<run>\narg1=<probe.zig>\n",
+        standalone.parent().unwrap_or(&project).display()
+    ));
+    Ok(())
+}
+
+#[test]
+fn swiftpm_infers_only_conventional_executable_layouts() -> anyhow::Result<()> {
+    let temp = tempfile::tempdir()?;
+    let project = temp.path().join("swift-project");
+    fs::create_dir_all(project.join("Sources/Dealer"))?;
+    fs::create_dir_all(project.join("Tests/DealerTests"))?;
+    fs::write(
+        project.join("Package.swift"),
+        "// swift-tools-version: 6.1\n",
+    )?;
+    fs::write(
+        project.join("Sources/Dealer/main.swift"),
+        "print(\"cards\")\n",
+    )?;
+    let bin = fake_program(temp.path(), "swift")?;
+
+    let mut run = cargo_bin_cmd!("dev");
+    run.args(["run", "--quiet", "--at"])
+        .arg(&project)
+        .env("PATH", &bin);
+    run.assert()
+        .success()
+        .stdout(format!("cwd=<{}>\narg0=<run>\n", project.display()));
+
+    let mut build = cargo_bin_cmd!("dev");
+    build
+        .args(["build", "--quiet", "--at"])
+        .arg(&project)
+        .env("PATH", &bin);
+    build
+        .assert()
+        .success()
+        .stdout(format!("cwd=<{}>\narg0=<build>\n", project.display()));
+
+    let mut test = cargo_bin_cmd!("dev");
+    test.args(["test", "--quiet", "--at"])
+        .arg(&project)
+        .env("PATH", &bin);
+    test.assert()
+        .success()
+        .stdout(format!("cwd=<{}>\narg0=<test>\n", project.display()));
+
+    fs::create_dir_all(project.join("Sources/Worker"))?;
+    fs::write(
+        project.join("Sources/Worker/main.swift"),
+        "print(\"working\")\n",
+    )?;
+    let mut named_run = cargo_bin_cmd!("dev");
+    named_run
+        .args(["run", "worker", "--quiet", "--at"])
+        .arg(&project)
+        .env("PATH", &bin);
+    named_run.assert().success().stdout(format!(
+        "cwd=<{}>\narg0=<run>\narg1=<Worker>\n",
+        project.display()
+    ));
+    Ok(())
+}
+
+#[test]
+fn bare_xcode_project_explains_why_no_command_was_inferred() -> anyhow::Result<()> {
+    let temp = tempfile::tempdir()?;
+    let project = temp.path().join("xcode-only");
+    fs::create_dir_all(project.join("App.xcodeproj"))?;
+    let bin = fake_program(temp.path(), "swift")?;
+
+    let mut command = cargo_bin_cmd!("dev");
+    let output = command
+        .args(["run", "--json", "--at"])
+        .arg(&project)
+        .env("PATH", &bin)
+        .output()?;
+    assert_eq!(output.status.code(), Some(4));
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout)?;
+    assert!(json["diagnostics"]
+        .as_array()
+        .is_some_and(|diagnostics| diagnostics.iter().any(|diagnostic| {
+            diagnostic["detector"] == "swift"
+                && diagnostic["message"]
+                    .as_str()
+                    .is_some_and(|message| message.contains("scheme and destination"))
+        })));
+    Ok(())
+}
+
+#[test]
+fn flutter_commands_include_device_warning_test_binding_and_host_availability() -> anyhow::Result<()>
+{
+    let temp = tempfile::tempdir()?;
+    let project = temp.path().join("flutter-project");
+    let test_file = project.join("test/widget_test.dart");
+    for directory in ["ios", "web", "windows"] {
+        fs::create_dir_all(project.join(directory))?;
+    }
+    fs::create_dir_all(test_file.parent().unwrap_or(&project))?;
+    fs::write(
+        project.join("pubspec.yaml"),
+        "name: flutter_probe\ndependencies:\n  flutter:\n    sdk: flutter\n",
+    )?;
+    fs::write(&test_file, "void main() {}\n")?;
+    let bin = fake_program(temp.path(), "flutter")?;
+
+    let mut run = cargo_bin_cmd!("dev");
+    run.args(["run", "--json", "--at"])
+        .arg(&project)
+        .env("PATH", &bin);
+    let output = run.output()?;
+    anyhow::ensure!(output.status.success(), "Flutter run failed: {output:?}");
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout)?;
+    assert_eq!(json["candidates"][0]["lifecycle"], "long_running");
+    assert!(json["candidates"][0]["description"]
+        .as_str()
+        .is_some_and(|description| description.contains("prompt")));
+
+    let mut test = cargo_bin_cmd!("dev");
+    test.args(["test", "--quiet", "--at"])
+        .arg(&test_file)
+        .env("PATH", &bin);
+    test.assert().success().stdout(format!(
+        "cwd=<{}>\narg0=<test>\narg1=<test/widget_test.dart>\n",
+        project.display()
+    ));
+
+    let mut builds = cargo_bin_cmd!("dev");
+    let output = builds
+        .args(["build", "--json", "--at"])
+        .arg(&project)
+        .env("PATH", &bin)
+        .output()?;
+    assert_eq!(output.status.code(), Some(5));
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout)?;
+    let windows = json["candidates"]
+        .as_array()
+        .and_then(|candidates| {
+            candidates
+                .iter()
+                .find(|candidate| candidate["action_key"] == "flutter:flutter_probe:windows")
+        })
+        .ok_or_else(|| anyhow::anyhow!("missing Windows Flutter build"))?;
+    if cfg!(target_os = "windows") {
+        assert_eq!(windows["availability"]["status"], "available");
+    } else {
+        assert_eq!(windows["availability"]["status"], "unsupported_host");
+    }
+    Ok(())
+}
+
+#[test]
+fn dart_package_and_explicit_test_file_use_current_cli_forms() -> anyhow::Result<()> {
+    let temp = tempfile::tempdir()?;
+    let project = temp.path().join("dart-project");
+    let test_file = project.join("test/parser_test.dart");
+    fs::create_dir_all(project.join("bin"))?;
+    fs::create_dir_all(test_file.parent().unwrap_or(&project))?;
+    fs::write(project.join("pubspec.yaml"), "name: parser_tool\n")?;
+    fs::write(project.join("bin/parser_tool.dart"), "void main() {}\n")?;
+    fs::write(&test_file, "void main() {}\n")?;
+    let bin = fake_program(temp.path(), "dart")?;
+
+    let mut run = cargo_bin_cmd!("dev");
+    run.args(["run", "--quiet", "--at"])
+        .arg(&project)
+        .env("PATH", &bin);
+    run.assert()
+        .success()
+        .stdout(format!("cwd=<{}>\narg0=<run>\n", project.display()));
+
+    let mut test = cargo_bin_cmd!("dev");
+    test.args(["test", "--quiet", "--at"])
+        .arg(&test_file)
+        .env("PATH", &bin);
+    test.assert().success().stdout(format!(
+        "cwd=<{}>\narg0=<test>\narg1=<test/parser_test.dart>\n",
+        project.display()
+    ));
+
+    let mut hinted_test = cargo_bin_cmd!("dev");
+    hinted_test
+        .args(["test", "parser", "--quiet", "--at"])
+        .arg(&project)
+        .env("PATH", &bin);
+    hinted_test.assert().success().stdout(format!(
+        "cwd=<{}>\narg0=<test>\narg1=<test/parser_test.dart>\n",
+        project.display()
+    ));
+    Ok(())
+}

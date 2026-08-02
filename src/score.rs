@@ -14,7 +14,10 @@ pub const MISSING_PROGRAM_POINTS: i32 = -50;
 /// Finalize availability and structural score after candidate deduplication.
 pub fn finalize(candidate: &mut Candidate, target: &Target) {
     candidate.anchor_distance = directory_distance(target.anchor_directory(), &candidate.cwd);
-    candidate.availability = resolve_program(&candidate.program, &candidate.cwd, &candidate.env);
+    if !matches!(candidate.availability, Availability::UnsupportedHost { .. }) {
+        candidate.availability =
+            resolve_program(&candidate.program, &candidate.cwd, &candidate.env);
+    }
     candidate.evidence.retain(|evidence| {
         !matches!(
             evidence.kind,
