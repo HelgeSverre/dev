@@ -2066,7 +2066,7 @@ fn flutter_commands_include_device_warning_test_binding_and_host_availability() 
     let temp = tempfile::tempdir()?;
     let project = temp.path().join("flutter-project");
     let test_file = project.join("test/widget_test.dart");
-    for directory in ["ios", "web", "windows"] {
+    for directory in ["android", "ios", "web", "windows"] {
         fs::create_dir_all(project.join(directory))?;
     }
     fs::create_dir_all(test_file.parent().unwrap_or(&project))?;
@@ -2074,8 +2074,14 @@ fn flutter_commands_include_device_warning_test_binding_and_host_availability() 
         project.join("pubspec.yaml"),
         "name: flutter_probe\ndependencies:\n  flutter:\n    sdk: flutter\n",
     )?;
+    fs::write(
+        project.join("android/settings.gradle"),
+        "rootProject.name = 'app'\n",
+    )?;
+    fs::write(project.join("android/build.gradle"), "plugins {}\n")?;
     fs::write(&test_file, "void main() {}\n")?;
     let bin = fake_program(temp.path(), "flutter")?;
+    let _ = fake_program(temp.path(), "gradle")?;
 
     let mut run = cargo_bin_cmd!("dev");
     run.args(["run", "--json", "--at"])
@@ -2106,6 +2112,11 @@ fn flutter_commands_include_device_warning_test_binding_and_host_availability() 
         .output()?;
     assert_eq!(output.status.code(), Some(5));
     let json: serde_json::Value = serde_json::from_slice(&output.stdout)?;
+    assert!(json["candidates"]
+        .as_array()
+        .is_some_and(|candidates| candidates
+            .iter()
+            .all(|candidate| { candidate["detector"] != "gradle" })));
     let windows = json["candidates"]
         .as_array()
         .and_then(|candidates| {
@@ -2119,6 +2130,16 @@ fn flutter_commands_include_device_warning_test_binding_and_host_availability() 
     } else {
         assert_eq!(windows["availability"]["status"], "unsupported_host");
     }
+
+    let mut android_build = cargo_bin_cmd!("dev");
+    android_build
+        .args(["build", "--quiet", "--at"])
+        .arg(project.join("android"))
+        .env("PATH", &bin);
+    android_build.assert().success().stdout(format!(
+        "cwd=<{}>\narg0=<build>\n",
+        project.join("android").display()
+    ));
     Ok(())
 }
 

@@ -28,6 +28,15 @@ struct Pubspec {
     dev_dependencies: BTreeMap<String, serde_yaml::Value>,
 }
 
+impl Pubspec {
+    fn declares_flutter(&self) -> bool {
+        self.dependencies
+            .get("flutter")
+            .or_else(|| self.dev_dependencies.get("flutter"))
+            .is_some_and(is_flutter_sdk_dependency)
+    }
+}
+
 #[derive(Clone, Debug)]
 struct DartProject {
     manifest_path: PathBuf,
@@ -114,11 +123,7 @@ fn projects(context: &ScanCtx<'_>) -> (Vec<DartProject>, Vec<Diagnostic>) {
                 continue;
             }
         };
-        let flutter = manifest
-            .dependencies
-            .get("flutter")
-            .or_else(|| manifest.dev_dependencies.get("flutter"))
-            .is_some_and(is_flutter_sdk_dependency);
+        let flutter = manifest.declares_flutter();
         projects.push(DartProject {
             directory: absolute
                 .parent()
@@ -525,6 +530,10 @@ fn is_flutter_sdk_dependency(value: &serde_yaml::Value) -> bool {
         .and_then(|mapping| mapping.get(serde_yaml::Value::String("sdk".to_owned())))
         .and_then(serde_yaml::Value::as_str)
         == Some("flutter")
+}
+
+pub(super) fn pubspec_declares_flutter(contents: &str) -> bool {
+    serde_yaml::from_str::<Pubspec>(contents).is_ok_and(|manifest| manifest.declares_flutter())
 }
 
 fn is_dart_file(entry: &IndexEntry) -> bool {

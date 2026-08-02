@@ -100,10 +100,43 @@ impl Detector for GradleDetector {
             project.application |= has_application_plugin(&contents);
         }
         for (directory, project) in projects {
+            if is_generated_flutter_android_project(context, &directory) {
+                continue;
+            }
             emit_project(context, &directory, project, &mut output);
         }
         output
     }
+}
+
+fn is_generated_flutter_android_project(context: &ScanCtx<'_>, directory: &Path) -> bool {
+    if context
+        .invocation
+        .target
+        .anchor_directory()
+        .starts_with(directory)
+    {
+        return false;
+    }
+
+    directory
+        .ancestors()
+        .take_while(|ancestor| ancestor.starts_with(&context.roots.scan_root))
+        .any(|ancestor| {
+            let is_android_subtree = directory
+                .strip_prefix(ancestor)
+                .ok()
+                .and_then(|relative| relative.components().next())
+                .is_some_and(|component| component.as_os_str() == "android");
+            if !is_android_subtree {
+                return false;
+            }
+            context
+                .index
+                .manifests
+                .read(&ancestor.join("pubspec.yaml"))
+                .is_ok_and(|contents| super::dart::pubspec_declares_flutter(&contents))
+        })
 }
 
 fn emit_project(
@@ -350,5 +383,15 @@ mod tests {
             literal_project_includes("include(\":app\", ':libs:core')\ninclude dynamicName\n"),
             BTreeSet::from([":app".to_owned(), ":libs:core".to_owned()])
         );
+    }
+
+    #[test]
+    fn flutter_pubspec_recognition_is_limited_to_sdk_dependencies() {
+        assert!(super::super::dart::pubspec_declares_flutter(
+            "dependencies:\n  flutter:\n    sdk: flutter\n"
+        ));
+        assert!(!super::super::dart::pubspec_declares_flutter(
+            "dependencies:\n  flutter: ^1.0.0\n"
+        ));
     }
 }
