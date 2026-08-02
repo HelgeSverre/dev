@@ -1,3 +1,29 @@
+# Rust build and profiling output
 /target/
-/tmp/
 *.profraw
+*.profdata
+
+# Local scratch files
+/tmp/
+*.log
+*.swp
+*.swo
+*~
+
+# IDE and editor metadata
+/.idea/
+/.vscode/
+*.iml
+
+# Local environment and tool state
+.env
+.env.*
+!.env.example
+!.env.*.example
+/.direnv/
+/.cargo/config.local.toml
+
+# Operating-system metadata
+.DS_Store
+Thumbs.db
+Desktop.ini
