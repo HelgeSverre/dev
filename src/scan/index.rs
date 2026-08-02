@@ -337,26 +337,8 @@ fn compile_globs(patterns: &[String]) -> Result<globset::GlobSet, globset::Error
     builder.build()
 }
 
-#[cfg(unix)]
-fn executable(_path: &Path, metadata: &std::fs::Metadata) -> bool {
-    use std::os::unix::fs::PermissionsExt;
-    metadata.permissions().mode() & 0o111 != 0
-}
-
-#[cfg(windows)]
 fn executable(path: &Path, metadata: &std::fs::Metadata) -> bool {
-    metadata.is_file()
-        && path.extension().is_some_and(|extension| {
-            matches!(
-                extension.to_string_lossy().to_ascii_lowercase().as_str(),
-                "exe" | "com" | "bat" | "cmd"
-            )
-        })
-}
-
-#[cfg(not(any(unix, windows)))]
-fn executable(_path: &Path, _metadata: &std::fs::Metadata) -> bool {
-    false
+    crate::path::is_executable(path, metadata)
 }
 
 fn stable_entry_cmp(left: &IndexEntry, right: &IndexEntry) -> Ordering {

@@ -1,5 +1,6 @@
 use std::env;
 use std::ffi::OsStr;
+use std::fs::Metadata;
 use std::path::{Component, Path, PathBuf};
 
 use crate::candidate::Availability;
@@ -135,6 +136,30 @@ fn resolve_executable(
     _env_delta: &std::collections::BTreeMap<std::ffi::OsString, std::ffi::OsString>,
 ) -> Option<PathBuf> {
     path.is_file().then(|| path.to_path_buf())
+}
+
+/// Determine whether a filesystem entry is executable by the OS.
+#[cfg(unix)]
+pub(crate) fn is_executable(_path: &Path, metadata: &Metadata) -> bool {
+    use std::os::unix::fs::PermissionsExt as _;
+
+    metadata.permissions().mode() & 0o111 != 0
+}
+
+#[cfg(windows)]
+pub(crate) fn is_executable(path: &Path, metadata: &Metadata) -> bool {
+    metadata.is_file()
+        && path.extension().is_some_and(|extension| {
+            matches!(
+                extension.to_string_lossy().to_ascii_lowercase().as_str(),
+                "exe" | "com" | "bat" | "cmd"
+            )
+        })
+}
+
+#[cfg(not(any(unix, windows)))]
+pub(crate) fn is_executable(_path: &Path, _metadata: &Metadata) -> bool {
+    false
 }
 
 #[cfg(windows)]
