@@ -214,10 +214,17 @@ pub enum LocalMetadataProbe {
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
+pub enum CommandOutput {
+    FirstNonEmptyLine,
+    LinePrefix(&'static str),
+}
+
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum DoctorProbe {
     Command {
         args: &'static [&'static str],
         timeout: Duration,
+        output: CommandOutput,
     },
     LocalMetadata(LocalMetadataProbe),
     PresenceOnly {
@@ -286,6 +293,24 @@ const fn command_tool(
         doctor: DoctorProbe::Command {
             args,
             timeout: DEFAULT_TIMEOUT,
+            output: CommandOutput::FirstNonEmptyLine,
+        },
+    }
+}
+
+const fn command_tool_with_output(
+    id: ToolId,
+    program: &'static str,
+    args: &'static [&'static str],
+    output: CommandOutput,
+) -> ToolRegistration {
+    ToolRegistration {
+        id,
+        program,
+        doctor: DoctorProbe::Command {
+            args,
+            timeout: DEFAULT_TIMEOUT,
+            output,
         },
     }
 }
@@ -300,7 +325,12 @@ const RUSTC_PROGRAM: ToolRegistration = command_tool(RUSTC_TOOL, "rustc", &["--v
 const COMPOSER_PROGRAM: ToolRegistration = command_tool(COMPOSER_TOOL, "composer", &["--version"]);
 const PHP_PROGRAM: ToolRegistration = command_tool(PHP_TOOL, "php", &["--version"]);
 const GO_PROGRAM: ToolRegistration = command_tool(GO_TOOL, "go", &["version"]);
-const GRADLE_PROGRAM: ToolRegistration = command_tool(GRADLE_TOOL, "gradle", &["--version"]);
+const GRADLE_PROGRAM: ToolRegistration = command_tool_with_output(
+    GRADLE_TOOL,
+    "gradle",
+    &["--version"],
+    CommandOutput::LinePrefix("Gradle "),
+);
 const MAVEN_PROGRAM: ToolRegistration = command_tool(MAVEN_TOOL, "mvn", &["--version"]);
 const DOTNET_PROGRAM: ToolRegistration = command_tool(DOTNET_TOOL, "dotnet", &["--version"]);
 const JAKE_PROGRAM: ToolRegistration = command_tool(JAKE_TOOL, "jake", &["--version"]);
@@ -1107,6 +1137,7 @@ pub fn fingerprint() -> &'static str {
             for tool in registration.tools {
                 hash_text(&mut hasher, tool.id.as_str());
                 hash_text(&mut hasher, tool.program);
+                hash_text(&mut hasher, &format!("{:?}", tool.doctor));
             }
             for root in registration.conventional_roots {
                 hash_text(&mut hasher, root);

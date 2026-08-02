@@ -9,7 +9,7 @@ use std::time::{Duration, Instant};
 use serde::Deserialize;
 
 use crate::candidate::Availability;
-use crate::registry::{DoctorProbe, LocalMetadataProbe, ToolId, ToolRegistration};
+use crate::registry::{CommandOutput, DoctorProbe, LocalMetadataProbe, ToolId, ToolRegistration};
 
 const MAX_CAPTURE_BYTES: usize = 16 * 1024;
 const MAX_METADATA_BYTES: u64 = 64 * 1024;
@@ -51,9 +51,11 @@ fn inspect_tool(tool: ToolRegistration, cwd: &Path) -> ToolReport {
         };
     };
     let outcome = match tool.doctor {
-        DoctorProbe::Command { args, timeout } => {
-            probe_command(&resolved_program, args, cwd, timeout)
-        }
+        DoctorProbe::Command {
+            args,
+            timeout,
+            output,
+        } => probe_command(&resolved_program, args, cwd, timeout, output),
         DoctorProbe::LocalMetadata(probe) => probe_local_metadata(probe, &resolved_program),
         DoctorProbe::PresenceOnly { reason } => ProbeOutcome::PresentUnknown(reason.to_owned()),
     };
@@ -65,7 +67,13 @@ fn inspect_tool(tool: ToolRegistration, cwd: &Path) -> ToolReport {
     }
 }
 
-fn probe_command(program: &Path, args: &[&str], cwd: &Path, timeout: Duration) -> ProbeOutcome {
+fn probe_command(
+    program: &Path,
+    args: &[&str],
+    cwd: &Path,
+    timeout: Duration,
+    output: CommandOutput,
+) -> ProbeOutcome {
     let mut command = Command::new(program);
     command
         .args(args)
@@ -103,7 +111,9 @@ fn probe_command(program: &Path, args: &[&str], cwd: &Path, timeout: Duration) -
     };
     let stdout = join_capture(stdout);
     let stderr = join_capture(stderr);
-    let summary = first_line(&stdout)
+    let summary = selected_line(&stdout, output)
+        .or_else(|| selected_line(&stderr, output))
+        .or_else(|| first_line(&stdout))
         .or_else(|| first_line(&stderr))
         .unwrap_or_else(|| {
             format!(
@@ -248,6 +258,24 @@ fn first_line(bytes: &[u8]) -> Option<String> {
     let line = bytes
         .split(|byte| *byte == b'\n' || *byte == b'\r')
         .find(|line| !line.is_empty())?;
+    Some(summarize_line(line))
+}
+
+fn selected_line(bytes: &[u8], output: CommandOutput) -> Option<String> {
+    match output {
+        CommandOutput::FirstNonEmptyLine => first_line(bytes),
+        CommandOutput::LinePrefix(prefix) => bytes
+            .split(|byte| *byte == b'\n' || *byte == b'\r')
+            .find(|line| {
+                String::from_utf8_lossy(line)
+                    .trim_start()
+                    .starts_with(prefix)
+            })
+            .map(summarize_line),
+    }
+}
+
+fn summarize_line(line: &[u8]) -> String {
     let mut output = String::from_utf8_lossy(line)
         .chars()
         .map(|character| {
@@ -262,7 +290,7 @@ fn first_line(bytes: &[u8]) -> Option<String> {
     if line.len() > 160 {
         output.push('…');
     }
-    Some(output)
+    output
 }
 
 #[must_use]
@@ -308,7 +336,8 @@ mod tests {
                 &version,
                 &["version", "--short"],
                 temp.path(),
-                Duration::from_secs(2)
+                Duration::from_secs(2),
+                CommandOutput::FirstNonEmptyLine,
             ),
             ProbeOutcome::Version("version --short".to_owned())
         );
@@ -317,8 +346,36 @@ mod tests {
         executable(&slow, "#!/bin/sh\nwhile :; do :; done\n")?;
         let timeout = Duration::from_millis(20);
         assert_eq!(
-            probe_command(&slow, &[], temp.path(), timeout),
+            probe_command(
+                &slow,
+                &[],
+                temp.path(),
+                timeout,
+                CommandOutput::FirstNonEmptyLine,
+            ),
             ProbeOutcome::TimedOut { timeout }
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn command_probe_can_select_a_registry_declared_version_line() -> anyhow::Result<()> {
+        let temp = tempfile::tempdir()?;
+        let version = temp.path().join("gradle");
+        executable(
+            &version,
+            "#!/bin/sh\nprintf '\\n------------------------------------------------------------\\nGradle 9.4.1\\n------------------------------------------------------------\\n'\n",
+        )?;
+
+        assert_eq!(
+            probe_command(
+                &version,
+                &["--version"],
+                temp.path(),
+                Duration::from_secs(2),
+                CommandOutput::LinePrefix("Gradle "),
+            ),
+            ProbeOutcome::Version("Gradle 9.4.1".to_owned())
         );
         Ok(())
     }
