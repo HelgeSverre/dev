@@ -111,15 +111,15 @@ struct ActionArgs {
     at: Option<PathBuf>,
 
     /// Render ranking evidence without running.
-    #[arg(short = 'w', long)]
+    #[arg(short = 'w', long, conflicts_with_all = ["list", "dry_run", "json"])]
     why: bool,
 
     /// Print a terse candidate list without running.
-    #[arg(short = 'l', long)]
+    #[arg(short = 'l', long, conflicts_with_all = ["dry_run", "json"])]
     list: bool,
 
     /// Print the selected shell command without running.
-    #[arg(short = 'n', long)]
+    #[arg(short = 'n', long, conflicts_with = "json")]
     dry_run: bool,
 
     /// Force interactive selection.
@@ -399,6 +399,23 @@ mod tests {
         let result = parse_from(["dev", "run", "./missing"], directory.path());
         assert!(matches!(result, Err(CliError::Target { .. })));
         Ok(())
+    }
+
+    #[test]
+    fn human_and_machine_output_modes_conflict() {
+        for arguments in [
+            ["dev", "run", "--why", "--list"],
+            ["dev", "run", "--why", "--json"],
+            ["dev", "run", "--list", "--dry-run"],
+            ["dev", "run", "--dry-run", "--json"],
+        ] {
+            let result = parse_from(arguments, Path::new("."));
+            assert!(matches!(
+                result,
+                Err(CliError::Clap(error))
+                    if error.kind() == clap::error::ErrorKind::ArgumentConflict
+            ));
+        }
     }
 
     #[test]

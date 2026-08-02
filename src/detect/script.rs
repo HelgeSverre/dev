@@ -16,6 +16,9 @@ pub(super) fn read_shebang(path: &Path) -> Option<Shebang> {
     let first_line = bytes[..read].split(|byte| *byte == b'\n').next()?;
     let text = std::str::from_utf8(first_line).ok()?.trim_end_matches('\r');
     let command = text.strip_prefix("#!")?.trim();
+    if command.contains(['\'', '"', '\\']) {
+        return None;
+    }
     let mut words = command.split_ascii_whitespace();
     let declared = words.next()?;
     let declared_name = Path::new(declared).file_name()?.to_str()?;
@@ -88,6 +91,15 @@ mod tests {
         let temp = tempfile::tempdir()?;
         let script = temp.path().join("probe");
         std::fs::write(&script, "#!/opt/custom/runtime\n")?;
+        assert_eq!(read_shebang(&script), None);
+        Ok(())
+    }
+
+    #[test]
+    fn quoted_env_split_shebang_is_not_misparsed() -> anyhow::Result<()> {
+        let temp = tempfile::tempdir()?;
+        let script = temp.path().join("probe");
+        std::fs::write(&script, "#!/usr/bin/env -S 'python3 -u'\n")?;
         assert_eq!(read_shebang(&script), None);
         Ok(())
     }

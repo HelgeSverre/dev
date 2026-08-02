@@ -75,7 +75,14 @@ pub(super) fn locally_usable_wrapper(
     let archive_stem = archive
         .strip_suffix(".zip")
         .or_else(|| archive.strip_suffix(".tar.gz"))?;
+    if !safe_archive_stem(archive_stem) {
+        return None;
+    }
     cached_distribution_exists(&cache_root, archive_stem).then_some(wrapper)
+}
+
+fn safe_archive_stem(stem: &str) -> bool {
+    !stem.is_empty() && !matches!(stem, "." | "..") && !stem.contains(['/', '\\'])
 }
 
 fn property<'a>(contents: &'a str, expected: &str) -> Option<&'a str> {
@@ -216,6 +223,13 @@ mod tests {
         for value in ["", "0", "false", "off"] {
             assert!(!flag_value_enabled(std::ffi::OsStr::new(value)), "{value}");
         }
+    }
+
+    #[test]
+    fn wrapper_distribution_stems_cannot_escape_the_cache_root() {
+        assert!(safe_archive_stem("gradle-9.1-bin"));
+        assert!(!safe_archive_stem("..\\outside"));
+        assert!(!safe_archive_stem("../outside"));
     }
 
     #[test]

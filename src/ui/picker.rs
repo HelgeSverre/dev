@@ -80,6 +80,7 @@ impl<'a> PickerApp<'a> {
             .map(str::to_owned)
             .collect::<Vec<_>>();
         let query = normalize_query(&hints);
+        let has_meaningful_query = query.iter().any(|term| !term.filler);
         self.visible = self
             .resolution
             .candidates
@@ -87,11 +88,11 @@ impl<'a> PickerApp<'a> {
             .enumerate()
             .filter_map(|(index, ranked)| {
                 let matched = match_candidate(&ranked.candidate, &query, self.chaos);
-                (query.is_empty() || matched.matched_meaningful_terms > 0)
+                (!has_meaningful_query || matched.matched_meaningful_terms > 0)
                     .then_some((index, matched))
             })
             .collect();
-        if !query.is_empty() {
+        if has_meaningful_query {
             self.visible.sort_by(|left, right| {
                 compare_hinted(
                     (&self.resolution.candidates[left.0].candidate, &left.1),
@@ -493,6 +494,13 @@ mod tests {
         assert_eq!(app.selected_index(), Some(1));
         app.query.clear();
         app.refresh();
+        assert_eq!(app.visible.len(), 2);
+    }
+
+    #[test]
+    fn filler_only_query_keeps_all_candidates_visible() {
+        let resolution = resolution();
+        let app = PickerApp::new(&resolution, &["whatever".to_owned()], 1, false, false);
         assert_eq!(app.visible.len(), 2);
     }
 

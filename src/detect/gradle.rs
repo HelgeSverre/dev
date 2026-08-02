@@ -263,11 +263,15 @@ fn has_application_plugin(contents: &str) -> bool {
     let mut in_plugins_block = false;
     for line in contents.lines().map(strip_comment) {
         let compact = line.split_ascii_whitespace().collect::<String>();
+        let inline_application = compact
+            .strip_prefix("plugins{")
+            .and_then(|plugins| plugins.strip_suffix('}'))
+            .is_some_and(|plugins| plugins.split(';').any(|plugin| plugin == "application"));
         if compact.contains("id(\"application\")")
             || compact.contains("id('application')")
             || compact.contains("id'application'")
             || compact.contains("plugin:'application'")
-            || compact.contains("plugins{application}")
+            || inline_application
             || (in_plugins_block && compact == "application")
         {
             return true;
@@ -374,6 +378,7 @@ mod tests {
         "#;
         assert!(has_application_plugin(source));
         assert!(has_application_plugin("plugins { application }"));
+        assert!(has_application_plugin("plugins { java; application }"));
         assert!(has_application_plugin("plugins {\n  application\n}"));
         assert!(has_application_plugin("plugins {\n  id 'application'\n}"));
         assert_eq!(
