@@ -23,14 +23,14 @@ formula = "dev"
 
 [dependencies]
 anyhow = "1.0"
-base64 = "0.22"
+base64 = "0.23"
 blake3 = "1.8"
 clap = { version = "4.5", features = ["derive", "wrap_help"] }
 clap_complete = "4.5"
 directories = "6.0"
 fs4 = { version = "1.1", features = ["sync"] }
 globset = "0.4"
-ignore = "=0.4.23"
+ignore = "=0.4.29"
 nucleo-matcher = "0.3"
 ratatui = { version = "0.29", default-features = false, features = ["crossterm"] }
 serde = { version = "1.0", features = ["derive"] }
@@ -39,10 +39,10 @@ serde_yaml = "0.9"
 smallvec = "1.15"
 strsim = "0.11"
 thiserror = "2.0"
-toml = "0.9"
+toml = "1.1"
 
 [target.'cfg(unix)'.dependencies]
-nix = { version = "0.30", features = ["process", "signal"] }
+nix = { version = "0.31", features = ["process", "signal"] }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = [
@@ -55,7 +55,7 @@ windows-sys = { version = "0.61", features = [
 
 [dev-dependencies]
 assert_cmd = "2.0"
-expectrl = "0.8"
+expectrl = "0.9"
 predicates = "3.1"
 proptest = "1.9"
 tempfile = "3.20"
