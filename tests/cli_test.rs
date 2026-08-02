@@ -1458,7 +1458,7 @@ fn mise_task_executes_through_explicit_run_subcommand() -> anyhow::Result<()> {
 }
 
 #[test]
-fn sema_package_uses_entrypoint_and_plain_test_command() -> anyhow::Result<()> {
+fn sema_package_uses_entrypoint_and_conventional_test_file() -> anyhow::Result<()> {
     let temp = tempfile::tempdir()?;
     let project = temp.path().join("sema-project");
     fs::create_dir(&project)?;
@@ -1466,8 +1466,9 @@ fn sema_package_uses_entrypoint_and_plain_test_command() -> anyhow::Result<()> {
         project.join("sema.toml"),
         "[package]\nname = \"example\"\nentrypoint = \"src/main.sema\"\n",
     )?;
-    fs::create_dir(project.join("src"))?;
+    fs::create_dir_all(project.join("src"))?;
     fs::write(project.join("src/main.sema"), "(println \"hello\")\n")?;
+    fs::write(project.join("tests.sema"), "(println \"testing\")\n")?;
     let bin = fake_program(temp.path(), "sema")?;
 
     let mut run = cargo_bin_cmd!("dev");
@@ -1483,9 +1484,34 @@ fn sema_package_uses_entrypoint_and_plain_test_command() -> anyhow::Result<()> {
     test.args(["test", "--quiet", "--at"])
         .arg(&project)
         .env("PATH", &bin);
-    test.assert()
-        .success()
-        .stdout(format!("cwd=<{}>\narg0=<test>\n", project.display()));
+    test.assert().success().stdout(format!(
+        "cwd=<{}>\narg0=<{}>\n",
+        project.display(),
+        project.join("tests.sema").display()
+    ));
+    Ok(())
+}
+
+#[test]
+fn sema_application_accepts_top_level_name_and_entry() -> anyhow::Result<()> {
+    let temp = tempfile::tempdir()?;
+    let project = temp.path().join("sema-application");
+    fs::create_dir_all(project.join("src"))?;
+    fs::write(
+        project.join("sema.toml"),
+        "name = \"example-app\"\nentry = \"src/main.sema\"\n",
+    )?;
+    fs::write(project.join("src/main.sema"), "(println \"hello\")\n")?;
+    let bin = fake_program(temp.path(), "sema")?;
+
+    let mut run = cargo_bin_cmd!("dev");
+    run.args(["run", "--quiet", "--at"])
+        .arg(&project)
+        .env("PATH", &bin);
+    run.assert().success().stdout(format!(
+        "cwd=<{}>\narg0=<src/main.sema>\n",
+        project.display()
+    ));
     Ok(())
 }
 

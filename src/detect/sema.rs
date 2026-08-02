@@ -19,7 +19,6 @@ struct SemaProject {
     name: Option<String>,
     description: Option<String>,
     entrypoint: Option<PathBuf>,
-    package: bool,
 }
 
 impl Detector for SemaDetector {
@@ -35,9 +34,6 @@ impl Detector for SemaDetector {
             if let Some(entrypoint) = &project.entrypoint {
                 declared_entrypoints.insert(project.directory.join(entrypoint));
                 emit_project_entrypoint(context, project, entrypoint, &mut output);
-            }
-            if context.invocation.intent == Intent::Test && project.package {
-                emit_project_test(context, project, &mut output);
             }
         }
         emit_direct_files(context, &declared_entrypoints, &mut output);
@@ -87,6 +83,7 @@ fn projects(context: &ScanCtx<'_>) -> (Vec<SemaProject>, Vec<Diagnostic>) {
             .and_then(|package| package.get("entrypoint"))
             .and_then(toml::Value::as_str)
             .or_else(|| document.get("entrypoint").and_then(toml::Value::as_str))
+            .or_else(|| document.get("entry").and_then(toml::Value::as_str))
             .map(PathBuf::from)
             .or_else(|| package.is_some().then(|| PathBuf::from("package.sema")));
         let entrypoint = entrypoint.filter(|path| safe_relative_path(path));
@@ -101,13 +98,14 @@ fn projects(context: &ScanCtx<'_>) -> (Vec<SemaProject>, Vec<Diagnostic>) {
             name: package
                 .and_then(|package| package.get("name"))
                 .and_then(toml::Value::as_str)
+                .or_else(|| document.get("name").and_then(toml::Value::as_str))
                 .map(str::to_owned),
             description: package
                 .and_then(|package| package.get("description"))
                 .and_then(toml::Value::as_str)
+                .or_else(|| document.get("description").and_then(toml::Value::as_str))
                 .map(str::to_owned),
             entrypoint,
-            package: package.is_some(),
         });
     }
     (projects, diagnostics)
@@ -178,46 +176,6 @@ fn emit_project_entrypoint(
     .emit(output);
 }
 
-fn emit_project_test(context: &ScanCtx<'_>, project: &SemaProject, output: &mut Detection) {
-    let relative_manifest = project
-        .manifest
-        .strip_prefix(&context.roots.scan_root)
-        .unwrap_or(&project.manifest);
-    let name = project.name.as_deref().unwrap_or("sema-package");
-    CandidateBuilder::tool_default(SEMA_SOURCE, Intent::Test, project.directory.clone(), "test")
-        .action_key(format!(
-            "sema:{}:test",
-            relative_manifest
-                .to_string_lossy()
-                .replace(['/', '\\'], ":")
-        ))
-        .tool(SEMA_TOOL)
-        .args(["test"])
-        .cwd(project.directory.clone())
-        .passthrough(PassthroughStyle::Append)
-        .selection(SelectionPolicy::Automatic)
-        .base_points(90)
-        .evidence(Evidence {
-            kind: EvidenceKind::Manifest,
-            reason: format!(
-                "{} declares Sema package `{name}`",
-                relative_manifest.display()
-            ),
-            points: 0,
-            source: Some(relative_manifest.to_path_buf()),
-        })
-        .search(SearchDocument {
-            identities: vec!["test".to_owned(), name.to_owned()],
-            target_paths: vec![relative_manifest.to_path_buf()],
-            scopes: vec![name.to_owned()],
-            tags: Vec::new(),
-            text: vec!["Run ordinary Sema tests".to_owned()],
-        })
-        .label(format!("Sema tests `{name}`"))
-        .description("Run ordinary Sema tests")
-        .emit(output);
-}
-
 fn emit_direct_files(
     context: &ScanCtx<'_>,
     declared_entrypoints: &BTreeSet<PathBuf>,
@@ -240,7 +198,7 @@ fn emit_direct_files(
             .relative_path
             .file_name()
             .and_then(|name| name.to_str())
-            .is_some_and(|name| name.ends_with(".test.sema"));
+            .is_some_and(|name| name == "tests.sema" || name.ends_with(".test.sema"));
         if context.invocation.intent == Intent::Test && !is_test {
             continue;
         }
@@ -258,10 +216,7 @@ fn emit_direct_files(
                 "build",
                 vec![OsString::from("build"), absolute.as_os_str().to_owned()],
             ),
-            Intent::Test => (
-                "test",
-                vec![OsString::from("test"), absolute.as_os_str().to_owned()],
-            ),
+            Intent::Test => ("test", vec![absolute.as_os_str().to_owned()]),
         };
         CandidateBuilder::direct_target(
             SEMA_SOURCE,
@@ -279,13 +234,21 @@ fn emit_direct_files(
         .tool(SEMA_TOOL)
         .args(args)
         .cwd(directory)
-        .passthrough(if context.invocation.intent == Intent::Run {
-            PassthroughStyle::DoubleDash
-        } else {
+        .passthrough(if context.invocation.intent == Intent::Build {
             PassthroughStyle::Append
+        } else {
+            PassthroughStyle::DoubleDash
         })
-        .selection(SelectionPolicy::ExplicitHint)
-        .base_points(25)
+        .selection(if context.invocation.intent == Intent::Test {
+            SelectionPolicy::Automatic
+        } else {
+            SelectionPolicy::ExplicitHint
+        })
+        .base_points(if context.invocation.intent == Intent::Test {
+            90
+        } else {
+            25
+        })
         .evidence(Evidence {
             kind: EvidenceKind::Rule,
             reason: format!("{} is a Sema source file", entry.relative_path.display()),

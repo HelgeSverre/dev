@@ -2175,7 +2175,9 @@ Create at least 50 tiny, real-shaped repositories covering:
 - Jake aliases, default/required-parameter handling, and namespaced imports;
 - Taskfile spelling precedence, internal/required-var tasks, and includes;
 - mise TOML task forms, aliases, hidden tasks, config layering, and includes;
-- Sema package entrypoints, ordinary tests, and standalone source files;
+- Sema package entrypoints, conventional `tests.sema`/`*.test.sema` suites,
+  and standalone source files; tests execute as source files rather than a
+  nonexistent `sema test` subcommand;
 - Gradle Groovy/Kotlin markers, literal settings/task declarations, and cached
   versus uncached wrappers;
 - Maven modules, packaging, known declared plugins, and cached versus uncached
