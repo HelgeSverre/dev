@@ -1,0 +1,285 @@
+<!doctype html>
+<!--
+  Open Graph card source — 1200×630.
+  Render with `just og` (chromium headless → website/og.png).
+  Edit this file, never og.png.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>dev — og card</title>
+    <style>
+      :root {
+        --paper: oklch(96% 0.022 95);
+        --ink: oklch(14% 0.018 145);
+        --muted: oklch(45% 0.025 145);
+        --citron: oklch(89% 0.22 125);
+        --citron-ink: oklch(16% 0.03 135);
+        --terminal: oklch(14% 0.018 145);
+        --line: color-mix(in oklch, var(--ink) 14%, transparent);
+        --bar: color-mix(in oklch, oklch(94% 0.014 105) 26%, transparent);
+
+        --sans: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        --mono: ui-monospace, "SFMono-Regular", "Cascadia Code", "Roboto Mono", monospace;
+      }
+
+      * {
+        box-sizing: border-box;
+        margin: 0;
+      }
+
+      body {
+        background: #fff;
+      }
+
+      .og {
+        position: relative;
+        overflow: hidden;
+        inline-size: 1200px;
+        block-size: 630px;
+        background:
+          linear-gradient(var(--line) 1px, transparent 1px),
+          linear-gradient(90deg, var(--line) 1px, transparent 1px),
+          var(--paper);
+        background-size: 64px 64px;
+        color: var(--ink);
+        font-family: var(--sans);
+      }
+
+      /* Oversized mark chevrons, cropped by the canvas edge. */
+      .chevrons {
+        position: absolute;
+        inset-block-end: -52px;
+        inset-inline-end: -54px;
+        display: flex;
+        gap: 16px;
+        color: var(--ink);
+      }
+
+      .chevrons svg {
+        display: block;
+        block-size: 218px;
+      }
+
+      .chevrons svg:last-child {
+        opacity: 0.24;
+      }
+
+      /* Technical-drawing marginalia. */
+      .tech {
+        position: absolute;
+        inset-block-end: 26px;
+        inset-inline-end: 198px;
+        color: color-mix(in oklch, var(--ink) 30%, transparent);
+      }
+
+      .tech svg {
+        display: block;
+        inline-size: 112px;
+      }
+
+      /* Abstracted terminal, bleeding off the right edge. */
+      .panel {
+        position: absolute;
+        inset-block-start: 43px;
+        inset-inline-start: 768px;
+        inline-size: 500px;
+        block-size: 416px;
+        border-start-start-radius: 16px;
+        border-end-start-radius: 16px;
+        background: var(--terminal);
+        padding: 26px 0 0 30px;
+        -webkit-mask-image: linear-gradient(to bottom, #000 62%, transparent 100%);
+        mask-image: linear-gradient(to bottom, #000 62%, transparent 100%);
+      }
+
+      .row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        block-size: 26px;
+      }
+
+      .row::before {
+        flex: 0 0 auto;
+        inline-size: 4px;
+        block-size: 4px;
+        border-radius: 50%;
+        background: color-mix(in oklch, oklch(94% 0.014 105) 26%, transparent);
+        content: "";
+      }
+
+      .row span {
+        block-size: 7px;
+        border-radius: 4px;
+        background: var(--bar);
+      }
+
+      .row.indent span:first-of-type {
+        margin-inline-start: 26px;
+      }
+
+      .row.active span {
+        background: var(--citron);
+      }
+
+      .row.active span:first-of-type {
+        inline-size: 9px;
+        block-size: 15px;
+        border-radius: 2px;
+      }
+
+      /* Brand lockup. */
+      .brand {
+        position: absolute;
+        inset-block-start: 52px;
+        inset-inline-start: 56px;
+        display: flex;
+        align-items: center;
+        gap: 18px;
+      }
+
+      .chip {
+        display: block;
+        inline-size: 72px;
+        border: 3px solid var(--ink);
+        border-radius: 18px;
+        background: var(--citron);
+        color: var(--citron-ink);
+      }
+
+      .wordmark {
+        font-size: 46px;
+        font-weight: 800;
+        letter-spacing: -0.04em;
+      }
+
+      /* Copy block. */
+      .copy {
+        position: absolute;
+        inset-block-end: 96px;
+        inset-inline-start: 56px;
+        inline-size: 660px;
+      }
+
+      .eyebrow {
+        margin-block-end: 26px;
+        color: var(--muted);
+        font-family: var(--mono);
+        font-size: 15px;
+        font-weight: 600;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+      }
+
+      h1 {
+        font-size: 82px;
+        font-weight: 780;
+        letter-spacing: -0.045em;
+        line-height: 0.98;
+      }
+
+      .footnote {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-block-start: 30px;
+        color: var(--ink);
+        font-family: var(--mono);
+        font-size: 15px;
+        font-weight: 600;
+        letter-spacing: 0.05em;
+      }
+
+      .footnote::before {
+        inline-size: 13px;
+        block-size: 13px;
+        border: 2px solid var(--ink);
+        border-radius: 50%;
+        background: var(--citron);
+        content: "";
+      }
+
+      /* Citron foot rule. */
+      .rule {
+        position: absolute;
+        inset-block-end: 0;
+        inset-inline: 0;
+        block-size: 14px;
+        border-block-start: 2px solid var(--ink);
+        background: var(--citron);
+      }
+    </style>
+  </head>
+
+  <body>
+    <div class="og">
+      <svg width="0" height="0" aria-hidden="true">
+        <symbol id="mark" viewBox="0 0 64 64">
+          <path fill="currentColor" d="M12 10H30V18H20V46H30V54H12ZM36 10L58 32L36 54V42L46 32L36 22Z" />
+        </symbol>
+      </svg>
+
+      <!-- Chevron drawn inline, not via <use>: a nested symbol viewBox would
+           offset the child viewport and push the glyph out of frame. -->
+      <div class="chevrons">
+        <svg viewBox="36 10 22 44">
+          <path fill="currentColor" d="M36 10L58 32L36 54V42L46 32L36 22Z" />
+        </svg>
+        <svg viewBox="36 10 22 44">
+          <path fill="currentColor" d="M36 10L58 32L36 54V42L46 32L36 22Z" />
+        </svg>
+      </div>
+
+      <div class="tech">
+        <svg viewBox="0 0 132 92" fill="none" stroke="currentColor" stroke-width="1">
+          <circle cx="66" cy="46" r="37" stroke-dasharray="5 6" />
+          <path d="M66 26v40M46 46h40" />
+          <path d="M0 46h30M102 46h30" stroke-dasharray="4 6" />
+        </svg>
+      </div>
+
+      <div class="panel">
+        <div class="row"><span style="inline-size: 176px"></span></div>
+        <div class="row indent"><span style="inline-size: 96px"></span></div>
+        <div class="row"></div>
+        <div class="row indent">
+          <span style="inline-size: 46px"></span><span style="inline-size: 118px"></span>
+        </div>
+        <div class="row indent"><span style="inline-size: 218px"></span></div>
+        <div class="row indent">
+          <span style="inline-size: 74px"></span><span style="inline-size: 8px"></span
+          ><span style="inline-size: 210px"></span>
+        </div>
+        <div class="row indent">
+          <span style="inline-size: 88px"></span><span style="inline-size: 62px"></span
+          ><span style="inline-size: 104px"></span>
+        </div>
+        <div class="row indent"><span style="inline-size: 152px"></span></div>
+        <div class="row active"><span></span><span style="inline-size: 252px"></span></div>
+        <div class="row"></div>
+        <div class="row"><span style="inline-size: 126px"></span></div>
+        <div class="row indent"><span style="inline-size: 198px"></span></div>
+        <div class="row indent">
+          <span style="inline-size: 82px"></span><span style="inline-size: 34px"></span>
+        </div>
+        <div class="row indent"><span style="inline-size: 186px"></span></div>
+        <div class="row indent"><span style="inline-size: 138px"></span></div>
+        <div class="row"><span style="inline-size: 160px"></span></div>
+      </div>
+
+      <div class="brand">
+        <svg class="chip" viewBox="0 0 64 64" aria-hidden="true"><use href="#mark" /></svg>
+        <span class="wordmark">dev</span>
+      </div>
+
+      <div class="copy">
+        <p class="eyebrow">One command. Across projects.</p>
+        <h1>Run the right command.</h1>
+        <p class="footnote">Discover · rank · execute exactly</p>
+      </div>
+
+      <div class="rule"></div>
+    </div>
+  </body>
+</html>

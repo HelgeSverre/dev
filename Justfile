@@ -52,3 +52,13 @@ qa: fmt-check clippy test
 [group('build')]
 clean:
     cargo clean
+
+# Edit website/og.html, never og.png. Override the browser with $CHROME.
+# Render the Open Graph card to website/og.png (1200x630).
+[group('web')]
+og:
+    @CHROME="${CHROME:-/Applications/Google Chrome.app/Contents/MacOS/Google Chrome}"; \
+    test -x "$CHROME" || { echo "No Chrome at $CHROME - set \$CHROME" >&2; exit 1; }; \
+    "$CHROME" --headless --disable-gpu --hide-scrollbars \
+        --force-device-scale-factor=1 --window-size=1200,630 \
+        --screenshot=website/og.png "file://$PWD/website/og.html"

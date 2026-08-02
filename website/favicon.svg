@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <style>
+    .background { fill: oklch(89% 0.22 125); }
+    .mark { fill: oklch(14% 0.018 145); }
+  </style>
+  <rect class="background" width="64" height="64" rx="14" />
+  <path class="mark" d="M12 10H30V18H20V46H30V54H12ZM36 10L58 32L36 54V42L46 32L36 22Z" />
+</svg>
