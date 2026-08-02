@@ -1,0 +1,121 @@
+use std::ffi::OsString;
+use std::io::Write;
+use std::path::Path;
+use std::process::Command;
+
+use crate::candidate::{Availability, Candidate};
+use crate::ui::command_display;
+
+#[derive(Debug, thiserror::Error)]
+pub enum ExecutionError {
+    #[error("selected candidate is unavailable: {0}")]
+    Unavailable(String),
+    #[error("refusing to recursively execute dev through `{0}`")]
+    Recursive(String),
+    #[error("failed to execute `{program}`: {source}")]
+    Start {
+        program: String,
+        #[source]
+        source: std::io::Error,
+    },
+}
+
+impl ExecutionError {
+    #[must_use]
+    pub fn exit_code(&self) -> i32 {
+        match self {
+            Self::Unavailable(_) => 6,
+            Self::Recursive(_) | Self::Start { .. } => 1,
+        }
+    }
+}
+
+/// Execute the candidate with inherited stdio and exact argv semantics.
+pub fn execute(
+    candidate: &Candidate,
+    passthrough: &[OsString],
+    quiet: bool,
+) -> Result<i32, ExecutionError> {
+    let resolved_program = match &candidate.availability {
+        Availability::Available { resolved_program } => resolved_program,
+        Availability::MissingProgram { program } => {
+            return Err(ExecutionError::Unavailable(format!(
+                "program `{}` was not found",
+                program.to_string_lossy()
+            )));
+        }
+        Availability::UnsupportedHost { reason } => {
+            return Err(ExecutionError::Unavailable(reason.clone()));
+        }
+    };
+    check_recursion(resolved_program)?;
+
+    if !quiet {
+        eprintln!(
+            "› {}  ({}, {})",
+            command_display::diagnostic(candidate, passthrough),
+            candidate.detector,
+            candidate.cwd.display()
+        );
+        let _ = std::io::stderr().flush();
+    }
+    let mut command = Command::new(&candidate.program);
+    command
+        .args(candidate.command_with_passthrough(passthrough))
+        .current_dir(&candidate.cwd)
+        .envs(&candidate.env);
+    #[cfg(unix)]
+    command.env("PWD", &candidate.cwd);
+    execute_command(command, &candidate.program.to_string_lossy())
+}
+
+fn check_recursion(candidate_program: &Path) -> Result<(), ExecutionError> {
+    let Ok(current) = std::env::current_exe() else {
+        return Ok(());
+    };
+    if same_file(&current, candidate_program) {
+        return Err(ExecutionError::Recursive(
+            candidate_program.display().to_string(),
+        ));
+    }
+    Ok(())
+}
+
+#[cfg(unix)]
+fn same_file(left: &Path, right: &Path) -> bool {
+    use std::os::unix::fs::MetadataExt;
+    match (left.metadata(), right.metadata()) {
+        (Ok(left), Ok(right)) => left.dev() == right.dev() && left.ino() == right.ino(),
+        _ => match (left.canonicalize(), right.canonicalize()) {
+            (Ok(left), Ok(right)) => left == right,
+            _ => false,
+        },
+    }
+}
+
+#[cfg(not(unix))]
+fn same_file(left: &Path, right: &Path) -> bool {
+    match (left.canonicalize(), right.canonicalize()) {
+        (Ok(left), Ok(right)) => left == right,
+        _ => false,
+    }
+}
+
+#[cfg(unix)]
+fn execute_command(mut command: Command, program: &str) -> Result<i32, ExecutionError> {
+    use std::os::unix::process::CommandExt;
+    let source = command.exec();
+    Err(ExecutionError::Start {
+        program: program.to_owned(),
+        source,
+    })
+}
+
+#[cfg(not(unix))]
+fn execute_command(mut command: Command, program: &str) -> Result<i32, ExecutionError> {
+    let status = command.status().map_err(|source| ExecutionError::Start {
+        program: program.to_owned(),
+        source,
+    })?;
+    Ok(status.code().unwrap_or(1))
+}
