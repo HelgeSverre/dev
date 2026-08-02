@@ -8,7 +8,7 @@ use crate::cache::CacheError;
 use crate::candidate::{Availability, Candidate};
 use crate::intent::Target;
 use crate::registry::MarkerPattern;
-use crate::scan::{FileIndex, RootInfo};
+use crate::scan::{FileIndex, IndexedFileType, RootInfo};
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct ShapeSnapshot {
@@ -35,6 +35,8 @@ struct PathMetadata {
     directory: bool,
     size: u64,
     modified_nanos: Option<u128>,
+    #[serde(default)]
+    executable: bool,
 }
 
 impl ShapeSnapshot {
@@ -64,6 +66,14 @@ impl ShapeSnapshot {
         if let Some(physical_anchor) = &roots.physical_anchor {
             watched.insert(physical_anchor.clone());
         }
+        watched.extend(roots.package_root.iter().cloned());
+        watched.extend(roots.workspace_root.iter().cloned());
+        watched.extend(
+            index
+                .all_entries()
+                .filter(|entry| entry.file_type == IndexedFileType::Directory)
+                .map(|entry| entry.absolute_path(&roots.scan_root)),
+        );
         watched.extend(semantic_paths.iter().cloned());
         watched.extend(
             semantic_paths
@@ -147,26 +157,54 @@ fn registered_marker_paths(root: &Path) -> Vec<PathBuf> {
 impl PathMetadata {
     fn capture(path: PathBuf) -> Self {
         match std::fs::symlink_metadata(&path) {
-            Ok(metadata) => Self {
-                path,
-                exists: true,
-                directory: metadata.is_dir(),
-                size: metadata.len(),
-                modified_nanos: metadata
-                    .modified()
-                    .ok()
-                    .and_then(|modified| modified.duration_since(UNIX_EPOCH).ok())
-                    .map(|duration| duration.as_nanos()),
-            },
+            Ok(metadata) => {
+                let executable = executable(&path, &metadata);
+                Self {
+                    path,
+                    exists: true,
+                    directory: metadata.is_dir(),
+                    size: metadata.len(),
+                    modified_nanos: metadata
+                        .modified()
+                        .ok()
+                        .and_then(|modified| modified.duration_since(UNIX_EPOCH).ok())
+                        .map(|duration| duration.as_nanos()),
+                    executable,
+                }
+            }
             Err(_) => Self {
                 path,
                 exists: false,
                 directory: false,
                 size: 0,
                 modified_nanos: None,
+                executable: false,
             },
         }
     }
+}
+
+#[cfg(unix)]
+fn executable(_path: &Path, metadata: &std::fs::Metadata) -> bool {
+    use std::os::unix::fs::PermissionsExt as _;
+
+    metadata.permissions().mode() & 0o111 != 0
+}
+
+#[cfg(windows)]
+fn executable(path: &Path, metadata: &std::fs::Metadata) -> bool {
+    metadata.is_file()
+        && path.extension().is_some_and(|extension| {
+            matches!(
+                extension.to_string_lossy().to_ascii_lowercase().as_str(),
+                "exe" | "com" | "bat" | "cmd"
+            )
+        })
+}
+
+#[cfg(not(any(unix, windows)))]
+fn executable(_path: &Path, _metadata: &std::fs::Metadata) -> bool {
+    false
 }
 
 fn digest_file(path: &Path) -> Option<String> {
@@ -241,6 +279,43 @@ mod tests {
         assert!(snapshot.is_current());
 
         std::fs::write(temp.path().join("App.csproj"), "<Project />")?;
+        assert!(!snapshot.is_current());
+        Ok(())
+    }
+
+    #[test]
+    fn adding_a_file_to_an_indexed_subdirectory_invalidates_snapshot() -> anyhow::Result<()> {
+        let temp = tempfile::tempdir()?;
+        let scripts = temp.path().join("deep/tools");
+        std::fs::create_dir_all(&scripts)?;
+        let target = Target::Directory(temp.path().to_path_buf());
+        let roots = resolve_roots(&target);
+        let index = FileIndex::build(&roots, ScanOptions::default());
+        let snapshot = ShapeSnapshot::capture(&roots, &index, &candidate(temp.path()), &target)?;
+        assert!(snapshot.is_current());
+
+        std::fs::write(scripts.join("deploy.sh"), "#!/bin/sh\n")?;
+        assert!(!snapshot.is_current());
+        Ok(())
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn changing_executable_permissions_invalidates_snapshot() -> anyhow::Result<()> {
+        use std::os::unix::fs::PermissionsExt as _;
+
+        let temp = tempfile::tempdir()?;
+        let script = temp.path().join("deploy.sh");
+        std::fs::write(&script, "#!/bin/sh\n")?;
+        let target = Target::File(script.clone());
+        let roots = resolve_roots(&target);
+        let index = FileIndex::build(&roots, ScanOptions::default());
+        let snapshot = ShapeSnapshot::capture(&roots, &index, &candidate(temp.path()), &target)?;
+        assert!(snapshot.is_current());
+
+        let mut permissions = script.metadata()?.permissions();
+        permissions.set_mode(0o755);
+        std::fs::set_permissions(&script, permissions)?;
         assert!(!snapshot.is_current());
         Ok(())
     }

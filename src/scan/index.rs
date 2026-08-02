@@ -112,6 +112,9 @@ impl FileIndex {
         let Ok(relative_anchor) = roots.logical_anchor.strip_prefix(&roots.scan_root) else {
             return;
         };
+        if relative_anchor.as_os_str().is_empty() {
+            return;
+        }
         let (entries, truncated) = collect_walk(&roots.logical_anchor, Some(1), hard_cap);
         self.structural.extend(entries.into_iter().map(|mut entry| {
             entry.relative_path = relative_anchor.join(entry.relative_path);

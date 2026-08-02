@@ -20,7 +20,7 @@ pub use shape::ShapeSnapshot;
 
 use serde_os::StoredOsString;
 
-const CACHE_SCHEMA: u32 = 3;
+const CACHE_SCHEMA: u32 = 4;
 const MATCHER_SCHEMA: u32 = 1;
 const MAX_ENTRIES: usize = 500;
 const MAX_AGE: Duration = Duration::from_secs(90 * 24 * 60 * 60);
