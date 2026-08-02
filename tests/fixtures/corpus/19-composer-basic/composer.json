@@ -1,0 +1,1 @@
+{"name":"acme/basic","scripts":{"dev":"php -S localhost:8000","test":"phpunit"}}

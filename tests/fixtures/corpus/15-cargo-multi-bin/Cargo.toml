@@ -1,0 +1,11 @@
+[package]
+name = "cargo-multi-bin"
+version = "0.1.0"
+
+[[bin]]
+name = "api"
+path = "cmd/api.rs"
+
+[[bin]]
+name = "worker"
+path = "cmd/worker.rs"

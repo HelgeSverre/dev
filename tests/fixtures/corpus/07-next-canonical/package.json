@@ -1,0 +1,1 @@
+{"name":"next-canonical","scripts":{"dev":"next dev","build":"next build","start":"next start"},"dependencies":{"next":"latest"}}

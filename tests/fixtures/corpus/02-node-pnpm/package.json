@@ -1,0 +1,1 @@
+{"name":"node-pnpm","scripts":{"dev":"vite","build":"vite build","test":"vitest"}}

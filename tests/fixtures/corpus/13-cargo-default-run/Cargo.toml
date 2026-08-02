@@ -1,0 +1,12 @@
+[package]
+name = "cargo-default-run"
+version = "0.1.0"
+default-run = "server"
+
+[[bin]]
+name = "server"
+path = "src/bin/server.rs"
+
+[[bin]]
+name = "worker"
+path = "src/bin/worker.rs"
