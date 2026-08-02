@@ -3,7 +3,7 @@ use std::ffi::OsStr;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
-use std::thread::JoinHandle;
+use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::time::{Duration, Instant};
 
 use serde::Deserialize;
@@ -86,8 +86,16 @@ fn probe_command(
         Ok(child) => child,
         Err(error) => return ProbeOutcome::Failed(error.to_string()),
     };
-    let stdout = child.stdout.take().map(capture_bounded);
-    let stderr = child.stderr.take().map(capture_bounded);
+    let (capture_sender, capture_receiver) = mpsc::channel();
+    let expected_captures =
+        usize::from(child.stdout.is_some()) + usize::from(child.stderr.is_some());
+    if let Some(stdout) = child.stdout.take() {
+        capture_bounded(stdout, CapturedStream::Stdout, capture_sender.clone());
+    }
+    if let Some(stderr) = child.stderr.take() {
+        capture_bounded(stderr, CapturedStream::Stderr, capture_sender.clone());
+    }
+    drop(capture_sender);
     let deadline = Instant::now() + timeout;
     let status = loop {
         match child.try_wait() {
@@ -97,20 +105,19 @@ fn probe_command(
             }
             Ok(None) => {
                 terminate_process_scope(&mut child);
-                let _ = join_capture(stdout);
-                let _ = join_capture(stderr);
                 return ProbeOutcome::TimedOut { timeout };
             }
             Err(error) => {
                 terminate_process_scope(&mut child);
-                let _ = join_capture(stdout);
-                let _ = join_capture(stderr);
                 return ProbeOutcome::Failed(error.to_string());
             }
         }
     };
-    let stdout = join_capture(stdout);
-    let stderr = join_capture(stderr);
+    let Some((stdout, stderr)) = collect_captures(&capture_receiver, expected_captures, deadline)
+    else {
+        terminate_process_scope(&mut child);
+        return ProbeOutcome::TimedOut { timeout };
+    };
     let summary = selected_line(&stdout, output)
         .or_else(|| selected_line(&stderr, output))
         .or_else(|| first_line(&stdout))
@@ -128,28 +135,52 @@ fn probe_command(
     }
 }
 
-fn capture_bounded<R>(mut reader: R) -> JoinHandle<Vec<u8>>
-where
+#[derive(Copy, Clone, Debug)]
+enum CapturedStream {
+    Stdout,
+    Stderr,
+}
+
+fn capture_bounded<R>(
+    mut reader: R,
+    stream: CapturedStream,
+    sender: Sender<(CapturedStream, Vec<u8>)>,
+) where
     R: Read + Send + 'static,
 {
     std::thread::spawn(move || {
         let mut captured = Vec::new();
         let mut buffer = [0_u8; 4096];
-        while let Ok(read) = reader.read(&mut buffer) {
+        while captured.len() < MAX_CAPTURE_BYTES {
+            let Ok(read) = reader.read(&mut buffer) else {
+                break;
+            };
             if read == 0 {
                 break;
             }
-            let remaining = MAX_CAPTURE_BYTES.saturating_sub(captured.len());
+            let remaining = MAX_CAPTURE_BYTES - captured.len();
             captured.extend_from_slice(&buffer[..read.min(remaining)]);
         }
-        captured
-    })
+        let _ = sender.send((stream, captured));
+    });
 }
 
-fn join_capture(handle: Option<JoinHandle<Vec<u8>>>) -> Vec<u8> {
-    handle
-        .and_then(|handle| handle.join().ok())
-        .unwrap_or_default()
+fn collect_captures(
+    receiver: &Receiver<(CapturedStream, Vec<u8>)>,
+    expected: usize,
+    deadline: Instant,
+) -> Option<(Vec<u8>, Vec<u8>)> {
+    let mut stdout = Vec::new();
+    let mut stderr = Vec::new();
+    for _ in 0..expected {
+        let remaining = deadline.checked_duration_since(Instant::now())?;
+        match receiver.recv_timeout(remaining) {
+            Ok((CapturedStream::Stdout, bytes)) => stdout = bytes,
+            Ok((CapturedStream::Stderr, bytes)) => stderr = bytes,
+            Err(RecvTimeoutError::Timeout | RecvTimeoutError::Disconnected) => return None,
+        }
+    }
+    Some((stdout, stderr))
 }
 
 #[cfg(unix)]
@@ -371,6 +402,28 @@ mod tests {
             ),
             ProbeOutcome::Version("Gradle 9.4.1".to_owned())
         );
+        Ok(())
+    }
+
+    #[test]
+    fn command_probe_deadline_survives_inherited_grandchild_pipes() -> anyhow::Result<()> {
+        let temp = tempfile::tempdir()?;
+        let version = temp.path().join("forking-version");
+        executable(&version, "#!/bin/sh\n(sleep 30) &\nprintf 'tool 1.0\\n'\n")?;
+        let timeout = Duration::from_millis(50);
+        let started = Instant::now();
+
+        assert_eq!(
+            probe_command(
+                &version,
+                &[],
+                temp.path(),
+                timeout,
+                CommandOutput::FirstNonEmptyLine,
+            ),
+            ProbeOutcome::TimedOut { timeout }
+        );
+        assert!(started.elapsed() < Duration::from_secs(2));
         Ok(())
     }
 
