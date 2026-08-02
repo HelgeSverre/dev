@@ -73,36 +73,52 @@ steps.
 The capability registry is the single source of truth for discovery behavior,
 project markers, tool availability, doctor probes, and cache identity.
 
-```mermaid
-flowchart TD
-    CLI["CLI parser"] -->|run · build · test| ROOTS["Root resolution<br/>package · workspace · scan root"]
-    CLI -->|doctor| DOCTOR
-    CLI -->|completions| COMPLETIONS["Shell completion generation"]
-    CLI -->|cache| CACHE_ADMIN["Remembered-choice list · clear"]
-    REGISTRY["Capability registry<br/>detectors · markers · tools · hooks"] --> ROOTS
-    REGISTRY --> CACHE["Cache identity<br/>project shape · registry · environment"]
-    REGISTRY --> INDEX["Bounded file indexes<br/>structural · optional target index"]
-    REGISTRY --> DETECT["Static detector dispatch"]
-    REGISTRY --> DOCTOR["Doctor<br/>bounded tool probes"]
+```text
+Capability registry
+├── markers + workspace hooks ──► root resolution and bounded indexes
+├── detectors + sources + tools ─► static candidate discovery
+├── schema + environment keys ───► cache identity
+└── tool probes ─────────────────► dev doctor
 
-    ROOTS --> CACHE
-    CACHE --> HIT{"Valid remembered choice?"}
-    HIT -->|Yes| EXEC["Process executor<br/>argv · cwd · env · signals"]
-    HIT -->|No or inspection mode| INDEX
-    INDEX --> DETECT
-    DETECT --> CANDIDATES["Candidates + diagnostics"]
-    CANDIDATES --> RANK["Deduplicate · availability · scoring"]
-    RANK --> RESOLVE["Hint matching + deterministic resolution"]
-
-    RESOLVE -->|why · list · JSON| EXPLAIN["Explain only"]
-    RESOLVE -->|Ambiguous| PICKER["Interactive picker"]
-    RESOLVE -->|Clear winner| SELECTED["Selected candidate"]
-    PICKER --> REMEMBER["Optional remembered choice"]
-    REMEMBER --> SELECTED
-    SELECTED --> DRY{"Dry run?"}
-    DRY -->|Yes| PRINT["Print command only"]
-    DRY -->|No| EXEC
-    EXEC --> EXIT["Child exit status"]
+run / build / test
+        │
+        ▼
+  root resolution
+        │
+        ▼
+remembered-choice lookup
+   ├── valid fast hit ──► process executor ──► child exit status
+   │
+   └── miss or inspection mode
+                    │
+                    ▼
+         bounded file indexes
+                    │
+                    ▼
+            static detectors
+                    │
+                    ▼
+         candidates + diagnostics
+                    │
+                    ▼
+    deduplicate + availability + scoring
+                    │
+                    ▼
+         deterministic resolution
+             │       │       │
+             │       │       └── clear winner ──┐
+             │       └── picker ── remember? ───┤
+             └── why / list / JSON ──► explain  │
+                                                 ▼
+                                         selected command
+                                           │           │
+                                     dry-run           run
+                                           │           │
+                                           ▼           ▼
+                                      print only   process executor
+                                                       │
+                                                       ▼
+                                                child exit status
 ```
 
 ## Usage
@@ -204,6 +220,13 @@ shell after installing a completion script.
 
 The complete contract and implementation milestones live in
 [`docs/spec.md`](docs/spec.md).
+
+## Contributing
+
+Human-written and AI-assisted contributions are both welcome. Start with the
+[contribution policy](CONTRIBUTING.md); detector authors should then follow the
+step-by-step [detector guide](docs/adding-a-detector.md). Coding agents must also
+read [`AGENTS.md`](AGENTS.md) before changing the repository.
 
 ## Development
 
