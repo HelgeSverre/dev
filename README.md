@@ -29,7 +29,14 @@ dev run laravel queue
 
 ## Install
 
-`dev` is currently installed from a checkout and requires Rust 1.85 or newer:
+`dev` requires Rust 1.85 or newer. It is not yet published to a registry;
+install from the repository:
+
+```console
+cargo install --git https://github.com/HelgeSverre/dev.git
+```
+
+For development or contributing, clone the checkout:
 
 ```console
 git clone https://github.com/HelgeSverre/dev.git
@@ -39,14 +46,11 @@ dev completions --install
 dev doctor
 ```
 
-`just install` runs `cargo install --path .`. Remove it again with:
+`just install` runs `cargo install --path .`. Remove either installation with:
 
 ```console
-just uninstall
+cargo uninstall dev-launcher
 ```
-
-If `just` is not installed, use `cargo install --path .` and
-`cargo uninstall dev-launcher` directly.
 
 ## How it works
 

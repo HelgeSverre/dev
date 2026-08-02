@@ -7,8 +7,7 @@ correctness work.
 ## Ground rules
 
 - **No CLA or DCO sign-off is required.** By opening a pull request, you agree
-  that your contribution may be distributed under the project's MIT OR
-  Apache-2.0 license terms.
+  that your contribution may be distributed under the project's MIT license.
 - **Be respectful.** Review the work, not the person, and assume good intent.
 - **Discuss large changes first.** Open an issue before investing in a new
   subsystem, broad refactor, dependency, or behavioral change so the approach
