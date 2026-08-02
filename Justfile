@@ -14,6 +14,12 @@ build:
 release:
     cargo build --release
 
+# Run the release-mode performance suite without invoking doctests.
+[group('qa')]
+bench:
+    cargo build --release --bin dev
+    cargo bench --bench performance
+
 # Run dev from source, passing arguments through.
 [group('build')]
 run *ARGS:

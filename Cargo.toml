@@ -13,6 +13,10 @@ publish = false
 name = "dev"
 path = "src/main.rs"
 
+[[bench]]
+name = "performance"
+harness = false
+
 [package.metadata.dist]
 dist = true
 formula = "dev"
