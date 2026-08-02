@@ -670,9 +670,9 @@ identity:
    order.
 
 Framework fallbacks and native conventions SHOULD use `ToolDefault`. Declared
-npm/Composer scripts SHOULD use `EcosystemTask`. Just recipes and literal Make
-targets SHOULD use `ProjectFacade`. Explicit files and binaries use
-`DirectTarget`.
+npm/Composer scripts SHOULD use `EcosystemTask`. Just, Jake, Taskfile, and mise
+tasks and literal Make targets SHOULD use `ProjectFacade`. Explicit files and
+binaries use `DirectTarget`.
 
 ---
 
@@ -815,6 +815,10 @@ The initial registry is static. Registration order MUST NOT influence output.
 | `dart` | `dart`, `flutter` | `pubspec.yaml` | run, build, test |
 | `python-file` | `python-file` | explicit or hinted `*.py` | run |
 | `just` | `just` | case-insensitive `justfile`, `.justfile` | run, build, test |
+| `jake` | `jake` | `Jakefile` | run, build, test |
+| `taskfile` | `taskfile` | standard Taskfile YAML names | run, build, test |
+| `mise` | `mise` | `mise.toml`, `.mise.toml`, environment/local variants | run, build, test |
+| `sema` | `sema` | `sema.toml`, `*.sema` | run, build, test |
 | `make` | `make` | Makefile variants | run, build, test |
 | `docker` | `docker` | Compose files, `Dockerfile` | run, build |
 | `shell` | `shell` | shebangs, executable files | run |
@@ -1063,7 +1067,24 @@ without claiming full Python-project understanding:
 `pyproject.toml` entry points, pytest, uv/Poetry/PDM environments, editable
 installs, and monorepo behavior require a dedicated post-v1 design.
 
-### 10.12 Just
+### 10.12 Sema
+
+Recognize `sema.toml`, `sema.lock`, and Sema source files. Parse `sema.toml`
+as bounded TOML. A `[package]` table may declare `entrypoint`; package manifests
+without one use `package.sema` only when that file exists. Entrypoints must be
+literal relative paths that remain inside the package.
+
+- Run: `sema <entrypoint>`.
+- Build: `sema build <entrypoint>`.
+- Test: `sema test` from a declared package root.
+- Hinted standalone sources use `sema <file>`, `sema build <file>`, or `sema
+  test <file>` according to intent.
+
+The ordinary Test candidate MUST NOT add `--doctests` or infer any other Sema
+test mode. `sema --version` is the registered doctor probe. Package-manager
+commands are never inserted before execution.
+
+### 10.13 Just
 
 Recognize `.justfile` and any basename equal to `justfile` under ASCII
 case-insensitive comparison. A Justfile is a package marker. If several
@@ -1107,7 +1128,47 @@ dominates lower-level same-scope defaults under section 9.7 while leaving those
 alternatives directly selectable. `just --version` is the registered doctor
 probe; `just version` is a recipe invocation and MUST NOT be used as a probe.
 
-### 10.13 Make
+### 10.14 Jake, Taskfile, and mise
+
+These systems are declared project-task facades and follow the canonical task
+names and dominance rules used by Just. Discovery is static and MUST NOT invoke
+`jake --list`, `task --list`, `mise tasks`, or any other native listing command.
+Unsupported dynamic includes invalidate that facade's partial result and emit a
+diagnostic.
+
+Jake recognizes the case-sensitive `Jakefile`, public `task` and simple recipe
+headers, `@default`, `@desc`, adjacent doc comments, aliases, and bounded
+literal relative `@import` directives. Dot namespaces are preserved. File
+recipes, underscore-prefixed recipes, and tasks with required parameters are
+not auto candidates. Execution is:
+
+```text
+jake -f <absolute-Jakefile> <task> -- <passthrough...>
+```
+
+Taskfile recognizes the standard `Taskfile.yml`, `Taskfile.yaml`, lowercase,
+and `.dist` spellings with documented precedence. It parses public YAML tasks,
+descriptions, aliases, `internal`, required variables, and bounded literal
+includes. Included namespaces use `:`. A canonical task that declares required
+variables requires confirmation. Execution is:
+
+```text
+task --taskfile <absolute-Taskfile> <task> -- <passthrough...>
+```
+
+mise recognizes `mise.toml`, `.mise.toml`, and environment/local variants. It
+parses `[tasks]` entries, descriptions, aliases, hidden tasks, dependency-only
+tasks, and bounded literal `[task_config].includes`. It does not evaluate tool,
+environment, hook, or task scripts during discovery. Execution is:
+
+```text
+mise run <task> -- <passthrough...>
+```
+
+Their registered doctor probes are respectively `jake --version`, `task
+--version`, and `mise --version`.
+
+### 10.15 Make
 
 Use a conservative line scanner, not a claim of fully parsing Make syntax.
 Recognize literal target names; ignore pattern rules, special targets, variable
@@ -1128,7 +1189,7 @@ Make is often a wrapper. When an execution-equivalent native candidate exists,
 deduplication should prefer the native explanation; otherwise Make remains a
 valid candidate rather than receiving a blanket penalty.
 
-### 10.14 Docker and Compose
+### 10.16 Docker and Compose
 
 Recognize all standard Compose filename spellings:
 
@@ -1148,7 +1209,7 @@ docker-compose.yaml
 Do not synthesize an image tag from a directory name: names may be invalid and
 tagging is an unnecessary side effect.
 
-### 10.15 Shell and executables
+### 10.17 Shell and executables
 
 - An explicitly anchored executable with a shebang runs directly.
 - A non-executable script with a recognized shebang runs through that
@@ -1160,7 +1221,7 @@ tagging is an unnecessary side effect.
 
 Never source a script to inspect it.
 
-### 10.16 Target binding and synthetic candidates
+### 10.18 Target binding and synthetic candidates
 
 Specific ecosystem binding takes precedence over executing a matched file as a
 standalone program. Detectors may register pure target binders:
@@ -1216,7 +1277,7 @@ Synthetic candidates:
 - never appear in unhinted resolution;
 - remain visible after the picker filter is cleared during the same invocation.
 
-### 10.17 Expansion constraints for Gradle, Maven, and .NET
+### 10.19 Expansion constraints for Gradle, Maven, and .NET
 
 New ecosystems use the same registration, marker, workspace, candidate-builder,
 and doctor APIs. They do not receive discovery-time subprocess exceptions.
@@ -2111,6 +2172,10 @@ Create at least 50 tiny, real-shaped repositories covering:
 - standalone Python files with and without active virtual environment;
 - Justfile case variants, private/default/aliased/dependency-only recipes,
   zero-minimum parameters, and bounded literal imports;
+- Jake aliases, default/required-parameter handling, and namespaced imports;
+- Taskfile spelling precedence, internal/required-var tasks, and includes;
+- mise TOML task forms, aliases, hidden tasks, config layering, and includes;
+- Sema package entrypoints, ordinary tests, and standalone source files;
 - Make comments, wrapper targets, and syntax the scanner intentionally ignores;
 - all four Compose filenames and Compose beside a native Vite app;
 - shell shebang variants, missing executable bit, and extensionless executables;
@@ -2293,7 +2358,9 @@ At M2, `dev` is useful for Node and Rust without a TUI or cache.
 
 - Static capability registry, registry-bound candidate builder, and removal of
   detector/tool/marker side tables.
-- Justfile detector and declared project-task dominance.
+- Justfile, Jake, Taskfile, and mise detectors and declared project-task
+  dominance.
+- Sema package and source-file support without doctest inference.
 - Full Python project design.
 - Gradle, Maven, and .NET detectors under the no-subprocess discovery contract.
 - CMake, Bazel, Nix, and plugin feasibility.
@@ -2334,6 +2401,8 @@ Revision 4 makes detector registration the expansion boundary:
 | Workspace expansion for Cargo, Node, and Go lives in the generic scanner | Optional pure workspace contributions live with their ecosystem registrations |
 | Declared wrappers compete with lower-level defaults only through scores | Canonical project-task facades demote same-scope tool defaults without hiding them |
 | Justfiles are indexed incidentally but have no consumer | Static Justfile parsing emits public zero-arity recipes and registers Just markers/tooling |
+| Other declared task systems require ad hoc support | Jake, Taskfile, and mise use the same bounded facade parser contract and registered doctor probes |
+| Sema source and package metadata are unknown | Static Sema candidates use declared entrypoints and ordinary `sema test` only |
 
 The registry remains compile-time and data-only. Revision 4 does not introduce
 runtime plugins or grant detectors permission to execute native task-listing
@@ -2350,7 +2419,8 @@ Migrate without a flag day:
    existing detectors in small ecosystem groups.
 4. Move doctor to registered probes and land the Go, Zig, Flutter, and Just
    probe corrections together.
-5. Add the static Justfile parser and facade-dominance fixtures.
+5. Add the static Justfile, Jake, Taskfile, mise, and Sema parsers plus
+   facade-dominance fixtures.
 6. Add Gradle, Maven, and .NET only after registry extension tests prove no
    scanner, cache, UI, or doctor side table must change.
 

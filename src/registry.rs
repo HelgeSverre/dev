@@ -8,8 +8,9 @@ use serde::Serialize;
 
 use crate::detect::{
     ArtisanDetector, CargoDetector, ComposerDetector, DartDetector, Detector, DockerDetector,
-    GoDetector, JustDetector, MakeDetector, NodeDetector, NodeTestBinder, PhpFileDetector,
-    PythonFileDetector, ShellDetector, SwiftDetector, TargetBinder, TargetRunner, ZigDetector,
+    GoDetector, JakeDetector, JustDetector, MakeDetector, MiseDetector, NodeDetector,
+    NodeTestBinder, PhpFileDetector, PythonFileDetector, SemaDetector, ShellDetector,
+    SwiftDetector, TargetBinder, TargetRunner, TaskfileDetector, ZigDetector,
 };
 
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Serialize)]
@@ -83,7 +84,11 @@ pub const CARGO: DetectorId = DetectorId::new("cargo");
 pub const COMPOSER: DetectorId = DetectorId::new("composer");
 pub const ARTISAN: DetectorId = DetectorId::new("artisan");
 pub const GO: DetectorId = DetectorId::new("go");
+pub const JAKE: DetectorId = DetectorId::new("jake");
 pub const JUST: DetectorId = DetectorId::new("just");
+pub const TASKFILE: DetectorId = DetectorId::new("taskfile");
+pub const MISE: DetectorId = DetectorId::new("mise");
+pub const SEMA: DetectorId = DetectorId::new("sema");
 pub const PHP_FILE: DetectorId = DetectorId::new("php-file");
 pub const ZIG: DetectorId = DetectorId::new("zig");
 pub const SWIFT: DetectorId = DetectorId::new("swift");
@@ -100,7 +105,11 @@ pub const CARGO_SOURCE: CandidateSourceId = CandidateSourceId::new("cargo");
 pub const COMPOSER_SOURCE: CandidateSourceId = CandidateSourceId::new("composer");
 pub const ARTISAN_SOURCE: CandidateSourceId = CandidateSourceId::new("artisan");
 pub const GO_SOURCE: CandidateSourceId = CandidateSourceId::new("go");
+pub const JAKE_SOURCE: CandidateSourceId = CandidateSourceId::new("jake");
 pub const JUST_SOURCE: CandidateSourceId = CandidateSourceId::new("just");
+pub const TASKFILE_SOURCE: CandidateSourceId = CandidateSourceId::new("taskfile");
+pub const MISE_SOURCE: CandidateSourceId = CandidateSourceId::new("mise");
+pub const SEMA_SOURCE: CandidateSourceId = CandidateSourceId::new("sema");
 pub const PHP_FILE_SOURCE: CandidateSourceId = CandidateSourceId::new("php-file");
 pub const ZIG_SOURCE: CandidateSourceId = CandidateSourceId::new("zig");
 pub const SWIFT_SOURCE: CandidateSourceId = CandidateSourceId::new("swift");
@@ -121,7 +130,11 @@ pub const RUSTC_TOOL: ToolId = ToolId::new("rustc");
 pub const COMPOSER_TOOL: ToolId = ToolId::new("composer");
 pub const PHP_TOOL: ToolId = ToolId::new("php");
 pub const GO_TOOL: ToolId = ToolId::new("go");
+pub const JAKE_TOOL: ToolId = ToolId::new("jake");
 pub const JUST_TOOL: ToolId = ToolId::new("just");
+pub const TASK_TOOL: ToolId = ToolId::new("task");
+pub const MISE_TOOL: ToolId = ToolId::new("mise");
+pub const SEMA_TOOL: ToolId = ToolId::new("sema");
 pub const ZIG_TOOL: ToolId = ToolId::new("zig");
 pub const SWIFT_TOOL: ToolId = ToolId::new("swift");
 pub const FLUTTER_TOOL: ToolId = ToolId::new("flutter");
@@ -263,7 +276,11 @@ const RUSTC_PROGRAM: ToolRegistration = command_tool(RUSTC_TOOL, "rustc", &["--v
 const COMPOSER_PROGRAM: ToolRegistration = command_tool(COMPOSER_TOOL, "composer", &["--version"]);
 const PHP_PROGRAM: ToolRegistration = command_tool(PHP_TOOL, "php", &["--version"]);
 const GO_PROGRAM: ToolRegistration = command_tool(GO_TOOL, "go", &["version"]);
+const JAKE_PROGRAM: ToolRegistration = command_tool(JAKE_TOOL, "jake", &["--version"]);
 const JUST_PROGRAM: ToolRegistration = command_tool(JUST_TOOL, "just", &["--version"]);
+const TASK_PROGRAM: ToolRegistration = command_tool(TASK_TOOL, "task", &["--version"]);
+const MISE_PROGRAM: ToolRegistration = command_tool(MISE_TOOL, "mise", &["--version"]);
+const SEMA_PROGRAM: ToolRegistration = command_tool(SEMA_TOOL, "sema", &["--version"]);
 const ZIG_PROGRAM: ToolRegistration = command_tool(ZIG_TOOL, "zig", &["version"]);
 const SWIFT_PROGRAM: ToolRegistration = command_tool(SWIFT_TOOL, "swift", &["--version"]);
 const FLUTTER_PROGRAM: ToolRegistration = ToolRegistration {
@@ -593,6 +610,128 @@ static REGISTRATIONS: &[DetectorRegistration] = &[
         target_runners: &[],
     },
     DetectorRegistration {
+        id: JAKE,
+        candidate_sources: &[CandidateSourceRegistration {
+            id: JAKE_SOURCE,
+            metadata_priority: 3,
+            default_tags: &["jake", "jakefile", "task"],
+        }],
+        synonyms: &["jake", "jakefile", "recipe", "task"],
+        markers: &[ProjectMarker {
+            pattern: MarkerPattern::Exact("Jakefile"),
+            root_role: RootRole::Package,
+        }],
+        tools: &[JAKE_PROGRAM],
+        conventional_roots: ROOTS,
+        candidate_schema: 1,
+        detector: &JakeDetector,
+        target_binders: &[],
+        target_runners: &[],
+    },
+    DetectorRegistration {
+        id: TASKFILE,
+        candidate_sources: &[CandidateSourceRegistration {
+            id: TASKFILE_SOURCE,
+            metadata_priority: 3,
+            default_tags: &["task", "taskfile", "go-task"],
+        }],
+        synonyms: &["task", "taskfile", "go-task", "recipe"],
+        markers: &[
+            ProjectMarker {
+                pattern: MarkerPattern::Exact("Taskfile.yml"),
+                root_role: RootRole::Package,
+            },
+            ProjectMarker {
+                pattern: MarkerPattern::Exact("Taskfile.yaml"),
+                root_role: RootRole::Package,
+            },
+            ProjectMarker {
+                pattern: MarkerPattern::Exact("taskfile.yml"),
+                root_role: RootRole::Package,
+            },
+            ProjectMarker {
+                pattern: MarkerPattern::Exact("taskfile.yaml"),
+                root_role: RootRole::Package,
+            },
+            ProjectMarker {
+                pattern: MarkerPattern::Exact("Taskfile.dist.yml"),
+                root_role: RootRole::Package,
+            },
+            ProjectMarker {
+                pattern: MarkerPattern::Exact("Taskfile.dist.yaml"),
+                root_role: RootRole::Package,
+            },
+            ProjectMarker {
+                pattern: MarkerPattern::Exact("taskfile.dist.yml"),
+                root_role: RootRole::Package,
+            },
+            ProjectMarker {
+                pattern: MarkerPattern::Exact("taskfile.dist.yaml"),
+                root_role: RootRole::Package,
+            },
+        ],
+        tools: &[TASK_PROGRAM],
+        conventional_roots: ROOTS,
+        candidate_schema: 1,
+        detector: &TaskfileDetector,
+        target_binders: &[],
+        target_runners: &[],
+    },
+    DetectorRegistration {
+        id: MISE,
+        candidate_sources: &[CandidateSourceRegistration {
+            id: MISE_SOURCE,
+            metadata_priority: 3,
+            default_tags: &["mise", "task"],
+        }],
+        synonyms: &["mise", "mise-en-place", "task", "recipe"],
+        markers: &[
+            ProjectMarker {
+                pattern: MarkerPattern::Exact("mise.toml"),
+                root_role: RootRole::Package,
+            },
+            ProjectMarker {
+                pattern: MarkerPattern::Exact(".mise.toml"),
+                root_role: RootRole::Package,
+            },
+        ],
+        tools: &[MISE_PROGRAM],
+        conventional_roots: ROOTS,
+        candidate_schema: 1,
+        detector: &MiseDetector,
+        target_binders: &[],
+        target_runners: &[],
+    },
+    DetectorRegistration {
+        id: SEMA,
+        candidate_sources: &[CandidateSourceRegistration {
+            id: SEMA_SOURCE,
+            metadata_priority: 2,
+            default_tags: &["sema", "lisp"],
+        }],
+        synonyms: &["sema", "sema-lang", "lisp", "sexpr"],
+        markers: &[
+            ProjectMarker {
+                pattern: MarkerPattern::Exact("sema.toml"),
+                root_role: RootRole::Package,
+            },
+            ProjectMarker {
+                pattern: MarkerPattern::Exact("sema.lock"),
+                root_role: RootRole::Auxiliary,
+            },
+            ProjectMarker {
+                pattern: MarkerPattern::Extension("sema"),
+                root_role: RootRole::Classified,
+            },
+        ],
+        tools: &[SEMA_PROGRAM],
+        conventional_roots: ROOTS,
+        candidate_schema: 1,
+        detector: &SemaDetector,
+        target_binders: &[],
+        target_runners: &[],
+    },
+    DetectorRegistration {
         id: SHELL,
         candidate_sources: &[CandidateSourceRegistration {
             id: SHELL_SOURCE,
@@ -858,7 +997,7 @@ mod tests {
     #[test]
     fn registry_is_internally_consistent() -> anyhow::Result<()> {
         validate()?;
-        assert_eq!(tools().len(), 19);
+        assert_eq!(tools().len(), 23);
         assert!(source_by_name("vite").is_some());
         assert!(source_by_name("unknown").is_none());
         Ok(())

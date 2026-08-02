@@ -1376,6 +1376,120 @@ fn just_test_facade_dominates_composer_and_preserves_exact_justfile() -> anyhow:
 }
 
 #[test]
+fn jake_imported_task_executes_with_root_file_and_namespace() -> anyhow::Result<()> {
+    let temp = tempfile::tempdir()?;
+    let project = temp.path().join("jake-project");
+    fs::create_dir_all(project.join("tasks"))?;
+    fs::write(
+        project.join("Jakefile"),
+        "@import \"tasks/checks.jake\" as checks\n\ntask deploy environment:\n    echo deploy\n",
+    )?;
+    fs::write(
+        project.join("tasks/checks.jake"),
+        "@desc \"Run the test suite\"\ntask test | verify:\n    echo test\n",
+    )?;
+    let bin = fake_program(temp.path(), "jake")?;
+
+    let mut command = cargo_bin_cmd!("dev");
+    command
+        .args(["test", "--quiet", "--at"])
+        .arg(&project)
+        .args(["--", "--filter", "database"])
+        .env("PATH", &bin);
+    command.assert().success().stdout(format!(
+        "cwd=<{}>\narg0=<-f>\narg1=<{}>\narg2=<checks.test>\narg3=<-->\narg4=<--filter>\narg5=<database>\n",
+        project.display(),
+        project.join("Jakefile").display()
+    ));
+    Ok(())
+}
+
+#[test]
+fn taskfile_included_task_executes_with_explicit_root_file() -> anyhow::Result<()> {
+    let temp = tempfile::tempdir()?;
+    let project = temp.path().join("task-project");
+    fs::create_dir_all(project.join("tasks"))?;
+    fs::write(
+        project.join("Taskfile.yml"),
+        "version: '3'\nincludes:\n  ci: tasks/ci.yml\n",
+    )?;
+    fs::write(
+        project.join("tasks/ci.yml"),
+        "version: '3'\ntasks:\n  test:\n    desc: Run the test suite\n    cmds: [echo test]\n",
+    )?;
+    let bin = fake_program(temp.path(), "task")?;
+
+    let mut command = cargo_bin_cmd!("dev");
+    command
+        .args(["test", "--quiet", "--at"])
+        .arg(&project)
+        .args(["--", "unit"])
+        .env("PATH", &bin);
+    command.assert().success().stdout(format!(
+        "cwd=<{}>\narg0=<--taskfile>\narg1=<{}>\narg2=<ci:test>\narg3=<-->\narg4=<unit>\n",
+        project.display(),
+        project.join("Taskfile.yml").display()
+    ));
+    Ok(())
+}
+
+#[test]
+fn mise_task_executes_through_explicit_run_subcommand() -> anyhow::Result<()> {
+    let temp = tempfile::tempdir()?;
+    let project = temp.path().join("mise-project");
+    fs::create_dir(&project)?;
+    fs::write(
+        project.join(".mise.toml"),
+        "[tasks.test]\ndescription = \"Run tests\"\nrun = \"cargo nextest run\"\nalias = [\"verify\"]\n",
+    )?;
+    let bin = fake_program(temp.path(), "mise")?;
+
+    let mut command = cargo_bin_cmd!("dev");
+    command
+        .args(["test", "--quiet", "--at"])
+        .arg(&project)
+        .args(["--", "package"])
+        .env("PATH", &bin);
+    command.assert().success().stdout(format!(
+        "cwd=<{}>\narg0=<run>\narg1=<test>\narg2=<-->\narg3=<package>\n",
+        project.display()
+    ));
+    Ok(())
+}
+
+#[test]
+fn sema_package_uses_entrypoint_and_plain_test_command() -> anyhow::Result<()> {
+    let temp = tempfile::tempdir()?;
+    let project = temp.path().join("sema-project");
+    fs::create_dir(&project)?;
+    fs::write(
+        project.join("sema.toml"),
+        "[package]\nname = \"example\"\nentrypoint = \"src/main.sema\"\n",
+    )?;
+    fs::create_dir(project.join("src"))?;
+    fs::write(project.join("src/main.sema"), "(println \"hello\")\n")?;
+    let bin = fake_program(temp.path(), "sema")?;
+
+    let mut run = cargo_bin_cmd!("dev");
+    run.args(["run", "--quiet", "--at"])
+        .arg(&project)
+        .env("PATH", &bin);
+    run.assert().success().stdout(format!(
+        "cwd=<{}>\narg0=<src/main.sema>\n",
+        project.display()
+    ));
+
+    let mut test = cargo_bin_cmd!("dev");
+    test.args(["test", "--quiet", "--at"])
+        .arg(&project)
+        .env("PATH", &bin);
+    test.assert()
+        .success()
+        .stdout(format!("cwd=<{}>\narg0=<test>\n", project.display()));
+    Ok(())
+}
+
+#[test]
 fn malformed_composer_manifest_is_diagnostic_not_a_command() -> anyhow::Result<()> {
     let temp = tempfile::tempdir()?;
     let project = temp.path().join("malformed-composer");

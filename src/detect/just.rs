@@ -213,56 +213,14 @@ fn recipe_policy(
     aliases: &[String],
     is_default: bool,
 ) -> Option<(SelectionPolicy, i32)> {
-    let names = aliases
-        .iter()
-        .map(String::as_str)
-        .chain(std::iter::once(name));
-    let canonical_points = names
-        .clone()
-        .filter_map(|name| canonical_points(intent, name))
-        .max();
-    if let Some(points) = canonical_points {
-        return Some((SelectionPolicy::Automatic, points));
-    }
-    match intent {
-        Intent::Run => {
-            let canonical_other = names.clone().any(|name| {
-                canonical_for(Intent::Build, name) || canonical_for(Intent::Test, name)
-            });
-            if is_default && !canonical_other {
-                Some((SelectionPolicy::Automatic, 85))
-            } else {
-                Some((SelectionPolicy::ExplicitHint, 15))
-            }
-        }
-        Intent::Build | Intent::Test => None,
-    }
-}
-
-fn canonical_for(intent: Intent, name: &str) -> bool {
-    canonical_points(intent, name).is_some()
-}
-
-fn canonical_points(intent: Intent, name: &str) -> Option<i32> {
-    match intent {
-        Intent::Run => match name {
-            "dev" => Some(95),
-            "run" | "start" => Some(90),
-            "serve" | "watch" => Some(75),
-            _ => None,
-        },
-        Intent::Build => match name {
-            "build" => Some(95),
-            "all" => Some(85),
-            "compile" | "bundle" => Some(75),
-            _ => None,
-        },
-        Intent::Test => match name {
-            "test" => Some(95),
-            "check" | "verify" => Some(75),
-            _ => None,
-        },
-    }
+    super::task_facade::policy(
+        intent,
+        aliases
+            .iter()
+            .map(String::as_str)
+            .chain(std::iter::once(name)),
+        is_default,
+    )
 }
 
 fn parse_file(path: &Path, namespace: &str, root: bool, depth: usize, state: &mut ParseState<'_>) {
@@ -528,7 +486,7 @@ fn parse_recipe_header(line: &str) -> Option<(String, Vec<String>)> {
     Some((name, tokens))
 }
 
-fn split_header(value: &str) -> Vec<String> {
+pub(super) fn split_header(value: &str) -> Vec<String> {
     let mut tokens = Vec::new();
     let mut current = String::new();
     let mut quote = None;
