@@ -15,8 +15,8 @@
   <a href="website/index.html">Website</a>
 </p>
 
-> **Status:** Early development. The CLI described below is the intended
-> interface and is not ready for general use yet.
+> **Status:** Active development. The CLI is implemented and usable, but the
+> pre-1.0 interface and candidate-ranking details may still change.
 
 `dev` finds commands a project already knows how to run, ranks the candidates
 deterministically, and executes the best match with the original process
@@ -30,7 +30,28 @@ dev test ./tests/Feature entitlement participant
 dev run laravel queue
 ```
 
-## How it is designed to work
+## Install
+
+`dev` is currently installed from a checkout and requires Rust 1.85 or newer:
+
+```console
+git clone https://github.com/HelgeSverre/dev.git
+cd dev
+just install
+dev completions --install
+dev doctor
+```
+
+`just install` runs `cargo install --path .`. Remove it again with:
+
+```console
+just uninstall
+```
+
+If `just` is not installed, use `cargo install --path .` and
+`cargo uninstall dev-launcher` directly.
+
+## How it works
 
 - Discover commands from manifests, conventional files, and runnable targets.
 - Match incomplete or misspelled hints without inventing shell commands.
@@ -45,24 +66,74 @@ dev run laravel queue
 
 Discovery is local, bounded, and read-only. It does not run project code,
 access the network, install missing tools, or generate arbitrary shell text.
+The selected command can still require dependencies that are not installed;
+use the project's normal setup command when that happens. `dev` deliberately
+does not insert `npm install`, `composer install`, `dotnet restore`, or similar
+steps.
 
-## Intended interface
+## Usage
 
 ```text
-dev <run|build|test> [target] [hint ...] [-- passthrough ...]
+dev <run|build|test> [options] [target] [hint ...] [-- passthrough ...]
 ```
 
 Targets must be path-like, such as `./apps/web` or `../service`. Other words
 are retrieval hints. This keeps parsing stable regardless of which files happen
-to exist in the current directory.
+to exist in the current directory. Use `-C` or `--at` when an explicit path is
+clearer:
 
-Useful inspection modes will include:
+```console
+dev test --at ./apps/api participant
+```
+
+Inspect resolution without executing anything:
 
 ```console
 dev run --list
 dev run vite frontend --why
 dev test --json
 dev build --dry-run -- --release
+```
+
+Arguments after `--` are forwarded to the selected command without shell
+re-parsing. `--why`, `--list`, `--json`, and `--dry-run` never execute the
+candidate.
+
+When hints are present, `dev` uses typo-tolerant matching and scans conventional
+directories such as `tests/`, `examples/`, `scripts/`, and `cmd/`. Set
+`--chaos 0` for declared commands only or `--chaos 2` for a broader bounded
+scan. Broader discovery never permits arbitrary command generation.
+
+### Supported project sources
+
+Discovery is static: `dev` reads manifests and task files but does not invoke
+native task-listing commands during detection.
+
+| Category | Sources |
+|---|---|
+| Package ecosystems | npm, pnpm, Yarn, Bun, Vite, Next.js, Cargo, Composer, Artisan, Go, Gradle, Maven, .NET, SwiftPM, Dart, Flutter, Zig, and Sema |
+| Project task facades | Just, Make, Jake, Taskfile, and mise |
+| Services and runnable targets | Docker Compose, shell scripts, Python files, and PHP files |
+
+Workspace-aware discovery covers Cargo workspaces, Node/pnpm workspaces, Go
+workspaces, Gradle multi-project builds, Maven reactors, and .NET solutions.
+Gradle and Maven wrappers are selected only when their declared distributions
+are already cached locally, so discovery cannot trigger a download.
+
+### Doctor and remembered choices
+
+Check every registered local toolchain with bounded, tool-specific probes:
+
+```console
+dev doctor
+```
+
+Explicit picker choices can be remembered for the same project shape and
+invocation. Inspect or clear them with:
+
+```console
+dev cache list
+dev cache clear
 ```
 
 ## Shell completions
@@ -102,6 +173,16 @@ The complete contract and implementation milestones live in
 
 ## Development
 
-The project targets Rust 1.85 or newer. It is being built as tested vertical
-slices across parsing, discovery, detection, ranking, resolution, interaction,
-caching, and execution.
+The project targets Rust 1.85 or newer and uses
+[`cargo-nextest`](https://nexte.st/) for its test suite.
+
+```console
+just test
+just qa
+just bench
+```
+
+`just qa` runs formatting checks, Clippy with warnings denied, and the nextest
+suite. `just bench` builds the release binary and checks the performance
+ceilings documented in [`docs/performance.md`](docs/performance.md). Doctests
+are intentionally not part of the project.
