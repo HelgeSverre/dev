@@ -37,6 +37,7 @@ const WATCHED_PROJECT_NAMES: &[&str] = &[
     "compose.yml",
     "docker-compose.yaml",
     "docker-compose.yml",
+    "Dockerfile",
 ];
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]

@@ -13,7 +13,8 @@ use crate::intent::{Intent, Target};
 use crate::query::{match_candidate, normalize_query, MatchClass};
 use crate::scan::{IndexEntry, IndexedFileType};
 
-use super::{Detection, Detector, ScanCtx};
+use super::target::explicitly_anchored;
+use super::{Detection, Detector, ScanCtx, TargetRunner};
 
 pub struct DartDetector;
 
@@ -54,12 +55,27 @@ impl Detector for DartDetector {
                 .candidates
                 .extend(project_candidates(context, project));
         }
-        if context.invocation.intent == Intent::Run {
-            output
-                .candidates
-                .extend(standalone_dart_candidates(context, &projects));
-        }
         output
+    }
+}
+
+impl TargetRunner for DartDetector {
+    fn supports(&self, target: &IndexEntry, context: &ScanCtx<'_>) -> bool {
+        context.invocation.intent == Intent::Run && is_dart_file(target)
+    }
+
+    fn candidate(&self, target: &IndexEntry, context: &ScanCtx<'_>) -> Option<Candidate> {
+        let absolute = context.roots.scan_root.join(&target.relative_path);
+        let explicit = explicitly_anchored(target, context);
+        let (projects, _) = projects(context);
+        let mut candidate = if let Some(project) = closest_project(&absolute, &projects) {
+            let relative = absolute.strip_prefix(&project.directory).ok()?;
+            dart_run_candidate(project, Some(relative), explicit)
+        } else {
+            standalone_without_pubspec(&absolute, explicit)
+        };
+        candidate.origin = CandidateOrigin::Synthetic;
+        Some(candidate)
     }
 }
 
@@ -436,50 +452,6 @@ fn default_dart_entry(project: &DartProject) -> Option<Option<PathBuf>> {
     }
 }
 
-fn standalone_dart_candidates(context: &ScanCtx<'_>, projects: &[DartProject]) -> Vec<Candidate> {
-    if let Target::File(target) = &context.invocation.target {
-        if target
-            .extension()
-            .is_some_and(|extension| extension == "dart")
-        {
-            if let Some(project) = closest_project(target, projects) {
-                let relative = target
-                    .strip_prefix(&project.directory)
-                    .unwrap_or(target)
-                    .to_path_buf();
-                return vec![dart_run_candidate(project, Some(&relative), true)];
-            }
-            return vec![standalone_without_pubspec(target, true)];
-        }
-    }
-    if context.invocation.hints.is_empty() {
-        return Vec::new();
-    }
-    let query = normalize_query(&context.invocation.hints);
-    context
-        .index
-        .all_entries()
-        .filter(|entry| is_dart_file(entry))
-        .map(|entry| {
-            let absolute = context.roots.scan_root.join(&entry.relative_path);
-            closest_project(&absolute, projects).map_or_else(
-                || standalone_without_pubspec(&absolute, false),
-                |project| {
-                    let relative = absolute
-                        .strip_prefix(&project.directory)
-                        .unwrap_or(&absolute);
-                    dart_run_candidate(project, Some(relative), false)
-                },
-            )
-        })
-        .filter(|candidate| {
-            let matched = match_candidate(candidate, &query, context.invocation.chaos);
-            matched.highest_class == Some(MatchClass::Identity)
-                && matched.matched_meaningful_terms > 0
-        })
-        .collect()
-}
-
 fn standalone_without_pubspec(target: &Path, explicit: bool) -> Candidate {
     let directory = target.parent().unwrap_or(Path::new(".")).to_path_buf();
     let filename = target
@@ -552,7 +524,7 @@ fn is_flutter_sdk_dependency(value: &serde_yaml::Value) -> bool {
 }
 
 fn is_dart_file(entry: &IndexEntry) -> bool {
-    entry.file_type == IndexedFileType::File
+    entry.file_type != IndexedFileType::Directory
         && entry
             .relative_path
             .extension()

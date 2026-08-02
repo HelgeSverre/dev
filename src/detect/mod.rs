@@ -11,6 +11,7 @@ mod python_file;
 mod script;
 mod shell;
 mod swift;
+mod target;
 mod zig;
 
 use crate::candidate::Candidate;
@@ -30,6 +31,7 @@ pub use php_file::PhpFileDetector;
 pub use python_file::PythonFileDetector;
 pub use shell::ShellDetector;
 pub use swift::SwiftDetector;
+pub use target::{TargetBinder, TargetRunner};
 pub use zig::ZigDetector;
 
 /// Read-only context shared by all detectors.
@@ -82,6 +84,7 @@ pub fn detect_all(context: &ScanCtx<'_>) -> Detection {
     for detector in detectors {
         output.append(detector.detect(context));
     }
+    output.candidates = target::expand(output.candidates, context);
     output.candidates.sort_by(|left, right| {
         left.action_key
             .cmp(&right.action_key)

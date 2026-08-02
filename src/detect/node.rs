@@ -10,11 +10,12 @@ use crate::candidate::{
 };
 use crate::diagnostic::Diagnostic;
 use crate::intent::Intent;
-use crate::scan::IndexedFileType;
+use crate::scan::{IndexEntry, IndexedFileType};
 
-use super::{Detection, Detector, ScanCtx};
+use super::{Detection, Detector, ScanCtx, TargetBinder};
 
 pub struct NodeDetector;
+pub(super) struct NodeTestBinder;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -563,4 +564,101 @@ fn package_scope(manifest: &PackageManifest, directory: &Path) -> String {
                 .map(|name| name.to_string_lossy().into_owned())
         })
         .unwrap_or_else(|| ".".to_owned())
+}
+
+impl TargetBinder for NodeTestBinder {
+    fn supports(&self, base: &Candidate, target: &IndexEntry, context: &ScanCtx<'_>) -> bool {
+        if base.intent != Intent::Test
+            || !base.action_key.contains(":script:")
+            || !is_javascript_test(&target.relative_path)
+        {
+            return false;
+        }
+        let absolute = context.roots.scan_root.join(&target.relative_path);
+        absolute.starts_with(&base.cwd)
+            && closest_node_package(context, &absolute).as_deref() == Some(base.cwd.as_path())
+    }
+
+    fn bind(
+        &self,
+        base: &Candidate,
+        target: &IndexEntry,
+        context: &ScanCtx<'_>,
+    ) -> Option<Candidate> {
+        let absolute = context.roots.scan_root.join(&target.relative_path);
+        let relative = absolute.strip_prefix(&base.cwd).ok()?.to_path_buf();
+        let mut candidate = base.clone();
+        candidate.args = candidate.command_with_passthrough(&[relative.as_os_str().to_owned()]);
+        candidate.passthrough = PassthroughStyle::Append;
+        candidate.action_key = format!(
+            "{}:target:{}",
+            base.action_key,
+            relative.to_string_lossy().replace(['/', '\\'], ":")
+        );
+        let identity = relative.file_stem().map_or_else(
+            || relative.to_string_lossy().into_owned(),
+            |name| name.to_string_lossy().into_owned(),
+        );
+        candidate.search.identities.push(identity);
+        candidate.search.target_paths.push(relative.clone());
+        candidate.evidence.push(Evidence {
+            kind: EvidenceKind::Rule,
+            reason: format!(
+                "bound package test script to {}",
+                target.relative_path.display()
+            ),
+            points: 20,
+            source: Some(target.relative_path.clone()),
+        });
+        candidate.label = format!("{} — {}", base.label, relative.display());
+        candidate.description =
+            "Declared package test script bound to a matching test file".to_owned();
+        Some(candidate)
+    }
+}
+
+fn closest_node_package(context: &ScanCtx<'_>, target: &Path) -> Option<PathBuf> {
+    context
+        .index
+        .all_entries()
+        .filter(|entry| {
+            entry.file_type == IndexedFileType::File
+                && entry
+                    .relative_path
+                    .file_name()
+                    .is_some_and(|name| name == "package.json")
+        })
+        .filter_map(|entry| {
+            context
+                .roots
+                .scan_root
+                .join(&entry.relative_path)
+                .parent()
+                .map(Path::to_path_buf)
+        })
+        .filter(|directory| target.starts_with(directory))
+        .max_by_key(|directory| directory.components().count())
+}
+
+fn is_javascript_test(path: &Path) -> bool {
+    let supported_extension = path
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .is_some_and(|extension| matches!(extension, "js" | "jsx" | "mjs" | "cjs" | "ts" | "tsx"));
+    if !supported_extension {
+        return false;
+    }
+    let in_test_directory = path.components().any(|component| {
+        matches!(
+            component.as_os_str().to_str(),
+            Some("test" | "tests" | "spec" | "__tests__")
+        )
+    });
+    let filename = path
+        .file_name()
+        .map_or_else(String::new, |name| name.to_string_lossy().to_lowercase());
+    in_test_directory
+        || filename.contains(".test.")
+        || filename.contains(".spec.")
+        || filename.contains("_test.")
 }

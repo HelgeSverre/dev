@@ -6,12 +6,12 @@ use crate::candidate::{
     Availability, Candidate, CandidateOrigin, Evidence, EvidenceKind, SearchDocument,
     SelectionPolicy,
 };
-use crate::intent::{Intent, Target};
+use crate::intent::Intent;
 use crate::path::resolve_program;
-use crate::query::{match_candidate, normalize_query, MatchClass};
 use crate::scan::{IndexEntry, IndexedFileType};
 
-use super::{Detection, Detector, ScanCtx};
+use super::target::explicitly_anchored;
+use super::{Detection, Detector, ScanCtx, TargetRunner};
 
 pub struct PythonFileDetector;
 
@@ -24,44 +24,23 @@ impl Detector for PythonFileDetector {
         &["python", "py"]
     }
 
-    fn detect(&self, context: &ScanCtx<'_>) -> Detection {
-        if context.invocation.intent != Intent::Run {
-            return Detection::default();
-        }
-        if let Target::File(path) = &context.invocation.target {
-            if has_python_extension(path) {
-                let relative = path.strip_prefix(&context.roots.scan_root).unwrap_or(path);
-                return Detection {
-                    candidates: vec![file_candidate(path, relative, true)],
-                    diagnostics: Vec::new(),
-                };
-            }
-        }
-        if context.invocation.hints.is_empty() {
-            return Detection::default();
-        }
+    fn detect(&self, _context: &ScanCtx<'_>) -> Detection {
+        Detection::default()
+    }
+}
 
-        let query = normalize_query(&context.invocation.hints);
-        let mut candidates = context
-            .index
-            .all_entries()
-            .filter(|entry| is_python_file(entry))
-            .map(|entry| {
-                let absolute = context.roots.scan_root.join(&entry.relative_path);
-                file_candidate(&absolute, &entry.relative_path, false)
-            })
-            .filter(|candidate| {
-                let matched = match_candidate(candidate, &query, context.invocation.chaos);
-                matched.highest_class == Some(MatchClass::Identity)
-                    && matched.matched_meaningful_terms > 0
-            })
-            .collect::<Vec<_>>();
-        candidates.sort_by(|left, right| left.action_key.cmp(&right.action_key));
-        candidates.dedup_by(|left, right| left.action_key == right.action_key);
-        Detection {
-            candidates,
-            diagnostics: Vec::new(),
-        }
+impl TargetRunner for PythonFileDetector {
+    fn supports(&self, target: &IndexEntry, context: &ScanCtx<'_>) -> bool {
+        context.invocation.intent == Intent::Run && is_python_file(target)
+    }
+
+    fn candidate(&self, target: &IndexEntry, context: &ScanCtx<'_>) -> Option<Candidate> {
+        let absolute = context.roots.scan_root.join(&target.relative_path);
+        Some(file_candidate(
+            &absolute,
+            &target.relative_path,
+            explicitly_anchored(target, context),
+        ))
     }
 }
 
@@ -143,7 +122,7 @@ fn python_interpreter(cwd: &Path) -> (OsString, String) {
 }
 
 fn is_python_file(entry: &IndexEntry) -> bool {
-    entry.file_type == IndexedFileType::File && has_python_extension(&entry.relative_path)
+    entry.file_type != IndexedFileType::Directory && has_python_extension(&entry.relative_path)
 }
 
 fn has_python_extension(path: &Path) -> bool {

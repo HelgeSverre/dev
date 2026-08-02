@@ -4,12 +4,12 @@ use std::path::{Path, PathBuf};
 use crate::candidate::{
     Candidate, CandidateOrigin, Evidence, EvidenceKind, Lifecycle, SearchDocument, SelectionPolicy,
 };
-use crate::intent::{Intent, Target};
-use crate::query::{match_candidate, normalize_query, MatchClass};
+use crate::intent::Intent;
 use crate::scan::{IndexEntry, IndexedFileType};
 
 use super::script::{read_shebang, Shebang};
-use super::{Detection, Detector, ScanCtx};
+use super::target::explicitly_anchored;
+use super::{Detection, Detector, ScanCtx, TargetRunner};
 
 pub struct ShellDetector;
 
@@ -23,28 +23,10 @@ impl Detector for ShellDetector {
     }
 
     fn detect(&self, context: &ScanCtx<'_>) -> Detection {
-        if let Target::File(path) = &context.invocation.target {
-            if let Some(candidate) = explicit_candidate(context, path) {
-                return Detection {
-                    candidates: vec![candidate],
-                    diagnostics: Vec::new(),
-                };
-            }
-        }
-
-        let query = (!context.invocation.hints.is_empty())
-            .then(|| normalize_query(&context.invocation.hints));
         let mut candidates = context
             .index
             .all_entries()
             .filter_map(|entry| discovery_candidate(context, entry))
-            .filter(|candidate| {
-                query.as_ref().is_none_or(|query| {
-                    let matched = match_candidate(candidate, query, context.invocation.chaos);
-                    matched.highest_class == Some(MatchClass::Identity)
-                        && matched.matched_meaningful_terms > 0
-                })
-            })
             .collect::<Vec<_>>();
         candidates.sort_by(|left, right| left.action_key.cmp(&right.action_key));
         candidates.dedup_by(|left, right| left.action_key == right.action_key);
@@ -55,40 +37,41 @@ impl Detector for ShellDetector {
     }
 }
 
-fn explicit_candidate(context: &ScanCtx<'_>, path: &Path) -> Option<Candidate> {
-    if claimed_by_language_detector(path) {
-        return None;
+impl TargetRunner for ShellDetector {
+    fn supports(&self, target: &IndexEntry, context: &ScanCtx<'_>) -> bool {
+        if context.invocation.intent != Intent::Run
+            || target.file_type == IndexedFileType::Directory
+            || claimed_by_language_detector(&target.relative_path)
+        {
+            return false;
+        }
+        let absolute = context.roots.scan_root.join(&target.relative_path);
+        target.executable
+            || read_shebang(&absolute).is_some()
+            || target
+                .relative_path
+                .extension()
+                .is_some_and(|value| value == "sh")
     }
-    let conventional_intent = path
-        .file_name()
-        .and_then(|name| name.to_str())
-        .and_then(|name| match name {
-            "run.sh" | "dev.sh" | "start.sh" => Some(Intent::Run),
-            "build.sh" => Some(Intent::Build),
-            "test.sh" => Some(Intent::Test),
-            _ => None,
-        });
-    if context.invocation.intent != Intent::Run
-        && conventional_intent != Some(context.invocation.intent)
-    {
-        return None;
+
+    fn candidate(&self, target: &IndexEntry, context: &ScanCtx<'_>) -> Option<Candidate> {
+        let absolute = context.roots.scan_root.join(&target.relative_path);
+        let explicit = explicitly_anchored(target, context);
+        script_candidate(
+            &absolute,
+            &target.relative_path,
+            Intent::Run,
+            target.executable,
+            read_shebang(&absolute),
+            if explicit { 90 } else { 20 },
+            if explicit {
+                SelectionPolicy::Automatic
+            } else {
+                SelectionPolicy::ExplicitHint
+            },
+            CandidateOrigin::Synthetic,
+        )
     }
-    let executable = executable(path);
-    let shebang = read_shebang(path);
-    if !executable && shebang.is_none() && path.extension().is_none_or(|value| value != "sh") {
-        return None;
-    }
-    let relative = path.strip_prefix(&context.roots.scan_root).unwrap_or(path);
-    script_candidate(
-        path,
-        relative,
-        context.invocation.intent,
-        executable,
-        shebang,
-        90,
-        SelectionPolicy::Automatic,
-        CandidateOrigin::Synthetic,
-    )
 }
 
 fn discovery_candidate(context: &ScanCtx<'_>, entry: &IndexEntry) -> Option<Candidate> {
@@ -116,8 +99,7 @@ fn discovery_candidate(context: &ScanCtx<'_>, entry: &IndexEntry) -> Option<Cand
         return None;
     }
     let eligible = conventional_intent == Some(context.invocation.intent)
-        || (context.invocation.intent == Intent::Run && in_discovery_directory && entry.executable)
-        || (context.invocation.intent == Intent::Run && hinted);
+        || (context.invocation.intent == Intent::Run && in_discovery_directory && entry.executable);
     if !eligible {
         return None;
     }
@@ -243,17 +225,4 @@ fn script_candidate(
         text: vec![candidate.description.clone()],
     };
     Some(candidate)
-}
-
-#[cfg(unix)]
-fn executable(path: &Path) -> bool {
-    use std::os::unix::fs::PermissionsExt as _;
-
-    path.metadata()
-        .is_ok_and(|metadata| metadata.is_file() && metadata.permissions().mode() & 0o111 != 0)
-}
-
-#[cfg(not(unix))]
-fn executable(path: &Path) -> bool {
-    path.is_file()
 }

@@ -1633,3 +1633,49 @@ fn doctor_reports_local_toolchains_without_treating_missing_tools_as_failure() -
         .stdout(predicates::str::contains("cargo     not found on PATH"));
     Ok(())
 }
+
+#[test]
+fn node_test_provider_binds_explicit_and_hinted_test_files_once() -> anyhow::Result<()> {
+    let temp = tempfile::tempdir()?;
+    let project = temp.path().join("node-tests");
+    let test_file = project.join("tests/deep/participant-sync.test.js");
+    fs::create_dir_all(test_file.parent().unwrap_or(&project))?;
+    fs::write(
+        project.join("package.json"),
+        r#"{"scripts":{"test":"vitest"}}"#,
+    )?;
+    fs::write(&test_file, "export {};\n")?;
+    let bin = fake_program(temp.path(), "npm")?;
+
+    let mut explicit = cargo_bin_cmd!("dev");
+    explicit
+        .args(["test", "--quiet", "--at"])
+        .arg(&test_file)
+        .args(["--", "--watch"])
+        .env("PATH", &bin);
+    explicit.assert().success().stdout(format!(
+        "cwd=<{}>\narg0=<run>\narg1=<test>\narg2=<-->\narg3=<tests/deep/participant-sync.test.js>\narg4=<--watch>\n",
+        project.display()
+    ));
+
+    let mut hinted = cargo_bin_cmd!("dev");
+    hinted
+        .args(["test", "participant-sync", "--quiet", "--at"])
+        .arg(&project)
+        .env("PATH", &bin);
+    hinted.assert().success().stdout(format!(
+        "cwd=<{}>\narg0=<run>\narg1=<test>\narg2=<-->\narg3=<tests/deep/participant-sync.test.js>\n",
+        project.display()
+    ));
+
+    let mut generic = cargo_bin_cmd!("dev");
+    generic
+        .args(["test", "test", "--quiet", "--at"])
+        .arg(&project)
+        .env("PATH", &bin);
+    generic.assert().success().stdout(format!(
+        "cwd=<{}>\narg0=<run>\narg1=<test>\n",
+        project.display()
+    ));
+    Ok(())
+}

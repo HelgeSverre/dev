@@ -5,11 +5,11 @@ use std::path::{Path, PathBuf};
 use crate::candidate::{
     Candidate, CandidateOrigin, Evidence, EvidenceKind, SearchDocument, SelectionPolicy,
 };
-use crate::intent::{Intent, Target};
-use crate::query::{match_candidate, normalize_query, MatchClass};
+use crate::intent::Intent;
 use crate::scan::{IndexEntry, IndexedFileType};
 
-use super::{Detection, Detector, ScanCtx};
+use super::target::explicitly_anchored;
+use super::{Detection, Detector, ScanCtx, TargetRunner};
 
 pub struct PhpFileDetector;
 
@@ -22,44 +22,24 @@ impl Detector for PhpFileDetector {
         &["php"]
     }
 
-    fn detect(&self, context: &ScanCtx<'_>) -> Detection {
-        if context.invocation.intent != Intent::Run {
-            return Detection::default();
-        }
-        if let Target::File(path) = &context.invocation.target {
-            if path.extension().is_some_and(|extension| extension == "php") {
-                let relative = path.strip_prefix(&context.roots.scan_root).unwrap_or(path);
-                return Detection {
-                    candidates: vec![file_candidate(path, relative, executable(path), true)],
-                    diagnostics: Vec::new(),
-                };
-            }
-        }
-        if context.invocation.hints.is_empty() {
-            return Detection::default();
-        }
+    fn detect(&self, _context: &ScanCtx<'_>) -> Detection {
+        Detection::default()
+    }
+}
 
-        let query = normalize_query(&context.invocation.hints);
-        let mut candidates = context
-            .index
-            .all_entries()
-            .filter(|entry| is_php_file(entry))
-            .map(|entry| {
-                let absolute = context.roots.scan_root.join(&entry.relative_path);
-                file_candidate(&absolute, &entry.relative_path, entry.executable, false)
-            })
-            .filter(|candidate| {
-                let matched = match_candidate(candidate, &query, context.invocation.chaos);
-                matched.highest_class == Some(MatchClass::Identity)
-                    && matched.matched_meaningful_terms > 0
-            })
-            .collect::<Vec<_>>();
-        candidates.sort_by(|left, right| left.action_key.cmp(&right.action_key));
-        candidates.dedup_by(|left, right| left.action_key == right.action_key);
-        Detection {
-            candidates,
-            diagnostics: Vec::new(),
-        }
+impl TargetRunner for PhpFileDetector {
+    fn supports(&self, target: &IndexEntry, context: &ScanCtx<'_>) -> bool {
+        context.invocation.intent == Intent::Run && is_php_file(target)
+    }
+
+    fn candidate(&self, target: &IndexEntry, context: &ScanCtx<'_>) -> Option<Candidate> {
+        let absolute = context.roots.scan_root.join(&target.relative_path);
+        Some(file_candidate(
+            &absolute,
+            &target.relative_path,
+            target.executable,
+            explicitly_anchored(target, context),
+        ))
     }
 }
 
@@ -133,7 +113,7 @@ fn file_candidate(
 }
 
 fn is_php_file(entry: &IndexEntry) -> bool {
-    entry.file_type == IndexedFileType::File
+    entry.file_type != IndexedFileType::Directory
         && entry
             .relative_path
             .extension()
@@ -156,17 +136,4 @@ fn has_php_shebang(path: &Path) -> bool {
         && String::from_utf8_lossy(first_line)
             .to_ascii_lowercase()
             .contains("php")
-}
-
-#[cfg(unix)]
-fn executable(path: &Path) -> bool {
-    use std::os::unix::fs::PermissionsExt as _;
-
-    path.metadata()
-        .is_ok_and(|metadata| metadata.permissions().mode() & 0o111 != 0)
-}
-
-#[cfg(not(unix))]
-fn executable(_path: &Path) -> bool {
-    false
 }

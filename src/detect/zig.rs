@@ -5,11 +5,11 @@ use crate::candidate::{
     Candidate, CandidateOrigin, Evidence, EvidenceKind, Lifecycle, PassthroughStyle,
     SearchDocument, SelectionPolicy,
 };
-use crate::intent::{Intent, Target};
-use crate::query::{match_candidate, normalize_query, MatchClass};
+use crate::intent::Intent;
 use crate::scan::{IndexEntry, IndexedFileType};
 
-use super::{Detection, Detector, ScanCtx};
+use super::target::explicitly_anchored;
+use super::{Detection, Detector, ScanCtx, TargetRunner};
 
 pub struct ZigDetector;
 
@@ -23,17 +23,29 @@ impl Detector for ZigDetector {
     }
 
     fn detect(&self, context: &ScanCtx<'_>) -> Detection {
-        let mut candidates = build_projects(context)
+        let candidates = build_projects(context)
             .into_iter()
             .map(|path| build_candidate(context.invocation.intent, &path))
             .collect::<Vec<_>>();
-        if context.invocation.intent == Intent::Run {
-            candidates.extend(standalone_candidates(context));
-        }
         Detection {
             candidates,
             diagnostics: Vec::new(),
         }
+    }
+}
+
+impl TargetRunner for ZigDetector {
+    fn supports(&self, target: &IndexEntry, context: &ScanCtx<'_>) -> bool {
+        context.invocation.intent == Intent::Run && is_zig_file(target)
+    }
+
+    fn candidate(&self, target: &IndexEntry, context: &ScanCtx<'_>) -> Option<Candidate> {
+        let absolute = context.roots.scan_root.join(&target.relative_path);
+        Some(standalone_candidate(
+            &absolute,
+            &target.relative_path,
+            explicitly_anchored(target, context),
+        ))
     }
 }
 
@@ -121,39 +133,6 @@ fn build_candidate(intent: Intent, build_file: &Path) -> Candidate {
     candidate
 }
 
-fn standalone_candidates(context: &ScanCtx<'_>) -> Vec<Candidate> {
-    if let Target::File(path) = &context.invocation.target {
-        if path.extension().is_some_and(|extension| extension == "zig") {
-            return vec![standalone_candidate(
-                path,
-                path.strip_prefix(&context.roots.scan_root).unwrap_or(path),
-                true,
-            )];
-        }
-    }
-    if context.invocation.hints.is_empty() {
-        return Vec::new();
-    }
-    let query = normalize_query(&context.invocation.hints);
-    context
-        .index
-        .all_entries()
-        .filter(|entry| is_zig_file(entry))
-        .map(|entry| {
-            standalone_candidate(
-                &context.roots.scan_root.join(&entry.relative_path),
-                &entry.relative_path,
-                false,
-            )
-        })
-        .filter(|candidate| {
-            let matched = match_candidate(candidate, &query, context.invocation.chaos);
-            matched.highest_class == Some(MatchClass::Identity)
-                && matched.matched_meaningful_terms > 0
-        })
-        .collect()
-}
-
 fn standalone_candidate(absolute: &Path, relative: &Path, explicit: bool) -> Candidate {
     let directory = absolute.parent().unwrap_or(Path::new(".")).to_path_buf();
     let filename = absolute
@@ -206,7 +185,7 @@ fn standalone_candidate(absolute: &Path, relative: &Path, explicit: bool) -> Can
 }
 
 fn is_zig_file(entry: &IndexEntry) -> bool {
-    entry.file_type == IndexedFileType::File
+    entry.file_type != IndexedFileType::Directory
         && entry
             .relative_path
             .extension()
