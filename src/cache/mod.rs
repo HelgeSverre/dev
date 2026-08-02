@@ -358,9 +358,10 @@ fn load_store() -> Result<ChoiceStore, CacheError> {
             entries: Vec::new(),
         }),
         Err(error) => {
+            let display = crate::ui::terminal_text(&path.to_string_lossy());
             eprintln!(
-                "dev: warning: ignored corrupt cache `{}`: {error}",
-                path.display()
+                "dev: warning: ignored corrupt cache `{display}`: {}",
+                crate::ui::terminal_text(&error.to_string())
             );
             let _ = lock::quarantine_corrupt(&path);
             Ok(ChoiceStore {

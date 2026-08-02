@@ -8,12 +8,13 @@ use dev_launcher::query::{MatchClass, TermMatch};
 use dev_launcher::resolve::{RankedCandidate, Resolution, ResolutionReason, ResolutionStatus};
 use dev_launcher::scan::{resolve_roots, FileIndex, ScanOptions};
 use dev_launcher::ui::picker::PickerOutcome;
+use dev_launcher::ui::terminal_text;
 
 fn main() {
     let code = match run() {
         Ok(code) => code,
         Err(error) => {
-            eprintln!("dev: {error:#}");
+            eprintln!("dev: {}", terminal_text(&format!("{error:#}")));
             1
         }
     };
@@ -32,7 +33,7 @@ fn run() -> anyhow::Result<i32> {
             return Ok(code);
         }
         Err(error) => {
-            eprintln!("dev: {error}");
+            eprintln!("dev: {}", terminal_text(&error.to_string()));
             return Ok(2);
         }
     };
@@ -46,10 +47,10 @@ fn run() -> anyhow::Result<i32> {
                 println!(
                     "Installed {} completions to {}",
                     installation.shell_name,
-                    installation.path.display()
+                    terminal_text(&installation.path.to_string_lossy())
                 );
                 if let Some(hint) = installation.hint {
-                    println!("  {hint}");
+                    println!("  {}", terminal_text(&hint));
                 }
             } else if let Some(shell) = shell {
                 dev_launcher::cli::write_completions(shell, &mut io::stdout().lock());
@@ -72,7 +73,10 @@ fn run_resolution(request: ResolveRequest) -> anyhow::Result<i32> {
         match dev_launcher::cache::forget(&request.invocation, &roots) {
             Ok(true) if request.verbose => eprintln!("dev: forgot the active remembered choice"),
             Ok(_) => {}
-            Err(error) => eprintln!("dev: warning: could not forget choice: {error}"),
+            Err(error) => eprintln!(
+                "dev: warning: could not forget choice: {}",
+                terminal_text(&error.to_string())
+            ),
         }
     }
     let cache_lookup = if request.no_cache || request.forget || request.pick {
@@ -86,7 +90,10 @@ fn run_resolution(request: ResolveRequest) -> anyhow::Result<i32> {
                 if candidate.availability.is_available() {
                     if entry.needs_touch() {
                         if let Err(error) = dev_launcher::cache::touch(&entry.key) {
-                            eprintln!("dev: warning: could not refresh remembered choice: {error}");
+                            eprintln!(
+                                "dev: warning: could not refresh remembered choice: {}",
+                                terminal_text(&error.to_string())
+                            );
                         }
                     }
                     return execute_candidate(&candidate, &request, None);
@@ -184,14 +191,20 @@ fn run_resolution(request: ResolveRequest) -> anyhow::Result<i32> {
     };
     let candidate = &resolution.candidates[index_in_resolution].candidate;
     if !candidate.availability.is_available() {
-        eprintln!("dev: {}", availability_message(&candidate.availability));
+        eprintln!(
+            "dev: {}",
+            terminal_text(&availability_message(&candidate.availability))
+        );
         return Ok(6);
     }
     if remembered_after_project_change {
         if let Err(error) =
             dev_launcher::cache::refresh(&request.invocation, &roots, &index, candidate)
         {
-            eprintln!("dev: warning: could not refresh remembered choice: {error}");
+            eprintln!(
+                "dev: warning: could not refresh remembered choice: {}",
+                terminal_text(&error.to_string())
+            );
         }
     }
     if remember && !print_only {
@@ -200,7 +213,10 @@ fn run_resolution(request: ResolveRequest) -> anyhow::Result<i32> {
         } else if let Err(error) =
             dev_launcher::cache::remember(&request.invocation, &roots, &index, candidate)
         {
-            eprintln!("dev: warning: could not remember choice: {error}");
+            eprintln!(
+                "dev: warning: could not remember choice: {}",
+                terminal_text(&error.to_string())
+            );
         }
     }
     if print_only {
@@ -297,7 +313,10 @@ fn choose_candidate(
         Ok(outcome) => Ok(Some(outcome)),
         Err(dev_launcher::ui::picker::PickerError::NotInteractive) => Ok(None),
         Err(error) => {
-            eprintln!("dev: picker unavailable: {error}");
+            eprintln!(
+                "dev: picker unavailable: {}",
+                terminal_text(&error.to_string())
+            );
             Ok(None)
         }
     }
@@ -316,7 +335,7 @@ fn execute_candidate(
     match dev_launcher::exec::execute(candidate, &request.invocation.passthrough, options) {
         Ok(code) => Ok(code),
         Err(error) => {
-            eprintln!("dev: {error}");
+            eprintln!("dev: {}", terminal_text(&error.to_string()));
             Ok(error.exit_code())
         }
     }
@@ -382,9 +401,12 @@ fn run_cache(request: CacheRequest) -> anyhow::Result<i32> {
                     }
                     QueryCacheKey::Hinted(_) => entry.query_display.join(" "),
                 };
+                let anchor = terminal_text(&entry.key.physical_anchor.to_string_lossy());
+                let query = terminal_text(&query);
+                let action_key = terminal_text(&entry.action_key);
                 println!(
                     "{}  {:<5}  {:<6}  {:<8}  {:<8}  {}",
-                    entry.key.physical_anchor.display(),
+                    anchor,
                     entry.key.intent,
                     query,
                     format_age(entry.age()),
@@ -393,7 +415,7 @@ fn run_cache(request: CacheRequest) -> anyhow::Result<i32> {
                     } else {
                         "stale"
                     },
-                    entry.action_key
+                    action_key
                 );
             }
             Ok(0)

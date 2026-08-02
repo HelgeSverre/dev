@@ -98,9 +98,10 @@ fn load_locked(path: &Path) -> Result<ChoiceStore, CacheError> {
             Ok(store) if store.schema_version == CACHE_SCHEMA => Ok(store),
             Ok(_) => Ok(empty_store()),
             Err(error) => {
+                let display = crate::ui::terminal_text(&path.to_string_lossy());
                 eprintln!(
-                    "dev: warning: ignored corrupt cache `{}`: {error}",
-                    path.display()
+                    "dev: warning: ignored corrupt cache `{display}`: {}",
+                    crate::ui::terminal_text(&error.to_string())
                 );
                 let _ = quarantine_locked(path);
                 Ok(empty_store())

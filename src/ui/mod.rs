@@ -5,4 +5,4 @@ pub mod picker;
 mod sanitize;
 pub mod why;
 
-pub(crate) use sanitize::terminal_text;
+pub use sanitize::terminal_text;

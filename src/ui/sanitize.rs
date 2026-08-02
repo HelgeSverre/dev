@@ -1,6 +1,6 @@
 /// Replace terminal control characters in untrusted display text.
 #[must_use]
-pub(crate) fn terminal_text(value: &str) -> String {
+pub fn terminal_text(value: &str) -> String {
     value
         .chars()
         .map(|character| {
