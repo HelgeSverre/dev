@@ -12,6 +12,7 @@ pub mod exec;
 pub mod intent;
 pub mod path;
 pub mod query;
+pub mod registry;
 pub mod resolve;
 pub mod scan;
 pub mod score;

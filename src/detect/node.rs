@@ -15,7 +15,7 @@ use crate::scan::{IndexEntry, IndexedFileType};
 use super::{Detection, Detector, ScanCtx, TargetBinder};
 
 pub struct NodeDetector;
-pub(super) struct NodeTestBinder;
+pub(crate) struct NodeTestBinder;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]

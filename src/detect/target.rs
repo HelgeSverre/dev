@@ -7,10 +7,7 @@ use crate::query::matcher::TargetIdentityMatcher;
 use crate::query::normalize_query;
 use crate::scan::{IndexEntry, IndexedFileType};
 
-use super::node::NodeTestBinder;
-use super::{
-    DartDetector, PhpFileDetector, PythonFileDetector, ScanCtx, ShellDetector, ZigDetector,
-};
+use super::ScanCtx;
 
 pub trait TargetBinder: Send + Sync {
     fn supports(&self, base: &Candidate, target: &IndexEntry, context: &ScanCtx<'_>) -> bool;
@@ -35,14 +32,17 @@ struct HintedTarget {
 pub(super) fn expand(candidates: Vec<Candidate>, context: &ScanCtx<'_>) -> Vec<Candidate> {
     let explicit = explicit_entry(context);
     let hinted_targets = hinted_entries(context);
-    let binders: [&dyn TargetBinder; 1] = [&NodeTestBinder];
+    let binders = crate::registry::registrations()
+        .iter()
+        .flat_map(|registration| registration.target_binders.iter().copied())
+        .collect::<Vec<_>>();
     let mut claimed = BTreeSet::<PathBuf>::new();
     let mut expanded = Vec::new();
 
     for base in candidates {
         let mut bound = Vec::new();
         if let Some(target) = explicit.as_ref() {
-            for binder in binders {
+            for binder in &binders {
                 if binder.supports(&base, target, context) {
                     if let Some(candidate) = binder.bind(&base, target, context) {
                         claimed.insert(target.relative_path.clone());
@@ -56,7 +56,7 @@ pub(super) fn expand(candidates: Vec<Candidate>, context: &ScanCtx<'_>) -> Vec<C
                     continue;
                 }
                 let target = &target.entry;
-                for binder in binders {
+                for binder in &binders {
                     if binder.supports(&base, target, context) {
                         if let Some(candidate) = binder.bind(&base, target, context) {
                             claimed.insert(target.relative_path.clone());
@@ -72,13 +72,10 @@ pub(super) fn expand(candidates: Vec<Candidate>, context: &ScanCtx<'_>) -> Vec<C
         expanded.extend(bound);
     }
 
-    let runners: [&dyn TargetRunner; 5] = [
-        &PhpFileDetector,
-        &PythonFileDetector,
-        &ShellDetector,
-        &ZigDetector,
-        &DartDetector,
-    ];
+    let runners = crate::registry::registrations()
+        .iter()
+        .flat_map(|registration| registration.target_runners.iter().copied())
+        .collect::<Vec<_>>();
     if let Some(target) = explicit.as_ref() {
         if !claimed.contains(&target.relative_path) {
             append_runner_candidates(&mut expanded, &runners, target, context);

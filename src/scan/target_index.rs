@@ -4,10 +4,6 @@ use std::path::PathBuf;
 use super::index::{collect_walk, Truncation};
 use super::{FileIndex, RootInfo};
 
-const CONVENTIONAL_ROOTS: &[&str] = &[
-    "bin", "cmd", "examples", "scripts", "spec", "test", "tests", "tools",
-];
-
 impl FileIndex {
     /// Add the wider target index selected by the invocation's chaos level.
     pub fn build_targets(&mut self, roots: &RootInfo, chaos: u8, hard_cap: usize) {
@@ -56,7 +52,7 @@ impl FileIndex {
 
     fn conventional_roots(&self, roots: &RootInfo) -> Vec<(PathBuf, PathBuf)> {
         let mut relative_roots = BTreeSet::new();
-        for conventional in CONVENTIONAL_ROOTS {
+        for conventional in crate::registry::conventional_roots() {
             let relative = PathBuf::from(conventional);
             if roots.scan_root.join(&relative).is_dir() {
                 relative_roots.insert(relative);
@@ -71,7 +67,9 @@ impl FileIndex {
                             .relative_path
                             .file_name()
                             .and_then(|name| name.to_str())
-                            .is_some_and(|name| CONVENTIONAL_ROOTS.contains(&name))
+                            .is_some_and(|name| {
+                                crate::registry::conventional_roots().contains(&name)
+                            })
                 })
                 .map(|entry| entry.relative_path.clone()),
         );

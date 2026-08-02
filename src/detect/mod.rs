@@ -27,6 +27,7 @@ pub use docker::DockerDetector;
 pub use go::GoDetector;
 pub use make::MakeDetector;
 pub use node::NodeDetector;
+pub(crate) use node::NodeTestBinder;
 pub use php_file::PhpFileDetector;
 pub use python_file::PythonFileDetector;
 pub use shell::ShellDetector;
@@ -65,25 +66,11 @@ pub trait Detector: Send + Sync {
 /// Run the static detector registry.
 #[must_use]
 pub fn detect_all(context: &ScanCtx<'_>) -> Detection {
-    detect_with_registry(context, &detector_registry())
-}
-
-fn detector_registry() -> [&'static dyn Detector; 13] {
-    [
-        &NodeDetector,
-        &CargoDetector,
-        &ComposerDetector,
-        &ArtisanDetector,
-        &GoDetector,
-        &PhpFileDetector,
-        &ZigDetector,
-        &SwiftDetector,
-        &DartDetector,
-        &PythonFileDetector,
-        &ShellDetector,
-        &MakeDetector,
-        &DockerDetector,
-    ]
+    let detectors = crate::registry::registrations()
+        .iter()
+        .map(|registration| registration.detector)
+        .collect::<Vec<_>>();
+    detect_with_registry(context, &detectors)
 }
 
 fn detect_with_registry(context: &ScanCtx<'_>, detectors: &[&dyn Detector]) -> Detection {
@@ -141,8 +128,11 @@ mod tests {
             roots: &roots,
             index: &index,
         };
-        let forward = detector_registry();
-        let mut reverse = detector_registry();
+        let forward = crate::registry::registrations()
+            .iter()
+            .map(|registration| registration.detector)
+            .collect::<Vec<_>>();
+        let mut reverse = forward.clone();
         reverse.reverse();
         let summarize = |detection: Detection| {
             deduplicate(detection.candidates, &invocation.target)
