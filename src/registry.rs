@@ -107,6 +107,7 @@ pub const DOCKER: DetectorId = DetectorId::new("docker");
 pub const NODE_SOURCE: CandidateSourceId = CandidateSourceId::new("node");
 pub const VITE_SOURCE: CandidateSourceId = CandidateSourceId::new("vite");
 pub const NEXT_SOURCE: CandidateSourceId = CandidateSourceId::new("next");
+pub const SVELTEKIT_SOURCE: CandidateSourceId = CandidateSourceId::new("sveltekit");
 pub const CARGO_SOURCE: CandidateSourceId = CandidateSourceId::new("cargo");
 pub const COMPOSER_SOURCE: CandidateSourceId = CandidateSourceId::new("composer");
 pub const ARTISAN_SOURCE: CandidateSourceId = CandidateSourceId::new("artisan");
@@ -413,6 +414,11 @@ static REGISTRATIONS: &[DetectorRegistration] = &[
                 metadata_priority: 3,
                 default_tags: &["node", "next"],
             },
+            CandidateSourceRegistration {
+                id: SVELTEKIT_SOURCE,
+                metadata_priority: 3,
+                default_tags: &["node", "svelte", "sveltekit"],
+            },
         ],
         synonyms: &[
             "javascript",
@@ -424,6 +430,8 @@ static REGISTRATIONS: &[DetectorRegistration] = &[
             "pnpm",
             "yarn",
             "bun",
+            "svelte-kit",
+            "sv",
         ],
         markers: &[
             ProjectMarker {

@@ -12,7 +12,7 @@ use crate::diagnostic::Diagnostic;
 use crate::intent::Intent;
 use crate::registry::{
     RootClassification, ScanContribution, ToolId, WorkspaceContributor, BUN_TOOL, NEXT_SOURCE,
-    NODE, NODE_SOURCE, NODE_TOOL, NPM_TOOL, PNPM_TOOL, VITE_SOURCE, YARN_TOOL,
+    NODE, NODE_SOURCE, NODE_TOOL, NPM_TOOL, PNPM_TOOL, SVELTEKIT_SOURCE, VITE_SOURCE, YARN_TOOL,
 };
 use crate::scan::{DiscoveryFiles, IndexEntry, IndexedFileType};
 
@@ -361,6 +361,14 @@ impl Detector for NodeDetector {
                     crate::registry::synonyms(NODE),
                 ));
             }
+            if manager == PackageManager::Bun {
+                output.candidates.extend(bun_native_candidates(
+                    context,
+                    &manifest,
+                    &package_directory,
+                    &manifest_path,
+                ));
+            }
         }
         output
     }
@@ -455,11 +463,14 @@ fn script_candidates(
                         | ("vite", Intent::Build, "build")
                         | ("next", Intent::Run, "dev" | "start")
                         | ("next", Intent::Build, "build")
+                        | ("sveltekit", Intent::Run, "dev" | "preview")
+                        | ("sveltekit", Intent::Build, "build")
                 )
             });
             let source = match detector {
                 Some("vite") => VITE_SOURCE,
                 Some("next") => NEXT_SOURCE,
+                Some("sveltekit") => SVELTEKIT_SOURCE,
                 _ => NODE_SOURCE,
             };
             let cwd = workspace.as_ref().map_or_else(
@@ -490,6 +501,12 @@ fn script_candidates(
                 && script == "preview"
             {
                 description.push_str("; requires a prior Vite build");
+            }
+            if framework == Some("sveltekit")
+                && context.invocation.intent == Intent::Run
+                && script == "preview"
+            {
+                description.push_str("; requires a prior SvelteKit build");
             }
             let mut evidence = vec![Evidence {
                 kind: EvidenceKind::Manifest,
@@ -715,6 +732,8 @@ fn framework(manifest: &PackageManifest, directory: &Path) -> Option<&'static st
     };
     if has_dependency("next") || has_config("next.config.") {
         Some("next")
+    } else if has_dependency("@sveltejs/kit") || has_config("svelte.config.") {
+        Some("sveltekit")
     } else if has_dependency("vite") || has_config("vite.config.") {
         Some("vite")
     } else {
@@ -894,17 +913,45 @@ fn framework_fallbacks(
                 false,
             ));
         }
+        ("sveltekit", Intent::Run) => {
+            if !manifest.scripts.contains_key("dev") {
+                actions.push(("dev", vec!["dev"], 80, SelectionPolicy::Automatic, false));
+            }
+            if !manifest.scripts.contains_key("preview") {
+                actions.push((
+                    "preview",
+                    vec!["preview"],
+                    25,
+                    SelectionPolicy::ExplicitHint,
+                    true,
+                ));
+            }
+        }
+        ("sveltekit", Intent::Build) if !manifest.scripts.contains_key("build") => {
+            actions.push((
+                "build",
+                vec!["build"],
+                80,
+                SelectionPolicy::Automatic,
+                false,
+            ));
+        }
         _ => {}
     }
 
-    let local_binary = project_local_binary(package_directory, &context.roots.scan_root, framework);
+    let local_binary = project_local_binary(
+        package_directory,
+        &context.roots.scan_root,
+        framework_binary_name(framework),
+    );
     actions
         .into_iter()
         .map(|(name, arguments, base_points, selection, requires_build)| {
-            let source = if framework == "vite" {
-                VITE_SOURCE
-            } else {
-                NEXT_SOURCE
+            let source = match framework {
+                "vite" => VITE_SOURCE,
+                "next" => NEXT_SOURCE,
+                "sveltekit" => SVELTEKIT_SOURCE,
+                _ => NODE_SOURCE,
             };
             let mut description = format!(
                 "Project-local {framework} through {} without installation",
@@ -932,7 +979,7 @@ fn framework_fallbacks(
                 package_scope(manifest, package_directory)
             ))
             .tool(manager.tool())
-            .args(manager.local_binary_args(framework, &arguments))
+            .args(manager.local_binary_args(framework_binary_name(framework), &arguments))
             .cwd(package_directory.to_path_buf())
             .env(manager.local_exec_env())
             .selection(selection)
@@ -1028,6 +1075,14 @@ fn framework_display(framework: &str) -> &str {
     match framework {
         "vite" => "Vite",
         "next" => "Next",
+        "sveltekit" => "SvelteKit",
+        other => other,
+    }
+}
+
+fn framework_binary_name(framework: &str) -> &str {
+    match framework {
+        "sveltekit" => "svelte-kit",
         other => other,
     }
 }
@@ -1145,6 +1200,152 @@ fn is_javascript_test(path: &Path) -> bool {
         || filename.contains(".test.")
         || filename.contains(".spec.")
         || filename.contains("_test.")
+}
+
+fn bun_native_candidates(
+    context: &ScanCtx<'_>,
+    manifest: &PackageManifest,
+    package_directory: &Path,
+    manifest_path: &Path,
+) -> Vec<Candidate> {
+    let scope = package_scope(manifest, package_directory);
+    let synonyms = crate::registry::synonyms(NODE);
+    let mut candidates = Vec::new();
+    match context.invocation.intent {
+        Intent::Run => {
+            if !manifest.scripts.contains_key("run") {
+                let description = "Bun entry-point auto-detection";
+                let candidate = CandidateBuilder::tool_default(
+                    NODE_SOURCE,
+                    Intent::Run,
+                    package_directory.to_path_buf(),
+                    "run",
+                )
+                .action_key(format!("bun:{}:auto-run", scope))
+                .tool(BUN_TOOL)
+                .args([OsString::from("run")])
+                .cwd(package_directory.to_path_buf())
+                .selection(SelectionPolicy::ExplicitHint)
+                .base_points(40)
+                .lifecycle(Lifecycle::LongRunning)
+                .label("Bun run")
+                .description(description)
+                .evidence(Evidence {
+                    kind: EvidenceKind::Rule,
+                    reason: "Bun is the project package manager; auto-detecting entry point"
+                        .to_owned(),
+                    points: 0,
+                    source: Some(manifest_path.to_path_buf()),
+                })
+                .search(SearchDocument {
+                    identities: vec!["run".to_owned(), "bun".to_owned()],
+                    target_paths: vec![manifest_path.to_path_buf()],
+                    scopes: vec![scope.clone()],
+                    tags: synonyms
+                        .iter()
+                        .map(|value| (*value).to_owned())
+                        .chain(std::iter::once("bun".to_owned()))
+                        .collect(),
+                    text: vec![description.to_owned()],
+                })
+                .build()
+                .expect("Bun auto-run candidate registration is valid");
+                candidates.push(candidate);
+            }
+        }
+        Intent::Build => {
+            if !manifest.scripts.contains_key("build") {
+                let description = "Bun native bundler";
+                let candidate = CandidateBuilder::tool_default(
+                    NODE_SOURCE,
+                    Intent::Build,
+                    package_directory.to_path_buf(),
+                    "build",
+                )
+                .action_key(format!("bun:{}:build", scope))
+                .tool(BUN_TOOL)
+                .args([OsString::from("build")])
+                .cwd(package_directory.to_path_buf())
+                .selection(SelectionPolicy::ExplicitHint)
+                .base_points(40)
+                .label("Bun build")
+                .description(description)
+                .evidence(Evidence {
+                    kind: EvidenceKind::Rule,
+                    reason: "Bun is the project package manager; offering native bundler"
+                        .to_owned(),
+                    points: 0,
+                    source: Some(manifest_path.to_path_buf()),
+                })
+                .search(SearchDocument {
+                    identities: vec!["build".to_owned(), "bun".to_owned()],
+                    target_paths: vec![manifest_path.to_path_buf()],
+                    scopes: vec![scope.clone()],
+                    tags: synonyms
+                        .iter()
+                        .map(|value| (*value).to_owned())
+                        .chain(std::iter::once("bun".to_owned()))
+                        .collect(),
+                    text: vec![description.to_owned()],
+                })
+                .build()
+                .expect("Bun build candidate registration is valid");
+                candidates.push(candidate);
+            }
+        }
+        Intent::Test => {
+            if has_test_files(context, package_directory) && !manifest.scripts.contains_key("test")
+            {
+                let description = "Bun native test runner";
+                let candidate = CandidateBuilder::tool_default(
+                    NODE_SOURCE,
+                    Intent::Test,
+                    package_directory.to_path_buf(),
+                    "test",
+                )
+                .action_key(format!("bun:{}:test", scope))
+                .tool(BUN_TOOL)
+                .args([OsString::from("test")])
+                .cwd(package_directory.to_path_buf())
+                .selection(SelectionPolicy::Automatic)
+                .base_points(90)
+                .passthrough(PassthroughStyle::DoubleDash)
+                .label("Bun test")
+                .description(description)
+                .evidence(Evidence {
+                    kind: EvidenceKind::Rule,
+                    reason: "Bun is the project package manager; offering native test runner"
+                        .to_owned(),
+                    points: 0,
+                    source: Some(manifest_path.to_path_buf()),
+                })
+                .search(SearchDocument {
+                    identities: vec!["test".to_owned(), "bun".to_owned()],
+                    target_paths: vec![manifest_path.to_path_buf()],
+                    scopes: vec![scope.clone()],
+                    tags: synonyms
+                        .iter()
+                        .map(|value| (*value).to_owned())
+                        .chain(std::iter::once("bun".to_owned()))
+                        .collect(),
+                    text: vec![description.to_owned()],
+                })
+                .build()
+                .expect("Bun test candidate registration is valid");
+                candidates.push(candidate);
+            }
+        }
+    }
+    candidates
+}
+
+fn has_test_files(context: &ScanCtx<'_>, package_directory: &Path) -> bool {
+    context.index.all_entries().any(|entry| {
+        is_javascript_test(&entry.relative_path) && {
+            let absolute = context.roots.scan_root.join(&entry.relative_path);
+            absolute.starts_with(package_directory)
+        }
+    })
 }
 
 #[cfg(test)]
