@@ -181,15 +181,15 @@ resolution status=NoCandidates reason=NoCandidates selected=-
 roots package=. workspace=- scan=.
 scan structural=1 targets=0 truncated=false
 resolution status=Ambiguous reason=NoAutomaticCandidates selected=-
-candidate action=node:vite-no-canonical:script:preview-site detector=node source=node layer=EcosystemTask origin=Declared policy=ExplicitHint base=15 total=40 distance=0 cwd=. scope=. program="npm" args=["run","preview-site"] availability=available
-  evidence kind=Manifest points=0 source=package.json reason=package.json declares script `preview-site`
-  evidence kind=Proximity points=30 source=. reason=same directory as target
-  evidence kind=Rule points=-5 source=- reason=defaulted to npm because no package-manager marker was found
 candidate action=vite:vite-no-canonical:dev detector=node source=vite layer=ToolDefault origin=Declared policy=Automatic base=80 total=70 distance=0 cwd=. scope=. program="npm" args=["exec","--offline","--","vite"] availability=unsupported:project-local vite binary is not installed; dev will not download it
   evidence kind=Manifest points=10 source=package.json reason=package declares vite without a canonical `dev` script
   evidence kind=Proximity points=30 source=. reason=same directory as target
   evidence kind=Availability points=-50 source=- reason=project-local vite binary is not installed; dev will not download it
   evidence kind=Rule points=0 source=- reason=npm uses its local-only binary execution mode
+candidate action=node:vite-no-canonical:script:preview-site detector=node source=node layer=EcosystemTask origin=Declared policy=ExplicitHint base=15 total=40 distance=0 cwd=. scope=. program="npm" args=["run","preview-site"] availability=available
+  evidence kind=Manifest points=0 source=package.json reason=package.json declares script `preview-site`
+  evidence kind=Proximity points=30 source=. reason=same directory as target
+  evidence kind=Rule points=-5 source=- reason=defaulted to npm because no package-manager marker was found
 candidate action=vite:vite-no-canonical:preview detector=node source=vite layer=ToolDefault origin=Declared policy=ExplicitHint base=25 total=15 distance=0 cwd=. scope=. program="npm" args=["exec","--offline","--","vite","preview"] availability=unsupported:project-local vite binary is not installed; dev will not download it
   evidence kind=Manifest points=10 source=package.json reason=package declares vite without a canonical `preview` script
   evidence kind=Proximity points=30 source=. reason=same directory as target
@@ -249,15 +249,15 @@ resolution status=NoCandidates reason=NoCandidates selected=-
 roots package=. workspace=- scan=.
 scan structural=1 targets=0 truncated=false
 resolution status=Ambiguous reason=NoAutomaticCandidates selected=-
-candidate action=node:next-no-canonical:script:preview-site detector=node source=node layer=EcosystemTask origin=Declared policy=ExplicitHint base=15 total=40 distance=0 cwd=. scope=. program="npm" args=["run","preview-site"] availability=available
-  evidence kind=Manifest points=0 source=package.json reason=package.json declares script `preview-site`
-  evidence kind=Proximity points=30 source=. reason=same directory as target
-  evidence kind=Rule points=-5 source=- reason=defaulted to npm because no package-manager marker was found
 candidate action=next:next-no-canonical:dev detector=node source=next layer=ToolDefault origin=Declared policy=Automatic base=80 total=70 distance=0 cwd=. scope=. program="npm" args=["exec","--offline","--","next","dev"] availability=unsupported:project-local next binary is not installed; dev will not download it
   evidence kind=Manifest points=10 source=package.json reason=package declares next without a canonical `dev` script
   evidence kind=Proximity points=30 source=. reason=same directory as target
   evidence kind=Availability points=-50 source=- reason=project-local next binary is not installed; dev will not download it
   evidence kind=Rule points=0 source=- reason=npm uses its local-only binary execution mode
+candidate action=node:next-no-canonical:script:preview-site detector=node source=node layer=EcosystemTask origin=Declared policy=ExplicitHint base=15 total=40 distance=0 cwd=. scope=. program="npm" args=["run","preview-site"] availability=available
+  evidence kind=Manifest points=0 source=package.json reason=package.json declares script `preview-site`
+  evidence kind=Proximity points=30 source=. reason=same directory as target
+  evidence kind=Rule points=-5 source=- reason=defaulted to npm because no package-manager marker was found
 candidate action=next:next-no-canonical:start detector=node source=next layer=ToolDefault origin=Declared policy=ExplicitHint base=25 total=15 distance=0 cwd=. scope=. program="npm" args=["exec","--offline","--","next","start"] availability=unsupported:project-local next binary is not installed; dev will not download it
   evidence kind=Manifest points=10 source=package.json reason=package declares next without a canonical `start` script
   evidence kind=Proximity points=30 source=. reason=same directory as target
@@ -585,15 +585,15 @@ resolution status=NoCandidates reason=NoCandidates selected=-
 roots package=. workspace=- scan=.
 scan structural=2 targets=0 truncated=false
 resolution status=Resolved reason=UniqueAutomaticCandidate selected=composer:acme/laravel:script:test
-candidate action=composer:acme/laravel:script:test detector=composer source=composer layer=EcosystemTask origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. scope=. program="composer" args=["run-script","test"] availability=available
-  evidence kind=Manifest points=0 source=composer.json reason=composer.json declares Laravel framework support
-  evidence kind=Manifest points=0 source=composer.json reason=composer.json declares script `test`
-  evidence kind=Proximity points=30 source=. reason=same directory as target
 candidate action=artisan:acme/laravel:test detector=artisan source=artisan layer=ToolDefault origin=Declared policy=ExplicitHint base=115 total=145 distance=0 cwd=. scope=. program="php" args=["artisan","test"] availability=available
   evidence kind=Manifest points=0 source=composer.json reason=composer.json declares Laravel framework support
   evidence kind=Convention points=0 source=artisan reason=project contains Artisan entrypoint for test
   evidence kind=Proximity points=30 source=. reason=same directory as target
   evidence kind=Rule points=0 source=- reason=demoted by canonical same-scope EcosystemTask project interface
+candidate action=composer:acme/laravel:script:test detector=composer source=composer layer=EcosystemTask origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. scope=. program="composer" args=["run-script","test"] availability=available
+  evidence kind=Manifest points=0 source=composer.json reason=composer.json declares Laravel framework support
+  evidence kind=Manifest points=0 source=composer.json reason=composer.json declares script `test`
+  evidence kind=Proximity points=30 source=. reason=same directory as target
 
 ## 21-artisan-only/run
 roots package=. workspace=- scan=.
@@ -918,10 +918,10 @@ candidate action=flutter:flutter_platforms:run detector=dart source=flutter laye
 roots package=. workspace=- scan=.
 scan structural=9 targets=0 truncated=false
 resolution status=Ambiguous reason=NoAutomaticCandidates selected=-
-candidate action=flutter:flutter_platforms:web detector=dart source=flutter layer=ToolDefault origin=Declared policy=ExplicitHint base=50 total=80 distance=0 cwd=. scope=. program="flutter" args=["build","web"] availability=available
+candidate action=flutter:flutter_platforms:linux detector=dart source=flutter layer=ToolDefault origin=Declared policy=ExplicitHint base=50 total=80 distance=0 cwd=. scope=. program="flutter" args=["build","linux"] availability=platform-specific
   evidence kind=Manifest points=0 source=pubspec.yaml reason=pubspec.yaml declares a Flutter project
   evidence kind=Proximity points=30 source=. reason=same directory as target
-candidate action=flutter:flutter_platforms:linux detector=dart source=flutter layer=ToolDefault origin=Declared policy=ExplicitHint base=50 total=80 distance=0 cwd=. scope=. program="flutter" args=["build","linux"] availability=platform-specific
+candidate action=flutter:flutter_platforms:web detector=dart source=flutter layer=ToolDefault origin=Declared policy=ExplicitHint base=50 total=80 distance=0 cwd=. scope=. program="flutter" args=["build","web"] availability=available
   evidence kind=Manifest points=0 source=pubspec.yaml reason=pubspec.yaml declares a Flutter project
   evidence kind=Proximity points=30 source=. reason=same directory as target
 candidate action=flutter:flutter_platforms:windows detector=dart source=flutter layer=ToolDefault origin=Declared policy=ExplicitHint base=50 total=80 distance=0 cwd=. scope=. program="flutter" args=["build","windows"] availability=platform-specific

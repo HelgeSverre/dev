@@ -266,7 +266,23 @@ fn render_resolution(
         "resolution status={:?} reason={:?} selected={selected}",
         resolution.status, resolution.reason
     )?;
-    for ranked in &resolution.candidates {
+    // Re-sort candidates by normalized totals so host-dependent Flutter
+    // platform availability doesn't change the order across platforms.
+    let mut ranked: Vec<&dev_launcher::resolve::RankedCandidate> =
+        resolution.candidates.iter().collect();
+    ranked.sort_by(|a, b| {
+        let na = normalized_total(&a.candidate);
+        let nb = normalized_total(&b.candidate);
+        nb.cmp(&na)
+            .then_with(|| {
+                a.candidate
+                    .anchor_distance
+                    .cmp(&b.candidate.anchor_distance)
+            })
+            .then_with(|| a.candidate.action_key.cmp(&b.candidate.action_key))
+            .then_with(|| a.candidate.id.as_str().cmp(b.candidate.id.as_str()))
+    });
+    for ranked in ranked {
         let candidate = &ranked.candidate;
         let args = candidate
             .args
@@ -275,17 +291,7 @@ fn render_resolution(
             .collect::<Vec<_>>()
             .join(",");
         let host_dependent = is_host_dependent_flutter(candidate);
-        let total = if host_dependent {
-            candidate.structural_points
-                - candidate
-                    .evidence
-                    .iter()
-                    .filter(|e| e.kind == EvidenceKind::Availability)
-                    .map(|e| e.points)
-                    .sum::<i32>()
-        } else {
-            candidate.structural_points
-        };
+        let total = normalized_total(candidate);
         let avail = if host_dependent {
             "platform-specific".to_owned()
         } else {
@@ -354,6 +360,22 @@ fn is_host_dependent_flutter(candidate: &Candidate) -> bool {
             .identities
             .iter()
             .any(|id| HOST_DEPENDENT.contains(&id.as_str()))
+}
+
+/// Returns the structural points with the host-dependent availability
+/// penalty removed, so the total is the same on every platform.
+fn normalized_total(candidate: &Candidate) -> i32 {
+    if is_host_dependent_flutter(candidate) {
+        candidate.structural_points
+            - candidate
+                .evidence
+                .iter()
+                .filter(|e| e.kind == EvidenceKind::Availability)
+                .map(|e| e.points)
+                .sum::<i32>()
+    } else {
+        candidate.structural_points
+    }
 }
 
 fn optional_path(path: Option<&Path>, fixture: &Path) -> String {
