@@ -5,9 +5,10 @@ use std::fmt::Write as _;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use dev_launcher::candidate::Availability;
+use dev_launcher::candidate::{Availability, Candidate, EvidenceKind};
 use dev_launcher::detect::{detect_all, ScanCtx};
 use dev_launcher::intent::{Intent, Invocation, Target};
+use dev_launcher::registry::{DART, FLUTTER_SOURCE};
 use dev_launcher::resolve::Resolution;
 use dev_launcher::scan::{resolve_roots, FileIndex, RootInfo, ScanOptions};
 
@@ -47,9 +48,7 @@ fn structural_corpus_matches_golden_and_is_repeatable() -> anyhow::Result<()> {
         )?;
         return Ok(());
     }
-    if cfg!(target_os = "macos") {
-        assert_eq!(actual, GOLDEN);
-    }
+    assert_eq!(actual, GOLDEN);
     Ok(())
 }
 
@@ -260,6 +259,23 @@ fn render_resolution(
             .map(|argument| format!("{:?}", argument.to_string_lossy()))
             .collect::<Vec<_>>()
             .join(",");
+        let host_dependent = is_host_dependent_flutter(candidate);
+        let total = if host_dependent {
+            candidate.structural_points
+                - candidate
+                    .evidence
+                    .iter()
+                    .filter(|e| e.kind == EvidenceKind::Availability)
+                    .map(|e| e.points)
+                    .sum::<i32>()
+        } else {
+            candidate.structural_points
+        };
+        let avail = if host_dependent {
+            "platform-specific".to_owned()
+        } else {
+            availability(&candidate.availability, fixture)
+        };
         writeln!(
             output,
             "candidate action={} detector={} source={} layer={:?} origin={:?} policy={:?} base={} total={} distance={} cwd={} scope={} program={:?} args=[{}] availability={}",
@@ -270,15 +286,18 @@ fn render_resolution(
             candidate.origin,
             candidate.selection,
             candidate.base_points,
-            candidate.structural_points,
+            total,
             candidate.anchor_distance,
             relative_path(&candidate.cwd, fixture),
             relative_path(&candidate.scope_root, fixture),
             normalize_text(&candidate.program.to_string_lossy(), fixture),
             args,
-            availability(&candidate.availability, fixture)
+            avail
         )?;
         for evidence in &candidate.evidence {
+            if host_dependent && evidence.kind == EvidenceKind::Availability {
+                continue;
+            }
             writeln!(
                 output,
                 "  evidence kind={:?} points={} source={} reason={}",
@@ -305,6 +324,21 @@ fn availability(availability: &Availability, fixture: &Path) -> String {
             format!("unsupported:{}", normalize_text(reason, fixture))
         }
     }
+}
+
+/// Flutter platform builds for ios/macos/windows/linux use `cfg!(target_os)`
+/// to decide availability, so their golden output is host-dependent.
+/// Normalize them so the same golden passes on every Unix platform.
+/// `android` and `web` are always supported and need no normalization.
+fn is_host_dependent_flutter(candidate: &Candidate) -> bool {
+    const HOST_DEPENDENT: &[&str] = &["ios", "macos", "windows", "linux"];
+    candidate.detector == DART
+        && candidate.source == FLUTTER_SOURCE
+        && candidate
+            .search
+            .identities
+            .iter()
+            .any(|id| HOST_DEPENDENT.contains(&id.as_str()))
 }
 
 fn optional_path(path: Option<&Path>, fixture: &Path) -> String {

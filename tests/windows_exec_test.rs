@@ -9,8 +9,18 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use assert_cmd::cargo::cargo_bin;
-use windows_sys::Win32::System::Console::{GenerateConsoleCtrlEvent, CTRL_BREAK_EVENT};
+use windows_sys::Win32::System::Console::{
+    GenerateConsoleCtrlEvent, GetConsoleWindow, CTRL_BREAK_EVENT,
+};
 use windows_sys::Win32::System::Threading::CREATE_NEW_PROCESS_GROUP;
+
+/// Returns true when a real console window is attached to this process.
+/// On headless CI runners (GitHub Actions, Docker, etc.) there is no
+/// console, so `GenerateConsoleCtrlEvent` cannot propagate Ctrl-Break
+/// to child process groups.
+fn has_console() -> bool {
+    unsafe { GetConsoleWindow() as usize != 0 }
+}
 
 fn project_with_npm(temp: &Path, script: &str) -> anyhow::Result<(PathBuf, PathBuf)> {
     let project = temp.join("project");
@@ -103,8 +113,10 @@ fn job_object_kills_descendants_when_the_launcher_is_terminated() -> anyhow::Res
 
 #[test]
 fn ctrl_break_is_forwarded_to_the_child_process_group() -> anyhow::Result<()> {
-    if std::env::var_os("GITHUB_ACTIONS").is_some() {
-        eprintln!("skipping: Ctrl-Break forwarding not supported on GitHub Actions runner");
+    if !has_console() {
+        eprintln!(
+            "skipping: no console window attached (GenerateConsoleCtrlEvent cannot propagate)"
+        );
         return Ok(());
     }
     let temp = tempfile::tempdir()?;
@@ -134,10 +146,6 @@ fn ctrl_break_is_forwarded_to_the_child_process_group() -> anyhow::Result<()> {
 
 #[test]
 fn command_quoting_preserves_spaces_empty_arguments_and_quotes() -> anyhow::Result<()> {
-    if std::env::var_os("GITHUB_ACTIONS").is_some() {
-        eprintln!("skipping: command quoting test unreliable on GitHub Actions runner");
-        return Ok(());
-    }
     let temp = tempfile::tempdir()?;
     let capture = temp.path().join("capture.ps1");
     let observed = temp.path().join("observed.json");
@@ -160,7 +168,12 @@ fn command_quoting_preserves_spaces_empty_arguments_and_quotes() -> anyhow::Resu
         .output()?;
     anyhow::ensure!(output.status.success(), "dev failed: {output:?}");
     let payload: serde_json::Value = serde_json::from_slice(&fs::read(observed)?)?;
-    assert_eq!(payload["cwd"], project.to_string_lossy().as_ref());
+    // Canonicalize both paths to handle Windows 8.3 short-name divergence
+    // (e.g. RUNNER~1 vs runneradmin) across different APIs.
+    let cwd_from_ps = payload["cwd"].as_str().unwrap();
+    let canonical_ps = fs::canonicalize(cwd_from_ps)?;
+    let canonical_project = fs::canonicalize(&project)?;
+    assert_eq!(canonical_ps, canonical_project);
     assert_eq!(
         payload["args"],
         serde_json::json!(["run", "dev", "--", "--flag", "a b", "", "a'b\"c"])

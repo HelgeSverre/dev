@@ -894,7 +894,7 @@ candidate action=flutter:flutter_ios:run detector=dart source=flutter layer=Tool
 roots package=. workspace=- scan=.
 scan structural=5 targets=0 truncated=false
 resolution status=Ambiguous reason=NoAutomaticCandidates selected=-
-candidate action=flutter:flutter_ios:ios detector=dart source=flutter layer=ToolDefault origin=Declared policy=ExplicitHint base=50 total=80 distance=0 cwd=. scope=. program="flutter" args=["build","ipa"] availability=available
+candidate action=flutter:flutter_ios:ios detector=dart source=flutter layer=ToolDefault origin=Declared policy=ExplicitHint base=50 total=80 distance=0 cwd=. scope=. program="flutter" args=["build","ipa"] availability=platform-specific
   evidence kind=Manifest points=0 source=pubspec.yaml reason=pubspec.yaml declares a Flutter project
   evidence kind=Proximity points=30 source=. reason=same directory as target
 
@@ -921,14 +921,12 @@ resolution status=Ambiguous reason=NoAutomaticCandidates selected=-
 candidate action=flutter:flutter_platforms:web detector=dart source=flutter layer=ToolDefault origin=Declared policy=ExplicitHint base=50 total=80 distance=0 cwd=. scope=. program="flutter" args=["build","web"] availability=available
   evidence kind=Manifest points=0 source=pubspec.yaml reason=pubspec.yaml declares a Flutter project
   evidence kind=Proximity points=30 source=. reason=same directory as target
-candidate action=flutter:flutter_platforms:linux detector=dart source=flutter layer=ToolDefault origin=Declared policy=ExplicitHint base=50 total=30 distance=0 cwd=. scope=. program="flutter" args=["build","linux"] availability=unsupported:Flutter linux builds are unsupported on this host
+candidate action=flutter:flutter_platforms:linux detector=dart source=flutter layer=ToolDefault origin=Declared policy=ExplicitHint base=50 total=80 distance=0 cwd=. scope=. program="flutter" args=["build","linux"] availability=platform-specific
   evidence kind=Manifest points=0 source=pubspec.yaml reason=pubspec.yaml declares a Flutter project
   evidence kind=Proximity points=30 source=. reason=same directory as target
-  evidence kind=Availability points=-50 source=- reason=Flutter linux builds are unsupported on this host
-candidate action=flutter:flutter_platforms:windows detector=dart source=flutter layer=ToolDefault origin=Declared policy=ExplicitHint base=50 total=30 distance=0 cwd=. scope=. program="flutter" args=["build","windows"] availability=unsupported:Flutter windows builds are unsupported on this host
+candidate action=flutter:flutter_platforms:windows detector=dart source=flutter layer=ToolDefault origin=Declared policy=ExplicitHint base=50 total=80 distance=0 cwd=. scope=. program="flutter" args=["build","windows"] availability=platform-specific
   evidence kind=Manifest points=0 source=pubspec.yaml reason=pubspec.yaml declares a Flutter project
   evidence kind=Proximity points=30 source=. reason=same directory as target
-  evidence kind=Availability points=-50 source=- reason=Flutter windows builds are unsupported on this host
 
 ## 35-flutter-platforms/test
 roots package=. workspace=- scan=.
