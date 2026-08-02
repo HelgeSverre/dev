@@ -68,8 +68,49 @@ fn unicode(value: &OsStr) -> Result<&str, DisplayError> {
 }
 
 fn diagnostic_value(value: &OsStr) -> String {
-    let display = value.to_string_lossy();
-    format!("{:?}", display.as_ref())
+    if let Some(value) = value.to_str() {
+        return format!("{value:?}");
+    }
+    diagnostic_opaque(value)
+}
+
+#[cfg(unix)]
+fn diagnostic_opaque(value: &OsStr) -> String {
+    use std::fmt::Write as _;
+    use std::os::unix::ffi::OsStrExt as _;
+
+    let mut output = String::from("b\"");
+    for byte in value.as_bytes() {
+        match byte {
+            b'\\' => output.push_str("\\\\"),
+            b'\"' => output.push_str("\\\""),
+            b'\n' => output.push_str("\\n"),
+            b'\r' => output.push_str("\\r"),
+            b'\t' => output.push_str("\\t"),
+            0x20..=0x7e => output.push(char::from(*byte)),
+            _ => write!(output, "\\x{byte:02x}").expect("writing to a String cannot fail"),
+        }
+    }
+    output.push('"');
+    output
+}
+
+#[cfg(windows)]
+fn diagnostic_opaque(value: &OsStr) -> String {
+    use std::fmt::Write as _;
+    use std::os::windows::ffi::OsStrExt as _;
+
+    let mut output = String::from("w\"");
+    for unit in value.encode_wide() {
+        write!(output, "\\u{{{unit:04x}}}").expect("writing to a String cannot fail");
+    }
+    output.push('"');
+    output
+}
+
+#[cfg(not(any(unix, windows)))]
+fn diagnostic_opaque(value: &OsStr) -> String {
+    format!("{:?}", value.to_string_lossy())
 }
 
 fn posix_quote(value: &str) -> String {
@@ -137,5 +178,25 @@ mod tests {
             "Set-Location -LiteralPath 'C:/work/a b'; $env:MODE = 'reader''s'; & 'tool.exe' 'it''s' '' 'tail arg'"
         );
         Ok(())
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn diagnostic_rendering_preserves_non_utf8_bytes_and_controls() {
+        use std::os::unix::ffi::OsStringExt as _;
+
+        let mut candidate = Candidate::new(
+            "test",
+            "test",
+            Intent::Run,
+            "test",
+            OsString::from_vec(vec![b't', 0x80, b'o', b'o', b'l']),
+            vec![OsString::from_vec(vec![b'a', b'\n', 0xff])],
+            PathBuf::from("/tmp"),
+            1,
+            SelectionPolicy::Automatic,
+        );
+        candidate.passthrough = crate::candidate::PassthroughStyle::Append;
+        assert_eq!(diagnostic(&candidate, &[]), r#"b"t\x80ool" b"a\n\xff""#);
     }
 }

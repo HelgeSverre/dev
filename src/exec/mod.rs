@@ -160,3 +160,92 @@ fn execute_command(mut command: Command, program: &str) -> Result<i32, Execution
     })?;
     Ok(status.code().unwrap_or(1))
 }
+
+#[cfg(all(test, unix))]
+mod tests {
+    use std::collections::BTreeMap;
+    use std::ffi::OsString;
+    use std::os::unix::fs::PermissionsExt as _;
+    use std::path::PathBuf;
+
+    use crate::candidate::{Availability, Candidate, SelectionPolicy};
+    use crate::intent::Intent;
+
+    use super::{execute, ExecutionOptions};
+
+    #[test]
+    fn exec_environment_helper() {
+        if std::env::var_os("DEV_EXEC_TEST_HELPER").is_none() {
+            return;
+        }
+        let program = PathBuf::from(
+            std::env::var_os("DEV_EXEC_TEST_PROGRAM").expect("helper program path must be set"),
+        );
+        let cwd =
+            PathBuf::from(std::env::var_os("DEV_EXEC_TEST_CWD").expect("helper cwd must be set"));
+        let output =
+            std::env::var_os("DEV_EXEC_TEST_OUTPUT").expect("helper output path must be set");
+        let mut candidate = Candidate::new(
+            "test:exec-environment",
+            "shell",
+            Intent::Run,
+            "exec-environment",
+            program.as_os_str(),
+            Vec::new(),
+            cwd,
+            95,
+            SelectionPolicy::Automatic,
+        );
+        candidate.env = BTreeMap::from([
+            (
+                OsString::from("DEV_DECLARED_DELTA"),
+                OsString::from("exact value"),
+            ),
+            (OsString::from("DEV_EXEC_OUTPUT"), output),
+        ]);
+        candidate.availability = Availability::Available {
+            resolved_program: program,
+        };
+        let result = execute(
+            &candidate,
+            &[],
+            ExecutionOptions {
+                quiet: true,
+                colors: false,
+                decisive_match: None,
+            },
+        );
+        panic!("exec returned instead of replacing the helper: {result:?}");
+    }
+
+    #[test]
+    fn exec_applies_declared_environment_deltas_and_working_directory() -> anyhow::Result<()> {
+        let temp = tempfile::tempdir()?;
+        let cwd = temp.path().join("working directory");
+        let program = temp.path().join("probe");
+        let output = temp.path().join("observed");
+        std::fs::create_dir(&cwd)?;
+        std::fs::write(
+            &program,
+            "#!/bin/sh\nprintf 'cwd=<%s>\\ndelta=<%s>\\n' \"$PWD\" \"$DEV_DECLARED_DELTA\" > \"$DEV_EXEC_OUTPUT\"\n",
+        )?;
+        let mut permissions = program.metadata()?.permissions();
+        permissions.set_mode(0o755);
+        std::fs::set_permissions(&program, permissions)?;
+
+        let status = std::process::Command::new(std::env::current_exe()?)
+            .args(["--exact", "exec::tests::exec_environment_helper"])
+            .env("DEV_EXEC_TEST_HELPER", "1")
+            .env("DEV_EXEC_TEST_PROGRAM", &program)
+            .env("DEV_EXEC_TEST_CWD", &cwd)
+            .env("DEV_EXEC_TEST_OUTPUT", &output)
+            .status()?;
+
+        anyhow::ensure!(status.success(), "exec helper failed with {status}");
+        assert_eq!(
+            std::fs::read_to_string(output)?,
+            format!("cwd=<{}>\ndelta=<exact value>\n", cwd.display())
+        );
+        Ok(())
+    }
+}

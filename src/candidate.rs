@@ -57,7 +57,18 @@ fn hash_os(hasher: &mut blake3::Hasher, value: &OsStr) {
     hasher.update(bytes);
 }
 
-#[cfg(not(unix))]
+#[cfg(windows)]
+fn hash_os(hasher: &mut blake3::Hasher, value: &OsStr) {
+    use std::os::windows::ffi::OsStrExt as _;
+
+    let wide = value.encode_wide().collect::<Vec<_>>();
+    hasher.update(&(wide.len() as u64).to_le_bytes());
+    for unit in wide {
+        hasher.update(&unit.to_le_bytes());
+    }
+}
+
+#[cfg(not(any(unix, windows)))]
 fn hash_os(hasher: &mut blake3::Hasher, value: &OsStr) {
     hash_text(hasher, &value.to_string_lossy());
 }

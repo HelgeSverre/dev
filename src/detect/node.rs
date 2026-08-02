@@ -59,6 +59,35 @@ impl PackageManager {
             Self::Yarn | Self::Bun => PassthroughStyle::Append,
         }
     }
+
+    fn local_binary_args(self, binary: &str, arguments: &[&str]) -> Vec<OsString> {
+        let mut output = match self {
+            Self::Npm => vec![
+                OsString::from("exec"),
+                OsString::from("--offline"),
+                OsString::from("--"),
+                OsString::from(binary),
+            ],
+            Self::Pnpm => vec![OsString::from("exec"), OsString::from(binary)],
+            Self::Yarn => vec![OsString::from("run"), OsString::from(binary)],
+            Self::Bun => vec![
+                OsString::from("x"),
+                OsString::from("--no-install"),
+                OsString::from(binary),
+            ],
+        };
+        output.extend(arguments.iter().map(OsString::from));
+        output
+    }
+
+    fn apply_local_exec_safety(self, candidate: &mut Candidate) {
+        if self == Self::Pnpm {
+            candidate.env.insert(
+                OsString::from("npm_config_verify_deps_before_run"),
+                OsString::from("false"),
+            );
+        }
+    }
 }
 
 impl Detector for NodeDetector {
@@ -211,10 +240,13 @@ fn script_candidates(
                 base_points = 55;
                 selection = SelectionPolicy::ExplicitHint;
             }
-            let detector = framework.filter(|_| {
+            let detector = framework.filter(|framework| {
                 matches!(
-                    (context.invocation.intent, script.as_str()),
-                    (Intent::Run, "dev") | (Intent::Build, "build")
+                    (*framework, context.invocation.intent, script.as_str()),
+                    ("vite", Intent::Run, "dev" | "preview")
+                        | ("vite", Intent::Build, "build")
+                        | ("next", Intent::Run, "dev" | "start")
+                        | ("next", Intent::Build, "build")
                 )
             });
             let detector_name = detector.unwrap_or("node");
@@ -277,6 +309,14 @@ fn script_candidates(
                 candidate
                     .description
                     .push_str("; requires a prior Next build");
+            }
+            if framework == Some("vite")
+                && context.invocation.intent == Intent::Run
+                && script == "preview"
+            {
+                candidate
+                    .description
+                    .push_str("; requires a prior Vite build");
             }
             candidate.search = SearchDocument {
                 identities: vec![script.clone()],
@@ -491,67 +531,169 @@ fn framework_fallbacks(
     framework: &'static str,
     synonyms: &[&str],
 ) -> Vec<Candidate> {
-    let action = match (framework, context.invocation.intent) {
-        ("vite", Intent::Run) if !manifest.scripts.contains_key("dev") => {
-            Some(("dev", vec!["vite"]))
+    let mut actions = Vec::<(&str, Vec<&str>, i32, SelectionPolicy, bool)>::new();
+    match (framework, context.invocation.intent) {
+        ("vite", Intent::Run) => {
+            if !manifest.scripts.contains_key("dev") {
+                actions.push(("dev", Vec::new(), 80, SelectionPolicy::Automatic, false));
+            }
+            if !manifest.scripts.contains_key("preview") {
+                actions.push((
+                    "preview",
+                    vec!["preview"],
+                    25,
+                    SelectionPolicy::ExplicitHint,
+                    true,
+                ));
+            }
         }
         ("vite", Intent::Build) if !manifest.scripts.contains_key("build") => {
-            Some(("build", vec!["vite", "build"]))
+            actions.push((
+                "build",
+                vec!["build"],
+                80,
+                SelectionPolicy::Automatic,
+                false,
+            ));
         }
-        ("next", Intent::Run) if !manifest.scripts.contains_key("dev") => {
-            Some(("dev", vec!["next", "dev"]))
+        ("next", Intent::Run) => {
+            if !manifest.scripts.contains_key("dev") {
+                actions.push(("dev", vec!["dev"], 80, SelectionPolicy::Automatic, false));
+            }
+            if !manifest.scripts.contains_key("start") {
+                actions.push((
+                    "start",
+                    vec!["start"],
+                    25,
+                    SelectionPolicy::ExplicitHint,
+                    true,
+                ));
+            }
         }
         ("next", Intent::Build) if !manifest.scripts.contains_key("build") => {
-            Some(("build", vec!["next", "build"]))
+            actions.push((
+                "build",
+                vec!["build"],
+                80,
+                SelectionPolicy::Automatic,
+                false,
+            ));
         }
-        _ => None,
-    };
-    let Some((name, command)) = action else {
-        return Vec::new();
-    };
-    let executable = package_directory
-        .join("node_modules")
-        .join(".bin")
-        .join(command[0]);
-    let mut candidate = Candidate::new(
-        format!(
-            "{framework}:{}:{name}",
-            package_scope(manifest, package_directory)
-        ),
-        framework,
-        context.invocation.intent,
-        name,
-        executable.as_os_str(),
-        command[1..].iter().map(OsString::from).collect(),
-        package_directory.to_path_buf(),
-        80,
-        SelectionPolicy::Automatic,
-    );
-    candidate.lifecycle = if context.invocation.intent == Intent::Run {
-        Lifecycle::LongRunning
-    } else {
-        Lifecycle::Finite
-    };
-    candidate.label = format!("{framework} {name}");
-    candidate.description = format!("Verified project-local {framework} binary");
-    candidate.evidence.push(Evidence {
-        kind: EvidenceKind::Manifest,
-        reason: format!("package declares {framework} without a canonical `{name}` script"),
-        points: 10,
-        source: Some(manifest_path.to_path_buf()),
-    });
-    candidate.search = SearchDocument {
-        identities: vec![name.to_owned(), framework.to_owned()],
-        target_paths: vec![manifest_path.to_path_buf()],
-        scopes: manifest.name.iter().cloned().collect(),
-        tags: synonyms
-            .iter()
-            .map(|value| (*value).to_owned())
-            .chain(std::iter::once(framework.to_owned()))
-            .collect(),
-        text: vec![candidate.description.clone(), manager.program().to_owned()],
-    };
-    vec![candidate]
+        _ => {}
+    }
+
+    let local_binary_available =
+        project_local_binary_exists(package_directory, &context.roots.scan_root, framework);
+    actions
+        .into_iter()
+        .map(|(name, arguments, base_points, selection, requires_build)| {
+            let mut candidate = Candidate::new(
+                format!(
+                    "{framework}:{}:{name}",
+                    package_scope(manifest, package_directory)
+                ),
+                framework,
+                context.invocation.intent,
+                name,
+                manager.program(),
+                manager.local_binary_args(framework, &arguments),
+                package_directory.to_path_buf(),
+                base_points,
+                selection,
+            );
+            manager.apply_local_exec_safety(&mut candidate);
+            if !local_binary_available {
+                candidate.availability = crate::candidate::Availability::UnsupportedHost {
+                    reason: format!(
+                        "project-local {framework} binary is not installed; dev will not download it"
+                    ),
+                };
+            }
+            candidate.lifecycle = if context.invocation.intent == Intent::Run {
+                Lifecycle::LongRunning
+            } else {
+                Lifecycle::Finite
+            };
+            candidate.label = format!("{framework} {name}");
+            candidate.description = format!(
+                "Project-local {framework} through {} without installation",
+                manager.program()
+            );
+            if requires_build {
+                candidate
+                    .description
+                    .push_str(&format!(
+                        "; requires a prior {} build",
+                        framework_display(framework)
+                    ));
+            }
+            candidate.evidence.push(Evidence {
+                kind: EvidenceKind::Manifest,
+                reason: format!(
+                    "package declares {framework} without a canonical `{name}` script"
+                ),
+                points: 10,
+                source: Some(manifest_path.to_path_buf()),
+            });
+            candidate.evidence.push(Evidence {
+                kind: EvidenceKind::Rule,
+                reason: format!(
+                    "{} uses its local-only binary execution mode",
+                    manager.program()
+                ),
+                points: 0,
+                source: None,
+            });
+            candidate.search = SearchDocument {
+                identities: vec![name.to_owned(), framework.to_owned()],
+                target_paths: vec![manifest_path.to_path_buf()],
+                scopes: manifest.name.iter().cloned().collect(),
+                tags: synonyms
+                    .iter()
+                    .map(|value| (*value).to_owned())
+                    .chain(std::iter::once(framework.to_owned()))
+                    .collect(),
+                text: vec![candidate.description.clone(), manager.program().to_owned()],
+            };
+            candidate
+        })
+        .collect()
+}
+
+fn project_local_binary_exists(package_directory: &Path, scan_root: &Path, binary: &str) -> bool {
+    package_directory
+        .ancestors()
+        .take_while(|directory| directory.starts_with(scan_root))
+        .any(|directory| {
+            let bin_directory = directory.join("node_modules").join(".bin");
+            ["", ".cmd", ".exe", ".bat", ".com"]
+                .into_iter()
+                .any(|extension| {
+                    project_binary_file(&bin_directory.join(format!("{binary}{extension}")))
+                })
+                || directory.join(".pnp.cjs").is_file()
+        })
+}
+
+#[cfg(unix)]
+fn project_binary_file(path: &Path) -> bool {
+    use std::os::unix::fs::PermissionsExt as _;
+
+    path.metadata()
+        .is_ok_and(|metadata| metadata.is_file() && metadata.permissions().mode() & 0o111 != 0)
+}
+
+#[cfg(not(unix))]
+fn project_binary_file(path: &Path) -> bool {
+    path.is_file()
+}
+
+fn framework_display(framework: &str) -> &str {
+    match framework {
+        "vite" => "Vite",
+        "next" => "Next",
+        other => other,
+    }
 }
 
 fn package_scope(manifest: &PackageManifest, directory: &Path) -> String {
@@ -661,4 +803,54 @@ fn is_javascript_test(path: &Path) -> bool {
         || filename.contains(".test.")
         || filename.contains(".spec.")
         || filename.contains("_test.")
+}
+
+#[cfg(test)]
+mod tests {
+    use std::ffi::OsString;
+
+    use super::*;
+
+    #[test]
+    fn framework_binary_commands_use_each_managers_local_only_mode() {
+        let arguments = ["preview", "--host"];
+        assert_eq!(
+            PackageManager::Npm.local_binary_args("vite", &arguments),
+            ["exec", "--offline", "--", "vite", "preview", "--host"].map(OsString::from)
+        );
+        assert_eq!(
+            PackageManager::Pnpm.local_binary_args("vite", &arguments),
+            ["exec", "vite", "preview", "--host"].map(OsString::from)
+        );
+        assert_eq!(
+            PackageManager::Yarn.local_binary_args("vite", &arguments),
+            ["run", "vite", "preview", "--host"].map(OsString::from)
+        );
+        assert_eq!(
+            PackageManager::Bun.local_binary_args("vite", &arguments),
+            ["x", "--no-install", "vite", "preview", "--host"].map(OsString::from)
+        );
+    }
+
+    #[test]
+    fn pnpm_local_exec_disables_dependency_auto_install_preflight() {
+        let mut candidate = Candidate::new(
+            "vite:test",
+            "vite",
+            Intent::Run,
+            "dev",
+            "pnpm",
+            Vec::new(),
+            PathBuf::from("/tmp"),
+            80,
+            SelectionPolicy::Automatic,
+        );
+        PackageManager::Pnpm.apply_local_exec_safety(&mut candidate);
+        assert_eq!(
+            candidate
+                .env
+                .get(&OsString::from("npm_config_verify_deps_before_run")),
+            Some(&OsString::from("false"))
+        );
+    }
 }

@@ -149,6 +149,10 @@ candidate action=node:vite-canonical:script:dev detector=vite origin=Declared po
   evidence kind=Manifest points=0 source=package.json reason=package.json declares script `dev`
   evidence kind=Proximity points=30 source=. reason=same directory as target
   evidence kind=Rule points=-5 source=- reason=defaulted to npm because no package-manager marker was found
+candidate action=vite:vite-canonical:preview detector=vite origin=Declared policy=ExplicitHint base=25 total=65 distance=0 cwd=. program="npm" args=["exec","--offline","--","vite","preview"] availability=available
+  evidence kind=Manifest points=10 source=package.json reason=package declares vite without a canonical `preview` script
+  evidence kind=Proximity points=30 source=. reason=same directory as target
+  evidence kind=Rule points=0 source=- reason=npm uses its local-only binary execution mode
 candidate action=node:vite-canonical:script:build detector=node origin=Declared policy=ExplicitHint base=15 total=40 distance=0 cwd=. program="npm" args=["run","build"] availability=available
   evidence kind=Manifest points=0 source=package.json reason=package.json declares script `build`
   evidence kind=Proximity points=30 source=. reason=same directory as target
@@ -173,9 +177,14 @@ resolution status=NoCandidates reason=NoCandidates selected=-
 roots package=. workspace=- scan=.
 scan structural=1 targets=0 truncated=false
 resolution status=Resolved reason=UniqueAutomaticCandidate selected=vite:vite-no-canonical:dev
-candidate action=vite:vite-no-canonical:dev detector=vite origin=Declared policy=Automatic base=80 total=120 distance=0 cwd=. program="<fixture>/node_modules/.bin/vite" args=[] availability=available
+candidate action=vite:vite-no-canonical:dev detector=vite origin=Declared policy=Automatic base=80 total=120 distance=0 cwd=. program="npm" args=["exec","--offline","--","vite"] availability=available
   evidence kind=Manifest points=10 source=package.json reason=package declares vite without a canonical `dev` script
   evidence kind=Proximity points=30 source=. reason=same directory as target
+  evidence kind=Rule points=0 source=- reason=npm uses its local-only binary execution mode
+candidate action=vite:vite-no-canonical:preview detector=vite origin=Declared policy=ExplicitHint base=25 total=65 distance=0 cwd=. program="npm" args=["exec","--offline","--","vite","preview"] availability=available
+  evidence kind=Manifest points=10 source=package.json reason=package declares vite without a canonical `preview` script
+  evidence kind=Proximity points=30 source=. reason=same directory as target
+  evidence kind=Rule points=0 source=- reason=npm uses its local-only binary execution mode
 candidate action=node:vite-no-canonical:script:preview-site detector=node origin=Declared policy=ExplicitHint base=15 total=40 distance=0 cwd=. program="npm" args=["run","preview-site"] availability=available
   evidence kind=Manifest points=0 source=package.json reason=package.json declares script `preview-site`
   evidence kind=Proximity points=30 source=. reason=same directory as target
@@ -185,9 +194,10 @@ candidate action=node:vite-no-canonical:script:preview-site detector=node origin
 roots package=. workspace=- scan=.
 scan structural=1 targets=0 truncated=false
 resolution status=Resolved reason=UniqueAutomaticCandidate selected=vite:vite-no-canonical:build
-candidate action=vite:vite-no-canonical:build detector=vite origin=Declared policy=Automatic base=80 total=120 distance=0 cwd=. program="<fixture>/node_modules/.bin/vite" args=["build"] availability=available
+candidate action=vite:vite-no-canonical:build detector=vite origin=Declared policy=Automatic base=80 total=120 distance=0 cwd=. program="npm" args=["exec","--offline","--","vite","build"] availability=available
   evidence kind=Manifest points=10 source=package.json reason=package declares vite without a canonical `build` script
   evidence kind=Proximity points=30 source=. reason=same directory as target
+  evidence kind=Rule points=0 source=- reason=npm uses its local-only binary execution mode
 
 ## 06-vite-no-canonical/test
 roots package=. workspace=- scan=.
@@ -203,7 +213,8 @@ candidate action=node:next-canonical:script:dev detector=next origin=Declared po
   evidence kind=Manifest points=0 source=package.json reason=package.json declares script `dev`
   evidence kind=Proximity points=30 source=. reason=same directory as target
   evidence kind=Rule points=-5 source=- reason=defaulted to npm because no package-manager marker was found
-candidate action=node:next-canonical:script:start detector=node origin=Declared policy=ExplicitHint base=55 total=80 distance=0 cwd=. program="npm" args=["run","start"] availability=available
+candidate action=node:next-canonical:script:start detector=next origin=Declared policy=ExplicitHint base=55 total=90 distance=0 cwd=. program="npm" args=["run","start"] availability=available
+  evidence kind=Manifest points=10 source=package.json reason=package declares next
   evidence kind=Manifest points=0 source=package.json reason=package.json declares script `start`
   evidence kind=Proximity points=30 source=. reason=same directory as target
   evidence kind=Rule points=-5 source=- reason=defaulted to npm because no package-manager marker was found
@@ -231,9 +242,14 @@ resolution status=NoCandidates reason=NoCandidates selected=-
 roots package=. workspace=- scan=.
 scan structural=1 targets=0 truncated=false
 resolution status=Resolved reason=UniqueAutomaticCandidate selected=next:next-no-canonical:dev
-candidate action=next:next-no-canonical:dev detector=next origin=Declared policy=Automatic base=80 total=120 distance=0 cwd=. program="<fixture>/node_modules/.bin/next" args=["dev"] availability=available
+candidate action=next:next-no-canonical:dev detector=next origin=Declared policy=Automatic base=80 total=120 distance=0 cwd=. program="npm" args=["exec","--offline","--","next","dev"] availability=available
   evidence kind=Manifest points=10 source=package.json reason=package declares next without a canonical `dev` script
   evidence kind=Proximity points=30 source=. reason=same directory as target
+  evidence kind=Rule points=0 source=- reason=npm uses its local-only binary execution mode
+candidate action=next:next-no-canonical:start detector=next origin=Declared policy=ExplicitHint base=25 total=65 distance=0 cwd=. program="npm" args=["exec","--offline","--","next","start"] availability=available
+  evidence kind=Manifest points=10 source=package.json reason=package declares next without a canonical `start` script
+  evidence kind=Proximity points=30 source=. reason=same directory as target
+  evidence kind=Rule points=0 source=- reason=npm uses its local-only binary execution mode
 candidate action=node:next-no-canonical:script:preview-site detector=node origin=Declared policy=ExplicitHint base=15 total=40 distance=0 cwd=. program="npm" args=["run","preview-site"] availability=available
   evidence kind=Manifest points=0 source=package.json reason=package.json declares script `preview-site`
   evidence kind=Proximity points=30 source=. reason=same directory as target
@@ -243,9 +259,10 @@ candidate action=node:next-no-canonical:script:preview-site detector=node origin
 roots package=. workspace=- scan=.
 scan structural=1 targets=0 truncated=false
 resolution status=Resolved reason=UniqueAutomaticCandidate selected=next:next-no-canonical:build
-candidate action=next:next-no-canonical:build detector=next origin=Declared policy=Automatic base=80 total=120 distance=0 cwd=. program="<fixture>/node_modules/.bin/next" args=["build"] availability=available
+candidate action=next:next-no-canonical:build detector=next origin=Declared policy=Automatic base=80 total=120 distance=0 cwd=. program="npm" args=["exec","--offline","--","next","build"] availability=available
   evidence kind=Manifest points=10 source=package.json reason=package declares next without a canonical `build` script
   evidence kind=Proximity points=30 source=. reason=same directory as target
+  evidence kind=Rule points=0 source=- reason=npm uses its local-only binary execution mode
 
 ## 08-next-no-canonical/test
 roots package=. workspace=- scan=.
@@ -1159,6 +1176,10 @@ candidate action=docker:root:compose-up:target:web detector=docker origin=Declar
 candidate action=docker:root:compose-up detector=docker origin=Declared policy=ExplicitHint base=40 total=70 distance=0 cwd=. program="docker" args=["compose","up"] availability=available
   evidence kind=Manifest points=0 source=compose.yaml reason=compose.yaml is a standard Compose manifest
   evidence kind=Proximity points=30 source=. reason=same directory as target
+candidate action=vite:compose-vite:preview detector=vite origin=Declared policy=ExplicitHint base=25 total=65 distance=0 cwd=. program="npm" args=["exec","--offline","--","vite","preview"] availability=available
+  evidence kind=Manifest points=10 source=package.json reason=package declares vite without a canonical `preview` script
+  evidence kind=Proximity points=30 source=. reason=same directory as target
+  evidence kind=Rule points=0 source=- reason=npm uses its local-only binary execution mode
 candidate action=node:compose-vite:script:build detector=node origin=Declared policy=ExplicitHint base=15 total=40 distance=0 cwd=. program="npm" args=["run","build"] availability=available
   evidence kind=Manifest points=0 source=package.json reason=package.json declares script `build`
   evidence kind=Proximity points=30 source=. reason=same directory as target
@@ -1245,6 +1266,10 @@ candidate action=node:ambiguous:script:dev detector=vite origin=Declared policy=
 candidate action=composer:acme/ambiguous:script:dev detector=composer origin=Declared policy=Automatic base=95 total=125 distance=0 cwd=. program="composer" args=["run-script","dev"] availability=available
   evidence kind=Manifest points=0 source=composer.json reason=composer.json declares script `dev`
   evidence kind=Proximity points=30 source=. reason=same directory as target
+candidate action=vite:ambiguous:preview detector=vite origin=Declared policy=ExplicitHint base=25 total=65 distance=0 cwd=. program="npm" args=["exec","--offline","--","vite","preview"] availability=available
+  evidence kind=Manifest points=10 source=package.json reason=package declares vite without a canonical `preview` script
+  evidence kind=Proximity points=30 source=. reason=same directory as target
+  evidence kind=Rule points=0 source=- reason=npm uses its local-only binary execution mode
 candidate action=shell:run:scripts:dev detector=shell origin=Conventional policy=ExplicitHint base=20 total=35 distance=1 cwd=scripts program="./dev" args=[] availability=available
   evidence kind=Convention points=0 source=scripts/dev reason=selected executable shebang `/bin/sh` for script target
   evidence kind=Proximity points=15 source=scripts reason=1 directory edges from target
@@ -1253,9 +1278,10 @@ candidate action=shell:run:scripts:dev detector=shell origin=Conventional policy
 roots package=. workspace=- scan=.
 scan structural=4 targets=0 truncated=false
 resolution status=Resolved reason=UniqueAutomaticCandidate selected=vite:ambiguous:build
-candidate action=vite:ambiguous:build detector=vite origin=Declared policy=Automatic base=80 total=120 distance=0 cwd=. program="<fixture>/node_modules/.bin/vite" args=["build"] availability=available
+candidate action=vite:ambiguous:build detector=vite origin=Declared policy=Automatic base=80 total=120 distance=0 cwd=. program="npm" args=["exec","--offline","--","vite","build"] availability=available
   evidence kind=Manifest points=10 source=package.json reason=package declares vite without a canonical `build` script
   evidence kind=Proximity points=30 source=. reason=same directory as target
+  evidence kind=Rule points=0 source=- reason=npm uses its local-only binary execution mode
 
 ## 50-ambiguous/test
 roots package=. workspace=- scan=.

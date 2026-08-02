@@ -93,10 +93,10 @@ fn node_script_executes_real_child_with_exact_passthrough_and_cwd() -> anyhow::R
     command
         .args(["run", "--at"])
         .arg(&project)
-        .args(["--", "--port", "a b", ""])
+        .args(["--", "--port", "a b", "", "a'b\"c"])
         .env("PATH", &bin);
     command.assert().success().stdout(format!(
-        "cwd=<{}>\narg0=<run>\narg1=<dev>\narg2=<-->\narg3=<--port>\narg4=<a b>\narg5=<>\n",
+        "cwd=<{}>\narg0=<run>\narg1=<dev>\narg2=<-->\narg3=<--port>\narg4=<a b>\narg5=<>\narg6=<a'b\"c>\n",
         project.display()
     ));
     Ok(())
@@ -330,6 +330,95 @@ fn next_start_requires_an_explicit_identity_hint() -> anyhow::Result<()> {
                 .is_some_and(|key| key.ends_with(":start"))
         })
         .ok_or_else(|| anyhow::anyhow!("Next start candidate must exist"))?;
+    assert_eq!(start["policy"], "explicit_hint");
+    assert!(start["description"]
+        .as_str()
+        .is_some_and(|description| description.contains("prior Next build")));
+    Ok(())
+}
+
+#[test]
+fn framework_fallbacks_use_local_only_exec_and_include_production_alternatives(
+) -> anyhow::Result<()> {
+    let temp = tempfile::tempdir()?;
+    let bin = fake_program(temp.path(), "npm")?;
+
+    let vite = temp.path().join("vite-fallback");
+    fs::create_dir_all(vite.join("node_modules/.bin"))?;
+    fs::write(
+        vite.join("package.json"),
+        r#"{"name":"web","devDependencies":{"vite":"7"}}"#,
+    )?;
+    write_executable(&vite.join("node_modules/.bin/vite"), "#!/bin/sh\n")?;
+
+    let mut vite_json = cargo_bin_cmd!("dev");
+    let output = vite_json
+        .args(["run", "--json", "--at"])
+        .arg(&vite)
+        .env("PATH", &bin)
+        .output()?;
+    anyhow::ensure!(output.status.success(), "Vite fallback failed: {output:?}");
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout)?;
+    let candidates = json["candidates"]
+        .as_array()
+        .ok_or_else(|| anyhow::anyhow!("candidates must be an array"))?;
+    let vite_dev = candidates
+        .iter()
+        .find(|candidate| candidate["action_key"] == "vite:web:dev")
+        .ok_or_else(|| anyhow::anyhow!("Vite dev fallback must exist"))?;
+    assert_eq!(
+        vite_dev["args"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|argument| argument["display"].as_str())
+            .collect::<Vec<_>>(),
+        ["exec", "--offline", "--", "vite"]
+    );
+    let preview = candidates
+        .iter()
+        .find(|candidate| candidate["action_key"] == "vite:web:preview")
+        .ok_or_else(|| anyhow::anyhow!("Vite preview fallback must exist"))?;
+    assert_eq!(preview["policy"], "explicit_hint");
+    assert!(preview["description"]
+        .as_str()
+        .is_some_and(|description| description.contains("prior Vite build")));
+
+    let mut run_preview = cargo_bin_cmd!("dev");
+    run_preview
+        .args(["run", "preview", "--quiet", "--at"])
+        .arg(&vite)
+        .env("PATH", &bin);
+    run_preview
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("arg0=<exec>"))
+        .stdout(predicates::str::contains("arg1=<--offline>"))
+        .stdout(predicates::str::contains("arg2=<-->"))
+        .stdout(predicates::str::contains("arg3=<vite>"))
+        .stdout(predicates::str::contains("arg4=<preview>"));
+
+    let next = temp.path().join("next-fallback");
+    fs::create_dir_all(next.join("node_modules/.bin"))?;
+    fs::write(
+        next.join("package.json"),
+        r#"{"name":"site","dependencies":{"next":"16"}}"#,
+    )?;
+    write_executable(&next.join("node_modules/.bin/next"), "#!/bin/sh\n")?;
+    let mut next_json = cargo_bin_cmd!("dev");
+    let output = next_json
+        .args(["run", "--json", "--at"])
+        .arg(&next)
+        .env("PATH", &bin)
+        .output()?;
+    anyhow::ensure!(output.status.success(), "Next fallback failed: {output:?}");
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout)?;
+    let start = json["candidates"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .find(|candidate| candidate["action_key"] == "next:site:start")
+        .ok_or_else(|| anyhow::anyhow!("Next start fallback must exist"))?;
     assert_eq!(start["policy"], "explicit_hint");
     assert!(start["description"]
         .as_str()
@@ -1264,6 +1353,31 @@ fn standalone_php_targets_use_the_interpreter_and_hint_widening() -> anyhow::Res
         "cwd=<{}>\narg0=<legacy_importer.php>\n",
         target.parent().unwrap_or(&project).display()
     ));
+    Ok(())
+}
+
+#[test]
+fn project_local_bins_never_shadow_a_runtime_through_implicit_path_changes() -> anyhow::Result<()> {
+    let temp = tempfile::tempdir()?;
+    let project = temp.path().join("runtime-shadow");
+    let target = project.join("server.php");
+    fs::create_dir_all(project.join("vendor/bin"))?;
+    fs::write(&target, "<?php echo 'ok';\n")?;
+    write_executable(
+        &project.join("vendor/bin/php"),
+        "#!/bin/sh\nprintf 'shadowed-runtime\\n'\n",
+    )?;
+    let bin = fake_program(temp.path(), "php")?;
+
+    let mut command = cargo_bin_cmd!("dev");
+    command
+        .args(["run", "--quiet", "--at"])
+        .arg(&target)
+        .env("PATH", &bin);
+    command
+        .assert()
+        .success()
+        .stdout(format!("cwd=<{}>\narg0=<server.php>\n", project.display()));
     Ok(())
 }
 
