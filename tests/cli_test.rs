@@ -1331,6 +1331,51 @@ fn composer_script_executes_with_documented_argument_forwarding() -> anyhow::Res
 }
 
 #[test]
+fn just_test_facade_dominates_composer_and_preserves_exact_justfile() -> anyhow::Result<()> {
+    let temp = tempfile::tempdir()?;
+    let project = temp.path().join("facade-project");
+    fs::create_dir(&project)?;
+    let justfile = project.join("JUSTFILE");
+    fs::write(
+        &justfile,
+        "test *ARGS:\n    composer test {{ARGS}}\n\ncheck:\n    composer check\n",
+    )?;
+    fs::write(
+        project.join("composer.json"),
+        r#"{"name":"acme/facade","scripts":{"test":"pest","check":"phpstan"}}"#,
+    )?;
+    let bin = fake_program(temp.path(), "just")?;
+    fake_program(temp.path(), "composer")?;
+
+    let mut explain = cargo_bin_cmd!("dev");
+    explain
+        .args(["test", "--why", "--at"])
+        .arg(&project)
+        .env("PATH", &bin);
+    explain
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("Resolution: Resolved"))
+        .stdout(predicates::str::contains("Just recipe `test`"))
+        .stdout(predicates::str::contains(
+            "demoted by canonical same-scope ProjectFacade",
+        ));
+
+    let mut execute = cargo_bin_cmd!("dev");
+    execute
+        .args(["test", "--quiet", "--at"])
+        .arg(&project)
+        .args(["--", "--filter", "database"])
+        .env("PATH", &bin);
+    execute.assert().success().stdout(format!(
+        "cwd=<{}>\narg0=<--justfile>\narg1=<{}>\narg2=<test>\narg3=<--filter>\narg4=<database>\n",
+        project.display(),
+        justfile.display()
+    ));
+    Ok(())
+}
+
+#[test]
 fn malformed_composer_manifest_is_diagnostic_not_a_command() -> anyhow::Result<()> {
     let temp = tempfile::tempdir()?;
     let project = temp.path().join("malformed-composer");

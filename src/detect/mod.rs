@@ -1,9 +1,11 @@
 mod artisan;
+mod builder;
 mod cargo;
 mod composer;
 mod dart;
 mod docker;
 mod go;
+mod just;
 mod make;
 mod node;
 mod php_file;
@@ -20,11 +22,13 @@ use crate::intent::Invocation;
 use crate::scan::{FileIndex, RootInfo};
 
 pub use artisan::ArtisanDetector;
+pub use builder::{CandidateBuildError, CandidateBuilder};
 pub use cargo::CargoDetector;
 pub use composer::ComposerDetector;
 pub use dart::DartDetector;
 pub use docker::DockerDetector;
 pub use go::GoDetector;
+pub use just::JustDetector;
 pub use make::MakeDetector;
 pub use node::NodeDetector;
 pub(crate) use node::NodeTestBinder;

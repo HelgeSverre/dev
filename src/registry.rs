@@ -8,8 +8,8 @@ use serde::Serialize;
 
 use crate::detect::{
     ArtisanDetector, CargoDetector, ComposerDetector, DartDetector, Detector, DockerDetector,
-    GoDetector, MakeDetector, NodeDetector, NodeTestBinder, PhpFileDetector, PythonFileDetector,
-    ShellDetector, SwiftDetector, TargetBinder, TargetRunner, ZigDetector,
+    GoDetector, JustDetector, MakeDetector, NodeDetector, NodeTestBinder, PhpFileDetector,
+    PythonFileDetector, ShellDetector, SwiftDetector, TargetBinder, TargetRunner, ZigDetector,
 };
 
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Serialize)]
@@ -83,6 +83,7 @@ pub const CARGO: DetectorId = DetectorId::new("cargo");
 pub const COMPOSER: DetectorId = DetectorId::new("composer");
 pub const ARTISAN: DetectorId = DetectorId::new("artisan");
 pub const GO: DetectorId = DetectorId::new("go");
+pub const JUST: DetectorId = DetectorId::new("just");
 pub const PHP_FILE: DetectorId = DetectorId::new("php-file");
 pub const ZIG: DetectorId = DetectorId::new("zig");
 pub const SWIFT: DetectorId = DetectorId::new("swift");
@@ -99,6 +100,7 @@ pub const CARGO_SOURCE: CandidateSourceId = CandidateSourceId::new("cargo");
 pub const COMPOSER_SOURCE: CandidateSourceId = CandidateSourceId::new("composer");
 pub const ARTISAN_SOURCE: CandidateSourceId = CandidateSourceId::new("artisan");
 pub const GO_SOURCE: CandidateSourceId = CandidateSourceId::new("go");
+pub const JUST_SOURCE: CandidateSourceId = CandidateSourceId::new("just");
 pub const PHP_FILE_SOURCE: CandidateSourceId = CandidateSourceId::new("php-file");
 pub const ZIG_SOURCE: CandidateSourceId = CandidateSourceId::new("zig");
 pub const SWIFT_SOURCE: CandidateSourceId = CandidateSourceId::new("swift");
@@ -119,6 +121,7 @@ pub const RUSTC_TOOL: ToolId = ToolId::new("rustc");
 pub const COMPOSER_TOOL: ToolId = ToolId::new("composer");
 pub const PHP_TOOL: ToolId = ToolId::new("php");
 pub const GO_TOOL: ToolId = ToolId::new("go");
+pub const JUST_TOOL: ToolId = ToolId::new("just");
 pub const ZIG_TOOL: ToolId = ToolId::new("zig");
 pub const SWIFT_TOOL: ToolId = ToolId::new("swift");
 pub const FLUTTER_TOOL: ToolId = ToolId::new("flutter");
@@ -260,6 +263,7 @@ const RUSTC_PROGRAM: ToolRegistration = command_tool(RUSTC_TOOL, "rustc", &["--v
 const COMPOSER_PROGRAM: ToolRegistration = command_tool(COMPOSER_TOOL, "composer", &["--version"]);
 const PHP_PROGRAM: ToolRegistration = command_tool(PHP_TOOL, "php", &["--version"]);
 const GO_PROGRAM: ToolRegistration = command_tool(GO_TOOL, "go", &["version"]);
+const JUST_PROGRAM: ToolRegistration = command_tool(JUST_TOOL, "just", &["--version"]);
 const ZIG_PROGRAM: ToolRegistration = command_tool(ZIG_TOOL, "zig", &["version"]);
 const SWIFT_PROGRAM: ToolRegistration = command_tool(SWIFT_TOOL, "swift", &["--version"]);
 const FLUTTER_PROGRAM: ToolRegistration = ToolRegistration {
@@ -564,6 +568,31 @@ static REGISTRATIONS: &[DetectorRegistration] = &[
         target_runners: &[&PythonFileDetector],
     },
     DetectorRegistration {
+        id: JUST,
+        candidate_sources: &[CandidateSourceRegistration {
+            id: JUST_SOURCE,
+            metadata_priority: 3,
+            default_tags: &["just", "justfile", "task"],
+        }],
+        synonyms: &["just", "justfile", "recipe", "task"],
+        markers: &[
+            ProjectMarker {
+                pattern: MarkerPattern::Exact(".justfile"),
+                root_role: RootRole::Package,
+            },
+            ProjectMarker {
+                pattern: MarkerPattern::AsciiCaseInsensitiveBasename("justfile"),
+                root_role: RootRole::Package,
+            },
+        ],
+        tools: &[JUST_PROGRAM],
+        conventional_roots: ROOTS,
+        candidate_schema: 1,
+        detector: &JustDetector,
+        target_binders: &[],
+        target_runners: &[],
+    },
+    DetectorRegistration {
         id: SHELL,
         candidate_sources: &[CandidateSourceRegistration {
             id: SHELL_SOURCE,
@@ -829,7 +858,7 @@ mod tests {
     #[test]
     fn registry_is_internally_consistent() -> anyhow::Result<()> {
         validate()?;
-        assert_eq!(tools().len(), 18);
+        assert_eq!(tools().len(), 19);
         assert!(source_by_name("vite").is_some());
         assert!(source_by_name("unknown").is_none());
         Ok(())

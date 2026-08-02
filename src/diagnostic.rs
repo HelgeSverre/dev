@@ -24,6 +24,16 @@ pub struct Diagnostic {
 
 impl Diagnostic {
     #[must_use]
+    pub fn info(detector: DetectorId, message: impl Into<String>, source: Option<PathBuf>) -> Self {
+        Self {
+            detector,
+            severity: Severity::Info,
+            message: message.into(),
+            source,
+        }
+    }
+
+    #[must_use]
     pub fn warning(
         detector: DetectorId,
         message: impl Into<String>,
@@ -32,6 +42,20 @@ impl Diagnostic {
         Self {
             detector,
             severity: Severity::Warning,
+            message: message.into(),
+            source,
+        }
+    }
+
+    #[must_use]
+    pub fn error(
+        detector: DetectorId,
+        message: impl Into<String>,
+        source: Option<PathBuf>,
+    ) -> Self {
+        Self {
+            detector,
+            severity: Severity::Error,
             message: message.into(),
             source,
         }
