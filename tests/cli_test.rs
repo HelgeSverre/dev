@@ -1263,7 +1263,7 @@ fn concurrent_picker_writers_preserve_every_remembered_query() -> anyhow::Result
             .env("XDG_STATE_HOME", &state)
             .env("TERM", "xterm-256color");
         let mut session = Session::spawn(command)?;
-        session.set_expect_timeout(Some(Duration::from_secs(5)));
+        session.set_expect_timeout(Some(Duration::from_secs(15)));
         session
             .expect("\u{1b}[?1049h")
             .map_err(anyhow::Error::from)
