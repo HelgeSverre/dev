@@ -7,11 +7,19 @@ use std::path::{Path, PathBuf};
 use anyhow::Context as _;
 use assert_cmd::cargo::cargo_bin_cmd;
 
+fn write_executable(path: &Path, contents: &str) -> anyhow::Result<()> {
+    fs::write(path, contents)?;
+    let mut permissions = path.metadata()?.permissions();
+    permissions.set_mode(0o755);
+    fs::set_permissions(path, permissions)?;
+    Ok(())
+}
+
 fn fake_program(directory: &Path, name: &str) -> anyhow::Result<PathBuf> {
     let bin = directory.join("bin");
     fs::create_dir_all(&bin)?;
     let program = bin.join(name);
-    fs::write(
+    write_executable(
         &program,
         r#"#!/bin/sh
 printf 'cwd=<%s>\n' "$PWD"
@@ -30,9 +38,6 @@ fi
 exit "${DEV_FAKE_EXIT:-0}"
 "#,
     )?;
-    let mut permissions = program.metadata()?.permissions();
-    permissions.set_mode(0o755);
-    fs::set_permissions(&program, permissions)?;
     Ok(bin)
 }
 
@@ -357,6 +362,103 @@ fn child_stdio_and_exit_status_are_preserved() -> anyhow::Result<()> {
         .code(37)
         .stdout(predicates::str::contains("stdin=<from-parent>"))
         .stderr("child-stderr=<visible>\n");
+    Ok(())
+}
+
+#[test]
+fn child_observes_the_inherited_terminal() -> anyhow::Result<()> {
+    use std::process::Command;
+    use std::time::Duration;
+
+    use expectrl::{Eof, Expect, Session};
+
+    let temp = tempfile::tempdir()?;
+    let project = temp.path().join("tty-project");
+    let bin = temp.path().join("bin");
+    fs::create_dir(&project)?;
+    fs::create_dir(&bin)?;
+    fs::write(project.join("package.json"), r#"{"scripts":{"dev":"tty"}}"#)?;
+    write_executable(
+        &bin.join("npm"),
+        r#"#!/bin/sh
+stdin=no
+stdout=no
+stderr=no
+test -t 0 && stdin=yes
+test -t 1 && stdout=yes
+test -t 2 && stderr=yes
+printf 'tty stdin=%s stdout=%s stderr=%s\n' "$stdin" "$stdout" "$stderr"
+"#,
+    )?;
+
+    let mut command = Command::new(env!("CARGO_BIN_EXE_dev"));
+    command
+        .args(["run", "--quiet", "--at"])
+        .arg(&project)
+        .env("PATH", &bin)
+        .env("TERM", "xterm-256color");
+    let mut session = Session::spawn(command)?;
+    session.set_expect_timeout(Some(Duration::from_secs(5)));
+    session
+        .expect("tty stdin=yes stdout=yes stderr=yes")
+        .map_err(anyhow::Error::from)?;
+    session.expect(Eof).map_err(anyhow::Error::from)?;
+    Ok(())
+}
+
+#[test]
+fn signal_reaches_the_exec_replaced_child() -> anyhow::Result<()> {
+    use std::os::unix::process::ExitStatusExt as _;
+    use std::process::{Command, Stdio};
+    use std::time::{Duration, Instant};
+
+    let temp = tempfile::tempdir()?;
+    let project = temp.path().join("signal-project");
+    let bin = temp.path().join("bin");
+    let ready = temp.path().join("child-ready");
+    fs::create_dir(&project)?;
+    fs::create_dir(&bin)?;
+    fs::write(
+        project.join("package.json"),
+        r#"{"scripts":{"dev":"signal"}}"#,
+    )?;
+    write_executable(
+        &bin.join("npm"),
+        r#"#!/bin/sh
+: > "$DEV_SIGNAL_READY"
+exec /bin/sleep 30
+"#,
+    )?;
+
+    let mut child = Command::new(env!("CARGO_BIN_EXE_dev"))
+        .args(["run", "--quiet", "--at"])
+        .arg(&project)
+        .env("PATH", &bin)
+        .env("DEV_SIGNAL_READY", &ready)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()?;
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while !ready.exists() {
+        if let Some(status) = child.try_wait()? {
+            anyhow::bail!("dev exited with {status} before the child became ready");
+        }
+        if Instant::now() >= deadline {
+            let _ = child.kill();
+            let _ = child.wait();
+            anyhow::bail!("timed out waiting for the exec-replaced child");
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+
+    let delivered = Command::new("/bin/kill")
+        .arg("-TERM")
+        .arg(child.id().to_string())
+        .status()?;
+    anyhow::ensure!(delivered.success(), "failed to deliver SIGTERM");
+    let status = child.wait()?;
+    assert_eq!(status.signal(), Some(15));
     Ok(())
 }
 

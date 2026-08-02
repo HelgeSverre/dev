@@ -145,7 +145,7 @@ fn run_resolution(request: ResolveRequest) -> anyhow::Result<i32> {
         );
     }
 
-    let choice = choose_candidate(&resolution, &request)?;
+    let choice = choose_candidate(&resolution, &request, !index.truncated.is_empty())?;
     let Some(choice) = choice else {
         eprint!(
             "{}",
@@ -261,6 +261,7 @@ fn apply_remembered_choice(
 fn choose_candidate(
     resolution: &Resolution,
     request: &ResolveRequest,
+    scan_truncated: bool,
 ) -> anyhow::Result<Option<PickerOutcome>> {
     if let Some(index) = resolution.selected {
         return Ok(Some(PickerOutcome::Run {
@@ -272,6 +273,7 @@ fn choose_candidate(
         resolution,
         &request.invocation.hints,
         request.invocation.chaos,
+        scan_truncated,
         colors_enabled(request.color),
     ) {
         Ok(outcome) => Ok(Some(outcome)),

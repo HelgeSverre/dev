@@ -43,11 +43,18 @@ struct PickerApp<'a> {
     visible: Vec<(usize, QueryMatch)>,
     state: ListState,
     show_details: bool,
+    scan_truncated: bool,
     colors: bool,
 }
 
 impl<'a> PickerApp<'a> {
-    fn new(resolution: &'a Resolution, hints: &[String], chaos: u8, colors: bool) -> Self {
+    fn new(
+        resolution: &'a Resolution,
+        hints: &[String],
+        chaos: u8,
+        scan_truncated: bool,
+        colors: bool,
+    ) -> Self {
         let mut app = Self {
             resolution,
             query: if resolution.status == crate::resolve::ResolutionStatus::HintNoMatch {
@@ -59,6 +66,7 @@ impl<'a> PickerApp<'a> {
             visible: Vec::new(),
             state: ListState::default(),
             show_details: true,
+            scan_truncated,
             colors,
         };
         app.refresh();
@@ -216,13 +224,14 @@ pub fn pick(
     resolution: &Resolution,
     hints: &[String],
     chaos: u8,
+    scan_truncated: bool,
     colors: bool,
 ) -> Result<PickerOutcome, PickerError> {
     if !io::stdin().is_terminal() || !io::stderr().is_terminal() {
         return Err(PickerError::NotInteractive);
     }
     let mut session = TerminalSession::start()?;
-    let mut app = PickerApp::new(resolution, hints, chaos, colors);
+    let mut app = PickerApp::new(resolution, hints, chaos, scan_truncated, colors);
     loop {
         session.terminal.draw(|frame| render(frame, &mut app))?;
         if !event::poll(Duration::from_millis(250))? {
@@ -313,11 +322,11 @@ fn render_list(frame: &mut Frame<'_>, app: &mut PickerApp<'_>, area: Rect) {
         })
         .collect::<Vec<_>>();
     let list = List::new(items)
-        .block(Block::default().borders(Borders::ALL).title(format!(
-            " {} candidate{} ",
-            app.visible.len(),
-            if app.visible.len() == 1 { "" } else { "s" }
-        )))
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(candidate_list_title(app)),
+        )
         .highlight_symbol("● ")
         .highlight_style(color_style(
             app.colors,
@@ -326,6 +335,19 @@ fn render_list(frame: &mut Frame<'_>, app: &mut PickerApp<'_>, area: Rect) {
                 .add_modifier(Modifier::BOLD),
         ));
     frame.render_stateful_widget(list, area, &mut app.state);
+}
+
+fn candidate_list_title(app: &PickerApp<'_>) -> String {
+    format!(
+        " {}{} candidate{} ",
+        if app.scan_truncated {
+            "⚠ scan truncated · "
+        } else {
+            ""
+        },
+        app.visible.len(),
+        if app.visible.len() == 1 { "" } else { "s" }
+    )
 }
 
 fn render_details(frame: &mut Frame<'_>, app: &PickerApp<'_>, area: Rect) {
@@ -454,7 +476,7 @@ mod tests {
     #[test]
     fn interactive_filter_uses_shared_matcher_and_clear_reveals_all() {
         let resolution = resolution();
-        let mut app = PickerApp::new(&resolution, &["beta".to_owned()], 1, false);
+        let mut app = PickerApp::new(&resolution, &["beta".to_owned()], 1, false, false);
         assert_eq!(app.visible.len(), 1);
         assert_eq!(app.selected_index(), Some(1));
         app.query.clear();
@@ -465,7 +487,7 @@ mod tests {
     #[test]
     fn control_actions_return_the_selected_candidate() {
         let resolution = resolution();
-        let mut app = PickerApp::new(&resolution, &[], 1, false);
+        let mut app = PickerApp::new(&resolution, &[], 1, false, false);
         let remembered = app.handle_key(KeyEvent::new(KeyCode::Char('r'), KeyModifiers::CONTROL));
         assert_eq!(
             remembered,
@@ -491,8 +513,18 @@ mod tests {
         let mut resolution = resolution();
         resolution.status = ResolutionStatus::HintNoMatch;
         resolution.reason = ResolutionReason::HintNoMatch;
-        let app = PickerApp::new(&resolution, &["purple-monkey".to_owned()], 1, false);
+        let app = PickerApp::new(&resolution, &["purple-monkey".to_owned()], 1, false, false);
         assert!(app.query.is_empty());
         assert_eq!(app.visible.len(), 2);
+    }
+
+    #[test]
+    fn truncated_scan_is_disclosed_in_candidate_list_title() {
+        let resolution = resolution();
+        let app = PickerApp::new(&resolution, &[], 1, true, false);
+        assert_eq!(
+            candidate_list_title(&app),
+            " ⚠ scan truncated · 2 candidates "
+        );
     }
 }

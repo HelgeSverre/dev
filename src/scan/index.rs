@@ -296,6 +296,10 @@ fn workspace_manifest_patterns(root: &Path) -> WorkspacePatterns {
                     toml_strings(workspace.get("members"))
                         .map(|pattern| append_manifest(pattern, "Cargo.toml")),
                 );
+                output.includes.extend(
+                    toml_strings(workspace.get("default-members"))
+                        .map(|pattern| append_manifest(pattern, "Cargo.toml")),
+                );
                 output.excludes.extend(
                     toml_strings(workspace.get("exclude"))
                         .map(|pattern| append_manifest(pattern, "Cargo.toml")),
@@ -505,5 +509,49 @@ mod tests {
             ),
             ["apps/api", "deep/services/worker", "tools/job"]
         );
+    }
+
+    #[test]
+    fn cargo_workspace_globs_include_default_members_and_respect_excludes() -> anyhow::Result<()> {
+        let temp = tempfile::tempdir()?;
+        std::fs::write(
+            temp.path().join("Cargo.toml"),
+            "[workspace]\nmembers = [\"deep/crates/*\"]\ndefault-members = [\"deep/tools/*\"]\nexclude = [\"deep/crates/ignored\"]\n",
+        )?;
+        for member in [
+            "deep/crates/app",
+            "deep/crates/ignored",
+            "deep/tools/release",
+        ] {
+            std::fs::create_dir_all(temp.path().join(member).join("src"))?;
+            std::fs::write(
+                temp.path().join(member).join("Cargo.toml"),
+                format!(
+                    "[package]\nname = \"{}\"\nversion = \"0.1.0\"\n",
+                    member.replace('/', "-")
+                ),
+            )?;
+            std::fs::write(temp.path().join(member).join("src/main.rs"), "")?;
+        }
+
+        let roots = resolve_roots(&Target::Directory(temp.path().to_path_buf()));
+        let index = FileIndex::build(
+            &roots,
+            ScanOptions {
+                structural_depth: 1,
+                hard_cap: 20_000,
+            },
+        );
+
+        assert!(index
+            .find_relative(Path::new("deep/crates/app/Cargo.toml"))
+            .is_some());
+        assert!(index
+            .find_relative(Path::new("deep/tools/release/Cargo.toml"))
+            .is_some());
+        assert!(index
+            .find_relative(Path::new("deep/crates/ignored/Cargo.toml"))
+            .is_none());
+        Ok(())
     }
 }
