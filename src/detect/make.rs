@@ -206,8 +206,43 @@ fn parse_targets(contents: &str) -> Vec<MakeTarget> {
     let mut targets = Vec::new();
     let mut seen = BTreeSet::new();
     let mut preceding_help = None;
+    let mut conditional_depth = 0_u32;
+    let mut in_define = false;
     for line in contents.lines() {
         let trimmed = line.trim();
+        if in_define {
+            if make_directive(trimmed, "endef") {
+                in_define = false;
+            }
+            preceding_help = None;
+            continue;
+        }
+        if line.starts_with('\t') {
+            preceding_help = None;
+            continue;
+        }
+        if make_directive(trimmed, "define") {
+            in_define = true;
+            preceding_help = None;
+            continue;
+        }
+        if ["ifdef", "ifndef", "ifeq", "ifneq"]
+            .into_iter()
+            .any(|directive| make_directive(trimmed, directive))
+        {
+            conditional_depth = conditional_depth.saturating_add(1);
+            preceding_help = None;
+            continue;
+        }
+        if make_directive(trimmed, "endif") {
+            conditional_depth = conditional_depth.saturating_sub(1);
+            preceding_help = None;
+            continue;
+        }
+        if make_directive(trimmed, "else") || conditional_depth > 0 {
+            preceding_help = None;
+            continue;
+        }
         if let Some(help) = trimmed.strip_prefix("##") {
             preceding_help = nonempty(help.trim());
             continue;
@@ -216,7 +251,7 @@ fn parse_targets(contents: &str) -> Vec<MakeTarget> {
             preceding_help = None;
             continue;
         }
-        if line.starts_with('\t') || trimmed.starts_with('#') {
+        if trimmed.starts_with('#') {
             preceding_help = None;
             continue;
         }
@@ -228,7 +263,7 @@ fn parse_targets(contents: &str) -> Vec<MakeTarget> {
             preceding_help = None;
             continue;
         };
-        if left.contains('=') || left.contains('$') || right.trim_start().starts_with('=') {
+        if left.contains('=') || left.contains('$') || right.contains('=') {
             preceding_help = None;
             continue;
         }
@@ -252,11 +287,17 @@ fn parse_targets(contents: &str) -> Vec<MakeTarget> {
 fn literal_target(name: &str) -> bool {
     !name.is_empty()
         && !name.starts_with('.')
+        && !name.starts_with('-')
         && !name.contains(['%', '$', '*', '?', '\\', '=', '&'])
         && name.chars().all(|character| {
             character.is_ascii_alphanumeric()
                 || matches!(character, '_' | '-' | '.' | '/' | '@' | '+')
         })
+}
+
+fn make_directive(line: &str, directive: &str) -> bool {
+    line.strip_prefix(directive)
+        .is_some_and(|rest| rest.is_empty() || rest.chars().next().is_some_and(char::is_whitespace))
 }
 
 fn nonempty(value: &str) -> Option<String> {
@@ -287,6 +328,26 @@ mod tests {
                     name: "bar".to_owned(),
                     help: None,
                 },
+            ]
+        );
+    }
+
+    #[test]
+    fn unsafe_or_context_dependent_rules_are_suppressed() {
+        let targets = parse_targets(
+            "-s:\nifdef CI\nci-only:\nelse\nlocal-only:\nendif\ndefine GENERATED\ninside-define:\nendef\nprog: CPPFLAGS = -g\nsafe:\n\tifdef RECIPE_TEXT\nafter:\n",
+        );
+        assert_eq!(
+            targets,
+            [
+                MakeTarget {
+                    name: "safe".to_owned(),
+                    help: None,
+                },
+                MakeTarget {
+                    name: "after".to_owned(),
+                    help: None,
+                }
             ]
         );
     }

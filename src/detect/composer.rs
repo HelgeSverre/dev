@@ -45,6 +45,16 @@ impl Detector for ComposerDetector {
         for project in projects {
             let mut has_test_script = false;
             for (name, script) in &project.manifest.scripts {
+                if !safe_script_name(name) {
+                    output.diagnostics.push(Diagnostic::warning(
+                        COMPOSER,
+                        format!(
+                            "ignoring composer script `{name}` because the runner would parse it as an option"
+                        ),
+                        Some(context.roots.scan_root.join(&project.manifest_path)),
+                    ));
+                    continue;
+                }
                 if !is_executable_script(script) {
                     output.diagnostics.push(Diagnostic::warning(
                         COMPOSER,
@@ -139,6 +149,9 @@ pub(super) fn composer_projects(
 }
 
 fn script_policy(intent: Intent, name: &str) -> Option<(i32, SelectionPolicy)> {
+    if !safe_script_name(name) {
+        return None;
+    }
     let canonical = match intent {
         Intent::Run => ["dev", "serve", "start"]
             .into_iter()
@@ -153,6 +166,10 @@ fn script_policy(intent: Intent, name: &str) -> Option<(i32, SelectionPolicy)> {
     canonical
         .map(|points| (points, SelectionPolicy::Automatic))
         .or_else(|| (intent == Intent::Run).then_some((15, SelectionPolicy::ExplicitHint)))
+}
+
+fn safe_script_name(name: &str) -> bool {
+    !name.starts_with('-')
 }
 
 fn script_candidate(
@@ -369,4 +386,15 @@ pub(super) fn has_laravel_evidence(manifest: &ComposerManifest) -> bool {
         .keys()
         .chain(manifest.require_dev.keys())
         .any(|name| matches!(name.as_str(), "laravel/framework" | "laravel/laravel"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn leading_dash_script_names_are_not_commands() {
+        assert_eq!(script_policy(Intent::Run, "-v"), None);
+        assert!(script_policy(Intent::Run, "dev").is_some());
+    }
 }

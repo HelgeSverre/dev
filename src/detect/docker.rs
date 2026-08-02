@@ -72,13 +72,29 @@ fn compose_candidates(context: &ScanCtx<'_>) -> Detection {
             &relative_manifest,
             None,
         ));
-        output
-            .candidates
-            .extend(manifest.services.keys().map(|service| {
-                compose_up_candidate(&manifest_path, &relative_manifest, Some(service))
-            }));
+        for service in manifest.services.keys() {
+            if safe_service_name(service) {
+                output.candidates.push(compose_up_candidate(
+                    &manifest_path,
+                    &relative_manifest,
+                    Some(service),
+                ));
+            } else {
+                output.diagnostics.push(Diagnostic::warning(
+                    DOCKER,
+                    format!(
+                        "ignoring Compose service `{service}` because the runner would parse it as an option"
+                    ),
+                    Some(manifest_path.clone()),
+                ));
+            }
+        }
     }
     output
+}
+
+fn safe_service_name(name: &str) -> bool {
+    !name.starts_with('-')
 }
 
 fn compose_files(context: &ScanCtx<'_>) -> Vec<(PathBuf, PathBuf)> {
@@ -266,4 +282,16 @@ fn normalized_parent(path: &Path) -> String {
             || "root".to_owned(),
             |parent| parent.to_string_lossy().replace(['/', '\\'], ":"),
         )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn leading_dash_service_names_are_not_positional_arguments() {
+        assert!(!safe_service_name("-d"));
+        assert!(!safe_service_name("--build"));
+        assert!(safe_service_name("web"));
+    }
 }

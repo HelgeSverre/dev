@@ -309,6 +309,14 @@ impl Detector for NodeDetector {
                         format!("ignoring non-string package script `{script}`"),
                         Some(absolute_manifest.clone()),
                     ));
+                } else if !safe_script_name(script) {
+                    output.diagnostics.push(Diagnostic::warning(
+                        NODE,
+                        format!(
+                            "ignoring package script `{script}` because the runner would parse it as an option"
+                        ),
+                        Some(absolute_manifest.clone()),
+                    ));
                 }
             }
             let (manager, manager_reason) = package_manager(
@@ -423,7 +431,7 @@ fn script_candidates(
     manifest
         .scripts
         .iter()
-        .filter(|(_, value)| value.is_string())
+        .filter(|(script, value)| value.is_string() && safe_script_name(script))
         .filter_map(|(script, _)| {
             let canonical = canonical_script(context.invocation.intent, script);
             if canonical.is_none() && context.invocation.intent != Intent::Run {
@@ -553,6 +561,10 @@ fn script_candidates(
             Some(candidate)
         })
         .collect()
+}
+
+fn safe_script_name(name: &str) -> bool {
+    !name.starts_with('-')
 }
 
 fn canonical_script(intent: Intent, name: &str) -> Option<i32> {
@@ -1140,6 +1152,12 @@ mod tests {
     use std::ffi::OsString;
 
     use super::*;
+
+    #[test]
+    fn leading_dash_script_names_are_not_commands() {
+        assert!(!safe_script_name("--silent"));
+        assert!(safe_script_name("dev"));
+    }
 
     #[test]
     fn framework_binary_commands_use_each_managers_local_only_mode() {
