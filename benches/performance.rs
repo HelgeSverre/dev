@@ -55,6 +55,8 @@ fn main() -> anyhow::Result<()> {
                 black_box(index.truncated.len());
             },
         ),
+        benchmark_hinted_cli(&repository, 1, Duration::from_millis(500))?,
+        benchmark_hinted_cli(&repository, 2, Duration::from_millis(750))?,
     ];
     measurements.extend(benchmark_query_scaling());
     measurements.push(benchmark_startup()?);
@@ -177,6 +179,34 @@ fn benchmark_startup() -> anyhow::Result<Measurement> {
         assert!(status.success());
     });
     Ok(measurement)
+}
+
+fn benchmark_hinted_cli(
+    root: &Path,
+    chaos: u8,
+    p95_budget: Duration,
+) -> anyhow::Result<Measurement> {
+    let executable = release_binary()?;
+    let chaos = chaos.to_string();
+    Ok(measure(
+        &format!("cli/hinted-chaos-{chaos}-10k"),
+        11,
+        p95_budget,
+        || {
+            let status = Command::new(&executable)
+                .args(["run", "--list", "--no-cache", "--chaos"])
+                .arg(&chaos)
+                .arg("-C")
+                .arg(root)
+                .arg("file-099")
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status()
+                .expect("release binary should complete hinted discovery");
+            assert!(status.success());
+        },
+    ))
 }
 
 fn release_binary() -> anyhow::Result<PathBuf> {

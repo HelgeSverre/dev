@@ -64,6 +64,7 @@ pub struct FileIndex {
     pub by_extension: HashMap<OsString, SmallVec<[EntryId; 8]>>,
     pub manifests: ManifestCache,
     pub truncated: Vec<Truncation>,
+    pub(crate) structural_complete: bool,
 }
 
 impl FileIndex {
@@ -73,8 +74,15 @@ impl FileIndex {
             Some(options.structural_depth),
             options.hard_cap,
         );
+        let structural_complete = options.structural_depth > 0
+            && !was_truncated
+            && !structural.iter().any(|entry| {
+                entry.file_type == IndexedFileType::Directory
+                    && entry.relative_path.components().count() == options.structural_depth
+            });
         let mut index = Self {
             structural,
+            structural_complete,
             ..Self::default()
         };
         index.include_declared_workspace_manifests(roots, options.hard_cap);
@@ -167,6 +175,19 @@ impl FileIndex {
         self.targets.sort_by(stable_entry_cmp);
         self.targets
             .dedup_by(|left, right| left.relative_path == right.relative_path);
+        let structural = &self.structural;
+        let mut structural_index = 0;
+        self.targets.retain(|target| {
+            while structural
+                .get(structural_index)
+                .is_some_and(|entry| stable_entry_cmp(entry, target).is_lt())
+            {
+                structural_index += 1;
+            }
+            structural
+                .get(structural_index)
+                .is_none_or(|entry| entry.relative_path != target.relative_path)
+        });
         if let Some(truncation) = truncation {
             self.truncated.push(truncation);
         }

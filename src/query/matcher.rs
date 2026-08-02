@@ -1,6 +1,7 @@
 use std::cmp::Ordering;
 use std::path::Path;
 
+use nucleo_matcher::{Config, Matcher, Utf32Str};
 use serde::{Deserialize, Serialize};
 
 use crate::candidate::{Candidate, Points};
@@ -68,6 +69,93 @@ pub struct QueryMatch {
     pub total_points: Points,
 }
 
+#[derive(Copy, Clone, Debug, Default, Eq, PartialEq)]
+pub(crate) struct TargetIdentityMatch {
+    pub meaningful: bool,
+    pub bindable: bool,
+}
+
+pub(crate) struct TargetIdentityMatcher<'query> {
+    query: &'query [QueryTerm],
+    chaos: u8,
+    fuzzy: FuzzyMatcher,
+}
+
+impl<'query> TargetIdentityMatcher<'query> {
+    pub(crate) fn new(query: &'query [QueryTerm], chaos: u8) -> Self {
+        Self {
+            query,
+            chaos,
+            fuzzy: FuzzyMatcher::default(),
+        }
+    }
+
+    pub(crate) fn match_path(&mut self, path: &Path) -> TargetIdentityMatch {
+        let mut matched = TargetIdentityMatch::default();
+        for term in self.query {
+            if !self.term_matches_path(term, path) {
+                continue;
+            }
+            matched.meaningful |= !term.filler;
+            matched.bindable |= !matches!(
+                term.normalized.compact.as_str(),
+                "run" | "build" | "test" | "tests" | "spec"
+            );
+            if matched.meaningful && matched.bindable {
+                break;
+            }
+        }
+        matched
+    }
+
+    fn term_matches_path(&mut self, term: &QueryTerm, path: &Path) -> bool {
+        let stem_matches = path.file_stem().is_some_and(|stem| {
+            normalized_value_matches(
+                term,
+                &normalize(&stem.to_string_lossy()),
+                self.chaos,
+                &mut self.fuzzy,
+            )
+        });
+        if stem_matches {
+            return true;
+        }
+        let name_matches = path.file_name().is_some_and(|name| {
+            normalized_value_matches(
+                term,
+                &normalize(&name.to_string_lossy()),
+                self.chaos,
+                &mut self.fuzzy,
+            )
+        });
+        name_matches
+            || path.components().any(|component| {
+                normalized_value_matches(
+                    term,
+                    &normalize(&component.as_os_str().to_string_lossy()),
+                    self.chaos,
+                    &mut self.fuzzy,
+                )
+            })
+    }
+}
+
+struct FuzzyMatcher {
+    matcher: Matcher,
+    haystack_buffer: Vec<char>,
+    needle_buffer: Vec<char>,
+}
+
+impl Default for FuzzyMatcher {
+    fn default() -> Self {
+        Self {
+            matcher: Matcher::new(Config::DEFAULT),
+            haystack_buffer: Vec::new(),
+            needle_buffer: Vec::new(),
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 struct Surface {
     value: String,
@@ -79,6 +167,7 @@ struct Surface {
 #[must_use]
 pub fn match_candidate(candidate: &Candidate, query: &[QueryTerm], chaos: u8) -> QueryMatch {
     let surfaces = surfaces(candidate);
+    let mut fuzzy = FuzzyMatcher::default();
     let mut output = QueryMatch {
         meaningful_terms: query.iter().filter(|term| !term.filler).count() as u16,
         ..QueryMatch::default()
@@ -86,7 +175,7 @@ pub fn match_candidate(candidate: &Candidate, query: &[QueryTerm], chaos: u8) ->
     for term in query {
         let best = surfaces
             .iter()
-            .filter_map(|surface| term_match(term, surface, chaos))
+            .filter_map(|surface| term_match(term, surface, chaos, &mut fuzzy))
             .max_by(compare_term_matches);
         if let Some(best) = best {
             if !term.filler || best.class == MatchClass::Identity {
@@ -211,8 +300,40 @@ fn path_segments(path: &Path) -> impl Iterator<Item = String> + '_ {
         .map(|component| component.as_os_str().to_string_lossy().into_owned())
 }
 
-fn term_match(term: &QueryTerm, surface: &Surface, chaos: u8) -> Option<TermMatch> {
+fn term_match(
+    term: &QueryTerm,
+    surface: &Surface,
+    chaos: u8,
+    fuzzy: &mut FuzzyMatcher,
+) -> Option<TermMatch> {
     let target = normalize(&surface.value);
+    let (strategy, quality_millis) = match_quality(term, &target, chaos, fuzzy)?;
+    Some(TermMatch {
+        hint: term.normalized.original.clone(),
+        candidate_value: surface.value.clone(),
+        field: surface.field,
+        class: surface.class,
+        strategy,
+        quality_millis,
+        points: surface.weight * i32::from(quality_millis) / 1000,
+    })
+}
+
+fn normalized_value_matches(
+    term: &QueryTerm,
+    target: &super::NormalizedText,
+    chaos: u8,
+    fuzzy: &mut FuzzyMatcher,
+) -> bool {
+    match_quality(term, target, chaos, fuzzy).is_some()
+}
+
+fn match_quality(
+    term: &QueryTerm,
+    target: &super::NormalizedText,
+    chaos: u8,
+    fuzzy: &mut FuzzyMatcher,
+) -> Option<(MatchStrategy, u16)> {
     let hint = &term.normalized;
     if hint.compact.is_empty() || target.compact.is_empty() {
         return None;
@@ -238,7 +359,7 @@ fn term_match(term: &QueryTerm, surface: &Surface, chaos: u8) -> Option<TermMatc
     {
         (MatchStrategy::Acronym, 920)
     } else if chaos > 0 && hint.compact.len() >= 3 {
-        fuzzy_quality(&hint.compact, &target.compact, chaos)?
+        fuzzy_quality(&hint.compact, &target.compact, chaos, fuzzy)?
     } else {
         return None;
     };
@@ -246,20 +367,17 @@ fn term_match(term: &QueryTerm, surface: &Surface, chaos: u8) -> Option<TermMatc
     if !quality_allowed(hint.compact.len(), quality_millis, chaos) {
         return None;
     }
-    Some(TermMatch {
-        hint: hint.original.clone(),
-        candidate_value: surface.value.clone(),
-        field: surface.field,
-        class: surface.class,
-        strategy,
-        quality_millis,
-        points: surface.weight * i32::from(quality_millis) / 1000,
-    })
+    Some((strategy, quality_millis))
 }
 
-fn fuzzy_quality(hint: &str, target: &str, chaos: u8) -> Option<(MatchStrategy, u16)> {
+fn fuzzy_quality(
+    hint: &str,
+    target: &str,
+    chaos: u8,
+    fuzzy: &mut FuzzyMatcher,
+) -> Option<(MatchStrategy, u16)> {
     let jaro = (strsim::jaro_winkler(hint, target) * 1000.0).round() as u16;
-    let nucleo = nucleo_quality(hint, target).unwrap_or(0);
+    let nucleo = fuzzy.nucleo_quality(hint, target).unwrap_or(0);
     let (strategy, quality) = if nucleo > jaro {
         (MatchStrategy::Subsequence, nucleo)
     } else {
@@ -268,36 +386,29 @@ fn fuzzy_quality(hint: &str, target: &str, chaos: u8) -> Option<(MatchStrategy, 
     quality_allowed(hint.len(), quality, chaos).then_some((strategy, quality))
 }
 
-fn nucleo_quality(needle: &str, haystack: &str) -> Option<u16> {
-    use nucleo_matcher::{Config, Matcher, Utf32Str};
-
-    if needle.chars().count() > 128 || haystack.chars().count() > 512 {
-        return None;
+impl FuzzyMatcher {
+    fn nucleo_quality(&mut self, needle: &str, haystack: &str) -> Option<u16> {
+        if needle.chars().count() > 128 || haystack.chars().count() > 512 {
+            return None;
+        }
+        let score = self.matcher.fuzzy_match(
+            Utf32Str::new(haystack, &mut self.haystack_buffer),
+            Utf32Str::new(needle, &mut self.needle_buffer),
+        )?;
+        let baseline = self.matcher.fuzzy_match(
+            Utf32Str::new(needle, &mut self.haystack_buffer),
+            Utf32Str::new(needle, &mut self.needle_buffer),
+        )?;
+        if baseline == 0 {
+            return None;
+        }
+        let quality = u32::from(score)
+            .saturating_mul(1000)
+            .checked_div(u32::from(baseline))
+            .unwrap_or(0)
+            .min(1000);
+        u16::try_from(quality).ok()
     }
-    let mut matcher = Matcher::new(Config::DEFAULT);
-    let mut haystack_buffer = Vec::new();
-    let mut needle_buffer = Vec::new();
-    let score = matcher.fuzzy_match(
-        Utf32Str::new(haystack, &mut haystack_buffer),
-        Utf32Str::new(needle, &mut needle_buffer),
-    )?;
-
-    let mut baseline_matcher = Matcher::new(Config::DEFAULT);
-    let mut baseline_haystack_buffer = Vec::new();
-    let mut baseline_needle_buffer = Vec::new();
-    let baseline = baseline_matcher.fuzzy_match(
-        Utf32Str::new(needle, &mut baseline_haystack_buffer),
-        Utf32Str::new(needle, &mut baseline_needle_buffer),
-    )?;
-    if baseline == 0 {
-        return None;
-    }
-    let quality = u32::from(score)
-        .saturating_mul(1000)
-        .checked_div(u32::from(baseline))
-        .unwrap_or(0)
-        .min(1000);
-    u16::try_from(quality).ok()
 }
 
 fn length_ratio(left: &str, right: &str) -> u16 {
@@ -379,5 +490,97 @@ mod tests {
         let candidate = named_candidate("cargoose");
         let query = normalize_query(&["go".to_owned()]);
         assert!(match_candidate(&candidate, &query, 2).terms.is_empty());
+    }
+
+    #[test]
+    fn target_identity_matcher_preserves_hint_roles() {
+        let query = normalize_query(&["legacy-importre".to_owned()]);
+        let mut matcher = TargetIdentityMatcher::new(&query, 1);
+        assert_eq!(
+            matcher.match_path(Path::new("tools/legacy_importer.php")),
+            TargetIdentityMatch {
+                meaningful: true,
+                bindable: true,
+            }
+        );
+
+        let query = normalize_query(&["test".to_owned()]);
+        let mut matcher = TargetIdentityMatcher::new(&query, 1);
+        assert_eq!(
+            matcher.match_path(Path::new("tests/auth.test.js")),
+            TargetIdentityMatch {
+                meaningful: true,
+                bindable: false,
+            }
+        );
+
+        let query = normalize_query(&["whatever".to_owned()]);
+        let mut matcher = TargetIdentityMatcher::new(&query, 1);
+        assert_eq!(
+            matcher.match_path(Path::new("whatever.rs")),
+            TargetIdentityMatch {
+                meaningful: false,
+                bindable: true,
+            }
+        );
+    }
+
+    #[test]
+    fn target_identity_matcher_agrees_with_candidate_matching() {
+        for (path, hints, chaos) in [
+            ("tools/legacy_importer.php", vec!["legacy-importre"], 1),
+            ("tests/auth.test.js", vec!["test"], 1),
+            ("whatever.rs", vec!["whatever"], 1),
+            ("data/group-099/file-099.txt", vec!["file-099"], 2),
+            ("data/group-099/file-099.txt", vec!["missing"], 2),
+            ("tools/legacy_importer.php", vec!["tools", "php"], 2),
+        ] {
+            let path = Path::new(path);
+            let hints = hints.into_iter().map(str::to_owned).collect::<Vec<_>>();
+            let query = normalize_query(&hints);
+            let candidate = indexed_target_candidate(path);
+            let expected = match_candidate(&candidate, &query, chaos);
+            let expected = TargetIdentityMatch {
+                meaningful: expected.highest_class == Some(MatchClass::Identity)
+                    && expected.matched_meaningful_terms > 0,
+                bindable: expected.terms.iter().any(|matched| {
+                    matched.class == MatchClass::Identity
+                        && !matches!(
+                            normalize(&matched.hint).compact.as_str(),
+                            "run" | "build" | "test" | "tests" | "spec"
+                        )
+                }),
+            };
+            let mut matcher = TargetIdentityMatcher::new(&query, chaos);
+            assert_eq!(matcher.match_path(path), expected, "path: {path:?}");
+        }
+    }
+
+    fn indexed_target_candidate(path: &Path) -> Candidate {
+        let filename = path.file_name().map_or_else(
+            || "target".to_owned(),
+            |name| name.to_string_lossy().into_owned(),
+        );
+        let stem = path.file_stem().map_or_else(
+            || filename.clone(),
+            |name| name.to_string_lossy().into_owned(),
+        );
+        let mut candidate = Candidate::new(
+            "target-index",
+            "target-index",
+            Intent::Run,
+            &stem,
+            "target-index",
+            Vec::new(),
+            PathBuf::from("/tmp"),
+            0,
+            SelectionPolicy::ExplicitHint,
+        );
+        candidate.search = SearchDocument {
+            identities: vec![stem, filename],
+            target_paths: vec![path.to_path_buf()],
+            ..SearchDocument::default()
+        };
+        candidate
     }
 }
