@@ -50,6 +50,18 @@ impl ManifestCache {
             message,
         })
     }
+
+    pub fn read_paths(&self) -> Result<Vec<PathBuf>, ManifestError> {
+        let mut paths = self
+            .values
+            .lock()
+            .map_err(|_| ManifestError::Poisoned)?
+            .keys()
+            .cloned()
+            .collect::<Vec<_>>();
+        paths.sort();
+        Ok(paths)
+    }
 }
 
 fn read_bounded(path: &Path) -> Result<String, ManifestError> {

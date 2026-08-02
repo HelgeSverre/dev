@@ -4,6 +4,7 @@ use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 
+use anyhow::Context as _;
 use assert_cmd::cargo::cargo_bin_cmd;
 
 fn fake_program(directory: &Path, name: &str) -> anyhow::Result<PathBuf> {
@@ -33,6 +34,43 @@ exit "${DEV_FAKE_EXIT:-0}"
     permissions.set_mode(0o755);
     fs::set_permissions(&program, permissions)?;
     Ok(bin)
+}
+
+fn remember_with_picker(
+    project: &Path,
+    state: &Path,
+    bin: &Path,
+    hints: &[&str],
+) -> anyhow::Result<()> {
+    use std::process::Command;
+    use std::time::Duration;
+
+    use expectrl::{Eof, Expect, Session};
+
+    let mut command = Command::new(env!("CARGO_BIN_EXE_dev"));
+    command
+        .args(["run", "--quiet", "--pick"])
+        .args(hints)
+        .arg("--at")
+        .arg(project)
+        .env("PATH", bin)
+        .env("XDG_STATE_HOME", state)
+        .env("TERM", "xterm-256color");
+    let mut session = Session::spawn(command).context("spawning dev in a PTY")?;
+    session.set_expect_timeout(Some(Duration::from_secs(5)));
+    session
+        .expect("\u{1b}[?1049h")
+        .map_err(anyhow::Error::from)
+        .context("waiting for picker alternate screen")?;
+    session
+        .send("\u{12}")
+        .map_err(anyhow::Error::from)
+        .context("sending Ctrl-R")?;
+    session
+        .expect(Eof)
+        .map_err(anyhow::Error::from)
+        .context("waiting for remembered command to exit")?;
+    Ok(())
 }
 
 #[test]
@@ -423,5 +461,403 @@ fn package_managers_receive_their_declared_passthrough_shape() -> anyhow::Result
             assert!(!stdout.contains("arg4="), "{manager}: {stdout}");
         }
     }
+    Ok(())
+}
+
+#[test]
+fn picker_can_teach_and_cache_maintenance_can_clear_a_choice() -> anyhow::Result<()> {
+    let temp = tempfile::tempdir()?;
+    let project = temp.path().join("teachable-project");
+    let state = temp.path().join("state");
+    fs::create_dir(&project)?;
+    fs::write(
+        project.join("package.json"),
+        r#"{"scripts":{"dev":"first","start":"second"}}"#,
+    )?;
+    let bin = fake_program(temp.path(), "npm")?;
+    remember_with_picker(&project, &state, &bin, &[])?;
+
+    let mut remembered = cargo_bin_cmd!("dev");
+    remembered
+        .args(["run", "--quiet", "--at"])
+        .arg(&project)
+        .env("PATH", &bin)
+        .env("XDG_STATE_HOME", &state);
+    remembered
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("arg1=<dev>"));
+
+    let mut list = cargo_bin_cmd!("dev");
+    list.args(["cache", "list"]).env("XDG_STATE_HOME", &state);
+    list.assert().success().stdout(predicates::str::contains(
+        "node:teachable-project:script:dev",
+    ));
+
+    let mut clear = cargo_bin_cmd!("dev");
+    clear
+        .args(["cache", "clear", "--yes"])
+        .env("XDG_STATE_HOME", &state);
+    clear
+        .assert()
+        .success()
+        .stderr(predicates::str::contains("cleared 1 remembered choice"));
+
+    let mut after_clear = cargo_bin_cmd!("dev");
+    after_clear
+        .args(["run", "--quiet", "--at"])
+        .arg(&project)
+        .env("PATH", &bin)
+        .env("XDG_STATE_HOME", &state);
+    after_clear.assert().code(5);
+    Ok(())
+}
+
+#[test]
+fn picker_cancel_restores_the_terminal_without_running_or_caching() -> anyhow::Result<()> {
+    use std::process::Command;
+    use std::time::Duration;
+
+    use expectrl::{Eof, Expect, Session};
+
+    let temp = tempfile::tempdir()?;
+    let project = temp.path().join("cancelled-picker-project");
+    let state = temp.path().join("state");
+    fs::create_dir(&project)?;
+    fs::write(
+        project.join("package.json"),
+        r#"{"scripts":{"dev":"first","start":"second"}}"#,
+    )?;
+    let bin = fake_program(temp.path(), "npm")?;
+    let mut command = Command::new(env!("CARGO_BIN_EXE_dev"));
+    command
+        .args(["run", "--quiet", "--at"])
+        .arg(&project)
+        .env("PATH", &bin)
+        .env("XDG_STATE_HOME", &state)
+        .env("TERM", "xterm-256color");
+    let mut session = Session::spawn(command)?;
+    session.set_expect_timeout(Some(Duration::from_secs(5)));
+    session
+        .expect("\u{1b}[?1049h")
+        .map_err(anyhow::Error::from)?;
+    session.send("\u{1b}").map_err(anyhow::Error::from)?;
+    session
+        .expect("\u{1b}[?1049l")
+        .map_err(anyhow::Error::from)
+        .context("waiting for terminal restoration")?;
+    session.expect(Eof).map_err(anyhow::Error::from)?;
+    assert!(!state.join("dev/choices.json").exists());
+    Ok(())
+}
+
+#[test]
+fn corrupt_cache_is_quarantined_and_never_blocks_execution() -> anyhow::Result<()> {
+    let temp = tempfile::tempdir()?;
+    let project = temp.path().join("corrupt-cache-project");
+    let state = temp.path().join("state");
+    let cache_directory = state.join("dev");
+    fs::create_dir(&project)?;
+    fs::create_dir_all(&cache_directory)?;
+    fs::write(
+        project.join("package.json"),
+        r#"{"scripts":{"dev":"works"}}"#,
+    )?;
+    fs::write(cache_directory.join("choices.json"), "{not json")?;
+    let bin = fake_program(temp.path(), "npm")?;
+
+    let mut command = cargo_bin_cmd!("dev");
+    command
+        .args(["run", "--quiet", "--at"])
+        .arg(&project)
+        .env("PATH", &bin)
+        .env("XDG_STATE_HOME", &state);
+    command
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("arg1=<dev>"))
+        .stderr(predicates::str::contains("ignored corrupt cache"));
+    assert!(fs::read_dir(cache_directory)?
+        .filter_map(Result::ok)
+        .any(|entry| { entry.file_name().to_string_lossy().contains("corrupt-") }));
+    Ok(())
+}
+
+#[test]
+fn corrupt_cache_is_recovered_during_a_locked_write() -> anyhow::Result<()> {
+    let temp = tempfile::tempdir()?;
+    let state = temp.path().join("state");
+    let cache_directory = state.join("dev");
+    fs::create_dir_all(&cache_directory)?;
+    fs::write(cache_directory.join("choices.json"), "{not json")?;
+
+    let mut clear = cargo_bin_cmd!("dev");
+    clear
+        .args(["cache", "clear", "--yes"])
+        .env("XDG_STATE_HOME", &state);
+    clear
+        .assert()
+        .success()
+        .stderr(predicates::str::contains("ignored corrupt cache"));
+
+    let recovered: serde_json::Value =
+        serde_json::from_slice(&fs::read(cache_directory.join("choices.json"))?)?;
+    assert_eq!(recovered["schema_version"], 1);
+    assert_eq!(recovered["entries"].as_array().map(Vec::len), Some(0));
+    assert!(fs::read_dir(cache_directory)?
+        .filter_map(Result::ok)
+        .any(|entry| entry.file_name().to_string_lossy().contains("corrupt-")));
+    Ok(())
+}
+
+#[test]
+fn stale_remembered_choices_revalidate_exact_action_semantics() -> anyhow::Result<()> {
+    let temp = tempfile::tempdir()?;
+    let project = temp.path().join("stale-project");
+    let state = temp.path().join("state");
+    fs::create_dir(&project)?;
+    fs::write(
+        project.join("package.json"),
+        r#"{"scripts":{"dev":"first","start":"second"}}"#,
+    )?;
+    let bin = fake_program(temp.path(), "npm")?;
+    remember_with_picker(&project, &state, &bin, &[])?;
+
+    fs::write(
+        project.join("package.json"),
+        r#"{"scripts":{"dev":"first","start":"second","lint":"third"}}"#,
+    )?;
+    let mut command = cargo_bin_cmd!("dev");
+    command
+        .args(["run", "--quiet", "--at"])
+        .arg(&project)
+        .env("PATH", &bin)
+        .env("XDG_STATE_HOME", &state);
+    command
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("arg1=<dev>"))
+        .stderr(predicates::str::contains(
+            "project changed; remembered action still exists",
+        ));
+    Ok(())
+}
+
+#[test]
+fn stale_choice_never_accepts_changed_argv_for_the_same_action() -> anyhow::Result<()> {
+    let temp = tempfile::tempdir()?;
+    let project = temp.path().join("changed-command-project");
+    let state = temp.path().join("state");
+    fs::create_dir(&project)?;
+    fs::write(
+        project.join("package.json"),
+        r#"{"scripts":{"dev":"first","start":"second"}}"#,
+    )?;
+    let bin = fake_program(temp.path(), "npm")?;
+    remember_with_picker(&project, &state, &bin, &[])?;
+
+    fs::write(project.join("pnpm-lock.yaml"), "lockfileVersion: '9.0'\n")?;
+    fake_program(temp.path(), "pnpm")?;
+    let mut command = cargo_bin_cmd!("dev");
+    let output = command
+        .args(["run", "--json", "--at"])
+        .arg(&project)
+        .env("PATH", &bin)
+        .env("XDG_STATE_HOME", &state)
+        .output()?;
+    assert_eq!(output.status.code(), Some(5));
+    assert!(output.stderr.is_empty(), "unexpected stderr: {output:?}");
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout)?;
+    assert_eq!(json["resolution"]["status"], "ambiguous");
+    assert_eq!(json["resolution"]["reason"], "remembered_command_changed");
+    assert_eq!(json["candidates"][0]["program"]["display"], "pnpm");
+    Ok(())
+}
+
+#[test]
+fn disappeared_remembered_action_is_retained_as_unavailable_context() -> anyhow::Result<()> {
+    let temp = tempfile::tempdir()?;
+    let project = temp.path().join("disappeared-action-project");
+    let state = temp.path().join("state");
+    fs::create_dir(&project)?;
+    fs::write(
+        project.join("package.json"),
+        r#"{"scripts":{"dev":"first","start":"second"}}"#,
+    )?;
+    let bin = fake_program(temp.path(), "npm")?;
+    remember_with_picker(&project, &state, &bin, &[])?;
+
+    fs::write(
+        project.join("package.json"),
+        r#"{"scripts":{"start":"second"}}"#,
+    )?;
+    let mut command = cargo_bin_cmd!("dev");
+    let output = command
+        .args(["run", "--json", "--at"])
+        .arg(&project)
+        .env("PATH", &bin)
+        .env("XDG_STATE_HOME", &state)
+        .output()?;
+    assert_eq!(output.status.code(), Some(5));
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout)?;
+    assert_eq!(json["resolution"]["reason"], "remembered_action_missing");
+    let remembered = json["candidates"]
+        .as_array()
+        .and_then(|candidates| {
+            candidates.iter().find(|candidate| {
+                candidate["action_key"]
+                    .as_str()
+                    .is_some_and(|key| key.ends_with(":script:dev"))
+            })
+        })
+        .ok_or_else(|| anyhow::anyhow!("missing remembered context candidate"))?;
+    assert_eq!(remembered["availability"]["status"], "unsupported_host");
+    Ok(())
+}
+
+#[test]
+fn concurrent_picker_writers_preserve_every_remembered_query() -> anyhow::Result<()> {
+    use std::process::Command;
+    use std::time::Duration;
+
+    use expectrl::{Eof, Expect, Session};
+
+    let temp = tempfile::tempdir()?;
+    let project = temp.path().join("concurrent-project");
+    let state = temp.path().join("state");
+    fs::create_dir(&project)?;
+    fs::write(
+        project.join("package.json"),
+        r#"{"scripts":{"dev":"first","start":"second"}}"#,
+    )?;
+    let bin = fake_program(temp.path(), "npm")?;
+
+    let mut sessions = Vec::new();
+    for query in ["dev", "start", "npm", "concurrent-project"] {
+        let mut command = Command::new(env!("CARGO_BIN_EXE_dev"));
+        command
+            .args(["run", "--quiet", "--pick", query, "--at"])
+            .arg(&project)
+            .env("PATH", &bin)
+            .env("XDG_STATE_HOME", &state)
+            .env("TERM", "xterm-256color");
+        let mut session = Session::spawn(command)?;
+        session.set_expect_timeout(Some(Duration::from_secs(5)));
+        session
+            .expect("\u{1b}[?1049h")
+            .map_err(anyhow::Error::from)
+            .context("waiting for concurrent picker")?;
+        sessions.push(session);
+    }
+    for session in &mut sessions {
+        session
+            .send("\u{12}")
+            .map_err(anyhow::Error::from)
+            .context("sending concurrent Ctrl-R")?;
+    }
+    for session in &mut sessions {
+        session
+            .expect(Eof)
+            .map_err(anyhow::Error::from)
+            .context("waiting for concurrent remembered command")?;
+    }
+
+    let store: serde_json::Value =
+        serde_json::from_slice(&fs::read(state.join("dev/choices.json"))?)?;
+    assert_eq!(store["entries"].as_array().map(Vec::len), Some(4));
+    Ok(())
+}
+
+#[test]
+fn busy_cache_lock_skips_remembering_but_still_executes() -> anyhow::Result<()> {
+    use std::fs::OpenOptions;
+    use std::process::Command;
+    use std::time::Duration;
+
+    use expectrl::{Eof, Expect, Session};
+    let temp = tempfile::tempdir()?;
+    let project = temp.path().join("busy-cache-project");
+    let state = temp.path().join("state");
+    let cache_directory = state.join("dev");
+    fs::create_dir(&project)?;
+    fs::create_dir_all(&cache_directory)?;
+    fs::write(
+        project.join("package.json"),
+        r#"{"scripts":{"dev":"first","start":"second"}}"#,
+    )?;
+    let bin = fake_program(temp.path(), "npm")?;
+    let lock = OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .read(true)
+        .write(true)
+        .open(cache_directory.join("choices.lock"))?;
+    fs4::FileExt::lock(&lock)?;
+
+    let mut command = Command::new(env!("CARGO_BIN_EXE_dev"));
+    command
+        .args(["run", "--quiet", "--pick", "--at"])
+        .arg(&project)
+        .env("PATH", &bin)
+        .env("XDG_STATE_HOME", &state)
+        .env("TERM", "xterm-256color");
+    let mut session = Session::spawn(command)?;
+    session.set_expect_timeout(Some(Duration::from_secs(5)));
+    session
+        .expect("\u{1b}[?1049h")
+        .map_err(anyhow::Error::from)?;
+    session.send("\u{12}").map_err(anyhow::Error::from)?;
+    session
+        .expect("cache lock remained busy")
+        .map_err(anyhow::Error::from)?;
+    session.expect(Eof).map_err(anyhow::Error::from)?;
+
+    fs4::FileExt::unlock(&lock)?;
+    assert!(!cache_directory.join("choices.json").exists());
+    Ok(())
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn remembered_choice_round_trips_a_non_utf8_project_path() -> anyhow::Result<()> {
+    use std::ffi::OsString;
+    use std::os::unix::ffi::OsStringExt as _;
+
+    let temp = tempfile::tempdir()?;
+    let project = temp.path().join(OsString::from_vec(vec![
+        b'o', b'p', b'a', 0x80, b'q', b'u', b'e',
+    ]));
+    let state = temp.path().join("state");
+    fs::create_dir(&project).context("creating non-UTF-8 project directory")?;
+    fs::write(
+        project.join("package.json"),
+        r#"{"scripts":{"dev":"first","start":"second"}}"#,
+    )
+    .context("writing manifest in non-UTF-8 project directory")?;
+    let bin = fake_program(temp.path(), "npm").context("creating fake npm")?;
+    remember_with_picker(&project, &state, &bin, &[])
+        .context("remembering choice for non-UTF-8 project")?;
+
+    let stored = fs::read_to_string(state.join("dev/choices.json"))?;
+    assert!(
+        stored.contains("unix-bytes"),
+        "cache lost opaque path: {stored}"
+    );
+
+    let mut command = cargo_bin_cmd!("dev");
+    let output = command
+        .args(["run", "--quiet", "--at"])
+        .arg(&project)
+        .env("PATH", &bin)
+        .env("XDG_STATE_HOME", &state)
+        .output()?;
+    anyhow::ensure!(
+        output.status.success(),
+        "cached execution failed: {output:?}"
+    );
+    assert!(output
+        .stdout
+        .windows(b"arg1=<dev>\n".len())
+        .any(|window| window == b"arg1=<dev>\n"));
     Ok(())
 }

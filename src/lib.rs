@@ -1,5 +1,6 @@
 //! Core library for the `dev` command launcher.
 
+pub mod cache;
 pub mod candidate;
 pub mod cli;
 pub mod dedupe;

@@ -34,6 +34,9 @@ pub enum ResolutionReason {
     NoAutomaticCandidates,
     HintNoMatch,
     NoCandidates,
+    RememberedChoice,
+    RememberedCommandChanged,
+    RememberedActionMissing,
 }
 
 #[derive(Clone, Debug)]

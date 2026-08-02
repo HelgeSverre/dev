@@ -10,6 +10,7 @@ use crate::path::logical_absolute;
 #[derive(Clone, Debug)]
 pub enum Request {
     Resolve(ResolveRequest),
+    Cache(CacheRequest),
 }
 
 #[derive(Clone, Debug)]
@@ -26,6 +27,12 @@ pub struct ResolveRequest {
     pub quiet: bool,
     pub verbose: bool,
     pub color: ColorMode,
+}
+
+#[derive(Clone, Debug)]
+pub enum CacheRequest {
+    List,
+    Clear { yes: bool },
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, ValueEnum)]
@@ -70,6 +77,11 @@ enum RawCommand {
     Build(ActionArgs),
     /// Discover a command that tests the project or a target.
     Test(ActionArgs),
+    /// Inspect or clear remembered choices.
+    Cache {
+        #[command(subcommand)]
+        command: CacheCommand,
+    },
 }
 
 #[derive(Clone, Debug, Args)]
@@ -131,6 +143,18 @@ struct ActionArgs {
     positionals: Vec<OsString>,
 }
 
+#[derive(Debug, Subcommand)]
+enum CacheCommand {
+    /// List remembered choices.
+    List,
+    /// Clear every remembered choice.
+    Clear {
+        /// Skip interactive confirmation.
+        #[arg(long)]
+        yes: bool,
+    },
+}
+
 /// Parse a platform-native argument sequence while preserving arguments after `--`.
 pub fn parse_from<I, T>(arguments: I, current_directory: &Path) -> Result<Request, CliError>
 where
@@ -158,6 +182,17 @@ where
         }
         RawCommand::Test(args) => {
             resolve_request(Intent::Test, args, passthrough, current_directory)
+        }
+        RawCommand::Cache { command } => {
+            if !passthrough.is_empty() {
+                return Err(CliError::Usage(
+                    "cache commands do not accept passthrough arguments".to_owned(),
+                ));
+            }
+            match command {
+                CacheCommand::List => Ok(Request::Cache(CacheRequest::List)),
+                CacheCommand::Clear { yes } => Ok(Request::Cache(CacheRequest::Clear { yes })),
+            }
         }
     }
 }
@@ -279,7 +314,9 @@ mod tests {
         let directory = tempfile::tempdir()?;
         std::fs::create_dir(directory.path().join("test"))?;
         let request = parse_from(["dev", "run", "test"], directory.path())?;
-        let Request::Resolve(request) = request;
+        let Request::Resolve(request) = request else {
+            anyhow::bail!("expected resolve request");
+        };
         assert_eq!(request.invocation.hints, ["test"]);
         assert_eq!(request.invocation.target.path(), directory.path());
         Ok(())
@@ -292,7 +329,9 @@ mod tests {
             ["dev", "build", "rust", "--", "--release", ""],
             directory.path(),
         )?;
-        let Request::Resolve(request) = request;
+        let Request::Resolve(request) = request else {
+            anyhow::bail!("expected resolve request");
+        };
         assert_eq!(request.invocation.hints, ["rust"]);
         assert_eq!(request.invocation.passthrough, ["--release", ""]);
         Ok(())
