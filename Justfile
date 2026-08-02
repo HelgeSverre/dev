@@ -14,6 +14,16 @@ build:
 release:
     cargo build --release
 
+# Install the dev binary globally from this checkout.
+[group('install')]
+install:
+    cargo install --path .
+
+# Remove the globally installed dev binary package.
+[group('install')]
+uninstall:
+    cargo uninstall dev-launcher
+
 # Run the release-mode performance suite.
 [group('qa')]
 bench:
