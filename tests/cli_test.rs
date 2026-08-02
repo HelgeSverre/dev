@@ -1111,7 +1111,7 @@ fn corrupt_cache_is_recovered_during_a_locked_write() -> anyhow::Result<()> {
 
     let recovered: serde_json::Value =
         serde_json::from_slice(&fs::read(cache_directory.join("choices.json"))?)?;
-    assert_eq!(recovered["schema_version"], 3);
+    assert_eq!(recovered["schema_version"], 4);
     assert_eq!(recovered["entries"].as_array().map(Vec::len), Some(0));
     assert!(fs::read_dir(cache_directory)?
         .filter_map(Result::ok)
