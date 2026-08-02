@@ -252,7 +252,7 @@ pub(crate) fn collect_walk(
         entries.push(IndexEntry {
             relative_path: relative_path.to_path_buf(),
             file_type,
-            executable: executable(&metadata),
+            executable: executable(directory_entry.path(), &metadata),
             size: metadata.len(),
             modified: metadata.modified().ok(),
         });
@@ -424,13 +424,24 @@ fn compile_globs(patterns: &[String]) -> Result<globset::GlobSet, globset::Error
 }
 
 #[cfg(unix)]
-fn executable(metadata: &std::fs::Metadata) -> bool {
+fn executable(_path: &Path, metadata: &std::fs::Metadata) -> bool {
     use std::os::unix::fs::PermissionsExt;
     metadata.permissions().mode() & 0o111 != 0
 }
 
-#[cfg(not(unix))]
-fn executable(_metadata: &std::fs::Metadata) -> bool {
+#[cfg(windows)]
+fn executable(path: &Path, metadata: &std::fs::Metadata) -> bool {
+    metadata.is_file()
+        && path.extension().is_some_and(|extension| {
+            matches!(
+                extension.to_string_lossy().to_ascii_lowercase().as_str(),
+                "exe" | "com" | "bat" | "cmd"
+            )
+        })
+}
+
+#[cfg(not(any(unix, windows)))]
+fn executable(_path: &Path, _metadata: &std::fs::Metadata) -> bool {
     false
 }
 

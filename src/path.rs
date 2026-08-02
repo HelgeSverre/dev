@@ -47,10 +47,8 @@ pub fn resolve_program(
         } else {
             cwd.join(path)
         };
-        return if is_executable(&resolved) {
-            Availability::Available {
-                resolved_program: resolved,
-            }
+        return if let Some(resolved_program) = resolve_executable(&resolved, env_delta) {
+            Availability::Available { resolved_program }
         } else {
             Availability::MissingProgram {
                 program: program.to_os_string(),
@@ -58,8 +56,7 @@ pub fn resolve_program(
         };
     }
 
-    let effective_path = env_delta
-        .get(OsStr::new("PATH"))
+    let effective_path = env_value(env_delta, OsStr::new("PATH"))
         .cloned()
         .or_else(|| env::var_os("PATH"));
     let Some(effective_path) = effective_path else {
@@ -75,7 +72,7 @@ pub fn resolve_program(
                 cwd.join(directory).join(program)
             }
         })
-        .find(|candidate| is_executable(candidate))
+        .find_map(|candidate| resolve_executable(&candidate, env_delta))
         .map_or_else(
             || Availability::MissingProgram {
                 program: program.to_os_string(),
@@ -84,32 +81,94 @@ pub fn resolve_program(
         )
 }
 
-#[cfg(unix)]
-fn is_executable(path: &Path) -> bool {
-    use std::os::unix::fs::PermissionsExt;
-    path.metadata()
-        .is_ok_and(|metadata| metadata.is_file() && metadata.permissions().mode() & 0o111 != 0)
+#[cfg(not(windows))]
+fn env_value<'a>(
+    env_delta: &'a std::collections::BTreeMap<std::ffi::OsString, std::ffi::OsString>,
+    key: &OsStr,
+) -> Option<&'a std::ffi::OsString> {
+    env_delta.get(key)
 }
 
 #[cfg(windows)]
-fn is_executable(path: &Path) -> bool {
-    if path.is_file() {
-        return true;
-    }
-    ["exe", "cmd", "bat", "com"]
+fn env_value<'a>(
+    env_delta: &'a std::collections::BTreeMap<std::ffi::OsString, std::ffi::OsString>,
+    key: &OsStr,
+) -> Option<&'a std::ffi::OsString> {
+    let key = key.to_string_lossy();
+    env_delta
         .iter()
-        .any(|extension| path.with_extension(extension).is_file())
+        .find(|(candidate, _)| candidate.to_string_lossy().eq_ignore_ascii_case(&key))
+        .map(|(_, value)| value)
+}
+
+#[cfg(unix)]
+fn resolve_executable(
+    path: &Path,
+    _env_delta: &std::collections::BTreeMap<std::ffi::OsString, std::ffi::OsString>,
+) -> Option<PathBuf> {
+    use std::os::unix::fs::PermissionsExt;
+    path.metadata()
+        .is_ok_and(|metadata| metadata.is_file() && metadata.permissions().mode() & 0o111 != 0)
+        .then(|| path.to_path_buf())
+}
+
+#[cfg(windows)]
+fn resolve_executable(
+    path: &Path,
+    env_delta: &std::collections::BTreeMap<std::ffi::OsString, std::ffi::OsString>,
+) -> Option<PathBuf> {
+    if path.is_file() {
+        return Some(path.to_path_buf());
+    }
+    if path.extension().is_some() {
+        return None;
+    }
+    windows_executable_extensions(env_delta)
+        .into_iter()
+        .map(|extension| path.with_extension(extension))
+        .find(|candidate| candidate.is_file())
 }
 
 #[cfg(not(any(unix, windows)))]
-fn is_executable(path: &Path) -> bool {
-    path.is_file()
+fn resolve_executable(
+    path: &Path,
+    _env_delta: &std::collections::BTreeMap<std::ffi::OsString, std::ffi::OsString>,
+) -> Option<PathBuf> {
+    path.is_file().then(|| path.to_path_buf())
+}
+
+#[cfg(windows)]
+fn windows_executable_extensions(
+    env_delta: &std::collections::BTreeMap<std::ffi::OsString, std::ffi::OsString>,
+) -> Vec<std::ffi::OsString> {
+    let configured = env_value(env_delta, OsStr::new("PATHEXT"))
+        .cloned()
+        .or_else(|| env::var_os("PATHEXT"));
+    configured
+        .as_deref()
+        .map(parse_windows_executable_extensions)
+        .filter(|extensions| !extensions.is_empty())
+        .unwrap_or_else(|| parse_windows_executable_extensions(OsStr::new(".COM;.EXE;.BAT;.CMD")))
+}
+
+#[cfg(any(windows, test))]
+fn parse_windows_executable_extensions(value: &OsStr) -> Vec<std::ffi::OsString> {
+    value
+        .to_string_lossy()
+        .split(';')
+        .map(str::trim)
+        .map(|extension| extension.trim_start_matches('.'))
+        .filter(|extension| !extension.is_empty())
+        .map(std::ffi::OsString::from)
+        .collect()
 }
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeMap;
     use std::ffi::OsString;
+
+    #[cfg(unix)]
+    use std::collections::BTreeMap;
 
     use super::*;
 
@@ -140,5 +199,17 @@ mod tests {
             }
         );
         Ok(())
+    }
+
+    #[test]
+    fn windows_pathext_parser_preserves_search_order() {
+        assert_eq!(
+            parse_windows_executable_extensions(OsStr::new(".CMD; .EXE;;BAT")),
+            [
+                OsString::from("CMD"),
+                OsString::from("EXE"),
+                OsString::from("BAT")
+            ]
+        );
     }
 }

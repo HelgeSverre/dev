@@ -114,4 +114,28 @@ mod tests {
         assert_eq!(rendered, "cd '/tmp/a b' && tool 'it'\"'\"'s' ''");
         Ok(())
     }
+
+    #[test]
+    fn powershell_rendering_quotes_cwd_environment_and_arguments() -> anyhow::Result<()> {
+        let mut candidate = Candidate::new(
+            "test",
+            "test",
+            Intent::Run,
+            "test",
+            "tool.exe",
+            vec![OsString::from("it's"), OsString::new()],
+            PathBuf::from("C:/work/a b"),
+            1,
+            SelectionPolicy::Automatic,
+        );
+        candidate
+            .env
+            .insert(OsString::from("MODE"), OsString::from("reader's"));
+        let rendered = powershell(&candidate, &[OsString::from("tail arg")])?;
+        assert_eq!(
+            rendered,
+            "Set-Location -LiteralPath 'C:/work/a b'; $env:MODE = 'reader''s'; & 'tool.exe' 'it''s' '' 'tail arg'"
+        );
+        Ok(())
+    }
 }

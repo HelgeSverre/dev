@@ -1,5 +1,6 @@
 use std::ffi::OsStr;
 
+#[cfg(unix)]
 use base64::Engine;
 use serde::Serialize;
 

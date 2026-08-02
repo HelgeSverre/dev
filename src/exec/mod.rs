@@ -7,6 +7,9 @@ use crate::candidate::{Availability, Candidate};
 use crate::query::TermMatch;
 use crate::ui::command_display;
 
+#[cfg(windows)]
+mod windows;
+
 #[derive(Copy, Clone, Debug)]
 pub struct ExecutionOptions<'a> {
     pub quiet: bool,
@@ -86,6 +89,9 @@ pub fn execute(
         }
         let _ = std::io::stderr().flush();
     }
+    #[cfg(windows)]
+    let mut command = Command::new(resolved_program);
+    #[cfg(not(windows))]
     let mut command = Command::new(&candidate.program);
     command
         .args(candidate.command_with_passthrough(passthrough))
@@ -138,7 +144,15 @@ fn execute_command(mut command: Command, program: &str) -> Result<i32, Execution
     })
 }
 
-#[cfg(not(unix))]
+#[cfg(windows)]
+fn execute_command(command: Command, program: &str) -> Result<i32, ExecutionError> {
+    windows::execute_command(command).map_err(|source| ExecutionError::Start {
+        program: program.to_owned(),
+        source,
+    })
+}
+
+#[cfg(not(any(unix, windows)))]
 fn execute_command(mut command: Command, program: &str) -> Result<i32, ExecutionError> {
     let status = command.status().map_err(|source| ExecutionError::Start {
         program: program.to_owned(),

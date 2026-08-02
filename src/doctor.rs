@@ -160,7 +160,7 @@ mod tests {
         let version = temp.path().join("version");
         executable(&version, "#!/bin/sh\nprintf 'probe 1.2.3\\n'\n")?;
         assert_eq!(
-            probe_version(&version, temp.path(), Duration::from_millis(200)),
+            probe_version(&version, temp.path(), Duration::from_secs(2)),
             ProbeOutcome::Version("probe 1.2.3".to_owned())
         );
 

@@ -1,5 +1,4 @@
 use std::io::{self, IsTerminal, Write};
-use std::process::ExitCode;
 
 use dev_launcher::cache::{CacheLookup, QueryCacheKey};
 use dev_launcher::candidate::{Availability, Candidate};
@@ -10,14 +9,17 @@ use dev_launcher::resolve::{RankedCandidate, Resolution, ResolutionReason, Resol
 use dev_launcher::scan::{resolve_roots, FileIndex, ScanOptions};
 use dev_launcher::ui::picker::PickerOutcome;
 
-fn main() -> ExitCode {
-    match run() {
-        Ok(code) => exit_code(code),
+fn main() {
+    let code = match run() {
+        Ok(code) => code,
         Err(error) => {
             eprintln!("dev: {error:#}");
-            ExitCode::from(1)
+            1
         }
-    }
+    };
+    let _ = io::stdout().flush();
+    let _ = io::stderr().flush();
+    std::process::exit(code);
 }
 
 fn run() -> anyhow::Result<i32> {
@@ -413,8 +415,4 @@ fn resolution_exit_code(status: ResolutionStatus) -> i32 {
         ResolutionStatus::NoCandidates => 4,
         ResolutionStatus::Ambiguous | ResolutionStatus::HintNoMatch => 5,
     }
-}
-
-fn exit_code(code: i32) -> ExitCode {
-    ExitCode::from(u8::try_from(code).unwrap_or(1))
 }

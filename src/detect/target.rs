@@ -184,7 +184,7 @@ fn explicit_entry(context: &ScanCtx<'_>) -> Option<IndexEntry> {
     Some(IndexEntry {
         relative_path,
         file_type,
-        executable: executable(&metadata),
+        executable: executable(path, &metadata),
         size: metadata.len(),
         modified: metadata.modified().ok(),
     })
@@ -198,13 +198,24 @@ pub(super) fn explicitly_anchored(target: &IndexEntry, context: &ScanCtx<'_>) ->
 }
 
 #[cfg(unix)]
-fn executable(metadata: &std::fs::Metadata) -> bool {
+fn executable(_path: &Path, metadata: &std::fs::Metadata) -> bool {
     use std::os::unix::fs::PermissionsExt as _;
 
     metadata.permissions().mode() & 0o111 != 0
 }
 
-#[cfg(not(unix))]
-fn executable(_metadata: &std::fs::Metadata) -> bool {
+#[cfg(windows)]
+fn executable(path: &Path, metadata: &std::fs::Metadata) -> bool {
+    metadata.is_file()
+        && path.extension().is_some_and(|extension| {
+            matches!(
+                extension.to_string_lossy().to_ascii_lowercase().as_str(),
+                "exe" | "com" | "bat" | "cmd"
+            )
+        })
+}
+
+#[cfg(not(any(unix, windows)))]
+fn executable(_path: &Path, _metadata: &std::fs::Metadata) -> bool {
     false
 }
