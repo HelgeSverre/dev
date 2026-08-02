@@ -5,7 +5,7 @@ use std::fmt::Write as _;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use dev_launcher::candidate::{Availability, EvidenceKind};
+use dev_launcher::candidate::Availability;
 use dev_launcher::detect::{detect_all, ScanCtx};
 use dev_launcher::intent::{Intent, Invocation, Target};
 use dev_launcher::resolve::Resolution;
@@ -16,6 +16,11 @@ const GOLDEN: &str = include_str!("snapshots/corpus-structural.snap");
 #[test]
 fn structural_corpus_matches_golden_and_is_repeatable() -> anyhow::Result<()> {
     std::env::remove_var("VIRTUAL_ENV");
+    let tool_path = tempfile::tempdir()?;
+    install_tool_stubs(tool_path.path())?;
+    let original_path = std::env::var_os("PATH");
+    std::env::set_var("PATH", tool_path.path());
+    let _path_guard = EnvironmentGuard::new("PATH", original_path);
     let corpus = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/corpus");
     let source_fixtures = fixture_directories(&corpus)?;
     assert!(
@@ -37,6 +42,49 @@ fn structural_corpus_matches_golden_and_is_repeatable() -> anyhow::Result<()> {
         return Ok(());
     }
     assert_eq!(actual, GOLDEN);
+    Ok(())
+}
+
+struct EnvironmentGuard {
+    key: &'static str,
+    previous: Option<std::ffi::OsString>,
+}
+
+impl EnvironmentGuard {
+    fn new(key: &'static str, previous: Option<std::ffi::OsString>) -> Self {
+        Self { key, previous }
+    }
+}
+
+impl Drop for EnvironmentGuard {
+    fn drop(&mut self) {
+        if let Some(previous) = &self.previous {
+            std::env::set_var(self.key, previous);
+        } else {
+            std::env::remove_var(self.key);
+        }
+    }
+}
+
+fn install_tool_stubs(directory: &Path) -> anyhow::Result<()> {
+    use std::os::unix::fs::PermissionsExt as _;
+
+    let mut programs = dev_launcher::registry::tools()
+        .iter()
+        .map(|tool| tool.program)
+        .chain([
+            "bash", "dash", "deno", "fish", "ksh", "perl", "ruby", "sh", "zsh",
+        ])
+        .collect::<Vec<_>>();
+    programs.sort_unstable();
+    programs.dedup();
+    for program in programs {
+        let stub = directory.join(program);
+        fs::write(&stub, "#!/bin/sh\nexit 0\n")?;
+        let mut permissions = stub.metadata()?.permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(stub, permissions)?;
+    }
     Ok(())
 }
 
@@ -113,9 +161,8 @@ fn render_case(
         index: &index,
     };
     let detection = detect_all(&context);
-    let mut candidates =
-        dev_launcher::dedupe::deduplicate(detection.candidates, &invocation.target);
-    for candidate in &mut candidates {
+    let candidates = dev_launcher::dedupe::deduplicate(detection.candidates, &invocation.target);
+    for candidate in &candidates {
         anyhow::ensure!(
             !candidate.action_key.is_empty()
                 && !candidate.action_name.is_empty()
@@ -133,13 +180,6 @@ fn render_case(
             "{name}/{intent}: candidate evidence/search document is incomplete for {}",
             candidate.action_key
         );
-        candidate.availability = Availability::Available {
-            resolved_program: PathBuf::from("<fixture-tool>"),
-        };
-        candidate
-            .evidence
-            .retain(|evidence| evidence.kind != EvidenceKind::Availability);
-        dev_launcher::score::recompute(candidate);
     }
     let resolution = dev_launcher::resolve::resolve(candidates, &[], 0, false);
 
@@ -196,7 +236,7 @@ fn render_resolution(
             .join(",");
         writeln!(
             output,
-            "candidate action={} detector={} source={} layer={:?} origin={:?} policy={:?} base={} total={} distance={} cwd={} scope={} program={:?} args=[{}] availability=available",
+            "candidate action={} detector={} source={} layer={:?} origin={:?} policy={:?} base={} total={} distance={} cwd={} scope={} program={:?} args=[{}] availability={}",
             candidate.action_key,
             candidate.detector,
             candidate.source,
@@ -209,7 +249,8 @@ fn render_resolution(
             relative_path(&candidate.cwd, fixture),
             relative_path(&candidate.scope_root, fixture),
             normalize_text(&candidate.program.to_string_lossy(), fixture),
-            args
+            args,
+            availability(&candidate.availability, fixture)
         )?;
         for evidence in &candidate.evidence {
             writeln!(
@@ -223,6 +264,21 @@ fn render_resolution(
         }
     }
     Ok(())
+}
+
+fn availability(availability: &Availability, fixture: &Path) -> String {
+    match availability {
+        Availability::Available { .. } => "available".to_owned(),
+        Availability::MissingProgram { program } => {
+            format!(
+                "missing:{:?}",
+                normalize_text(&program.to_string_lossy(), fixture)
+            )
+        }
+        Availability::UnsupportedHost { reason } => {
+            format!("unsupported:{}", normalize_text(reason, fixture))
+        }
+    }
 }
 
 fn optional_path(path: Option<&Path>, fixture: &Path) -> String {
