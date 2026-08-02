@@ -358,8 +358,11 @@ fn run_cache(request: CacheRequest) -> anyhow::Result<i32> {
         CacheRequest::List => {
             for entry in dev_launcher::cache::list()? {
                 let query = match &entry.key.query {
-                    QueryCacheKey::Unhinted => "—",
-                    QueryCacheKey::Hinted(_) => "hinted",
+                    QueryCacheKey::Unhinted => "—".to_owned(),
+                    QueryCacheKey::Hinted(_) if entry.query_display.is_empty() => {
+                        "hinted".to_owned()
+                    }
+                    QueryCacheKey::Hinted(_) => entry.query_display.join(" "),
                 };
                 println!(
                     "{}  {:<5}  {:<6}  {:<8}  {:<8}  {}",

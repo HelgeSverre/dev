@@ -582,8 +582,7 @@ fn framework_fallbacks(
         _ => {}
     }
 
-    let local_binary_available =
-        project_local_binary_exists(package_directory, &context.roots.scan_root, framework);
+    let local_binary = project_local_binary(package_directory, &context.roots.scan_root, framework);
     actions
         .into_iter()
         .map(|(name, arguments, base_points, selection, requires_build)| {
@@ -602,7 +601,7 @@ fn framework_fallbacks(
                 selection,
             );
             manager.apply_local_exec_safety(&mut candidate);
-            if !local_binary_available {
+            if local_binary.is_none() {
                 candidate.availability = crate::candidate::Availability::UnsupportedHost {
                     reason: format!(
                         "project-local {framework} binary is not installed; dev will not download it"
@@ -635,15 +634,23 @@ fn framework_fallbacks(
                 points: 10,
                 source: Some(manifest_path.to_path_buf()),
             });
-            candidate.evidence.push(Evidence {
-                kind: EvidenceKind::Rule,
-                reason: format!(
-                    "{} uses its local-only binary execution mode",
-                    manager.program()
-                ),
-                points: 0,
-                source: None,
-            });
+            candidate.evidence.push(local_binary.as_ref().map_or_else(
+                || Evidence {
+                    kind: EvidenceKind::Rule,
+                    reason: format!(
+                        "{} uses its local-only binary execution mode",
+                        manager.program()
+                    ),
+                    points: 0,
+                    source: None,
+                },
+                |path| Evidence {
+                    kind: EvidenceKind::Rule,
+                    reason: format!("verified project-local {framework} executable"),
+                    points: 0,
+                    source: Some(path.clone()),
+                },
+            ));
             candidate.search = SearchDocument {
                 identities: vec![name.to_owned(), framework.to_owned()],
                 target_paths: vec![manifest_path.to_path_buf()],
@@ -660,18 +667,24 @@ fn framework_fallbacks(
         .collect()
 }
 
-fn project_local_binary_exists(package_directory: &Path, scan_root: &Path, binary: &str) -> bool {
+fn project_local_binary(
+    package_directory: &Path,
+    scan_root: &Path,
+    binary: &str,
+) -> Option<PathBuf> {
     package_directory
         .ancestors()
         .take_while(|directory| directory.starts_with(scan_root))
-        .any(|directory| {
+        .find_map(|directory| {
             let bin_directory = directory.join("node_modules").join(".bin");
             ["", ".cmd", ".exe", ".bat", ".com"]
                 .into_iter()
-                .any(|extension| {
-                    project_binary_file(&bin_directory.join(format!("{binary}{extension}")))
+                .map(|extension| bin_directory.join(format!("{binary}{extension}")))
+                .find(|path| project_binary_file(path))
+                .or_else(|| {
+                    let pnp = directory.join(".pnp.cjs");
+                    pnp.is_file().then_some(pnp)
                 })
-                || directory.join(".pnp.cjs").is_file()
         })
 }
 

@@ -28,6 +28,8 @@ const MAX_AGE: Duration = Duration::from_secs(90 * 24 * 60 * 60);
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CacheEntry {
     pub key: CacheKey,
+    #[serde(default)]
+    pub query_display: Vec<String>,
     pub action_key: String,
     pub candidate_id: CandidateId,
     pub command_fingerprint: String,
@@ -213,6 +215,7 @@ pub fn remember(
     let now = now_millis();
     let entry = CacheEntry {
         key: key.clone(),
+        query_display: query_display(invocation),
         action_key: candidate.action_key.clone(),
         candidate_id: candidate.id.clone(),
         command_fingerprint: candidate.id.as_str().to_owned(),
@@ -243,6 +246,7 @@ pub fn refresh(
     let now = now_millis();
     lock::update_store(|store| {
         if let Some(entry) = store.entries.iter_mut().find(|entry| entry.key == key) {
+            entry.query_display = query_display(invocation);
             entry.action_key.clone_from(&candidate.action_key);
             entry.candidate_id.clone_from(&candidate.id);
             entry.command_fingerprint = candidate.id.as_str().to_owned();
@@ -255,6 +259,13 @@ pub fn refresh(
         }
         prune(store);
     })
+}
+
+fn query_display(invocation: &Invocation) -> Vec<String> {
+    crate::query::normalize_query(&invocation.hints)
+        .into_iter()
+        .map(|term| term.normalized.original)
+        .collect()
 }
 
 pub fn touch(key: &CacheKey) -> Result<(), CacheError> {

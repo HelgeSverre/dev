@@ -100,6 +100,15 @@ impl ShapeSnapshot {
                 .iter()
                 .filter_map(|path| path.parent().map(Path::to_path_buf)),
         );
+        watched.extend(candidate.evidence.iter().filter_map(|evidence| {
+            evidence.source.as_ref().map(|source| {
+                if source.is_absolute() {
+                    source.clone()
+                } else {
+                    roots.scan_root.join(source)
+                }
+            })
+        }));
         let marker_roots = [
             Some(roots.scan_root.clone()),
             roots.package_root.clone(),

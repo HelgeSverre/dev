@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::BTreeMap;
 use std::path::Path;
 
 use crate::candidate::{Availability, Candidate, Evidence, EvidenceKind};
@@ -72,21 +72,21 @@ pub fn finalize(candidate: &mut Candidate, target: &Target) {
 
 /// Recompute structural points from unique evidence.
 pub fn recompute(candidate: &mut Candidate) {
-    let mut seen = HashSet::new();
-    candidate.evidence.retain(|evidence| {
-        seen.insert((
+    let mut unique = BTreeMap::new();
+    for evidence in std::mem::take(&mut candidate.evidence) {
+        let key = (
             evidence.kind,
             evidence.reason.clone(),
             evidence.source.clone(),
-        ))
-    });
-    candidate.evidence.sort_by(|left, right| {
-        left.kind
-            .cmp(&right.kind)
-            .then_with(|| left.reason.cmp(&right.reason))
-            .then_with(|| left.source.cmp(&right.source))
-            .then_with(|| left.points.cmp(&right.points))
-    });
+        );
+        unique
+            .entry(key)
+            .and_modify(|existing: &mut Evidence| {
+                existing.points = existing.points.max(evidence.points);
+            })
+            .or_insert(evidence);
+    }
+    candidate.evidence.extend(unique.into_values());
     candidate.structural_points = candidate.base_points
         + candidate
             .evidence
@@ -124,5 +124,44 @@ fn proximity_points(distance: usize) -> Option<i32> {
         2 => Some(8),
         3 => Some(4),
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+
+    use crate::candidate::{Candidate, EvidenceKind, SelectionPolicy};
+    use crate::intent::Intent;
+
+    use super::*;
+
+    #[test]
+    fn duplicate_evidence_points_are_consolidated_independently_of_input_order() {
+        let evidence = |points| Evidence {
+            kind: EvidenceKind::Rule,
+            reason: "same semantic rule".to_owned(),
+            points,
+            source: Some(PathBuf::from("manifest")),
+        };
+        let score = |values: [i32; 2]| {
+            let mut candidate = Candidate::new(
+                "test",
+                "test",
+                Intent::Run,
+                "test",
+                "true",
+                Vec::new(),
+                PathBuf::from("/tmp"),
+                10,
+                SelectionPolicy::Automatic,
+            );
+            candidate.evidence = values.map(evidence).into();
+            recompute(&mut candidate);
+            (candidate.structural_points, candidate.evidence)
+        };
+
+        assert_eq!(score([3, 7]), score([7, 3]));
+        assert_eq!(score([3, 7]).0, 17);
     }
 }

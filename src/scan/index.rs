@@ -463,7 +463,14 @@ fn stable_os_cmp(left: &std::ffi::OsStr, right: &std::ffi::OsStr) -> Ordering {
     left.as_bytes().cmp(right.as_bytes())
 }
 
-#[cfg(not(unix))]
+#[cfg(windows)]
+fn stable_os_cmp(left: &std::ffi::OsStr, right: &std::ffi::OsStr) -> Ordering {
+    use std::os::windows::ffi::OsStrExt as _;
+
+    left.encode_wide().cmp(right.encode_wide())
+}
+
+#[cfg(not(any(unix, windows)))]
 fn stable_os_cmp(left: &std::ffi::OsStr, right: &std::ffi::OsStr) -> Ordering {
     left.to_string_lossy().cmp(&right.to_string_lossy())
 }

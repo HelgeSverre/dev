@@ -427,6 +427,53 @@ fn framework_fallbacks_use_local_only_exec_and_include_production_alternatives(
 }
 
 #[test]
+fn remembered_framework_fallback_is_invalidated_when_its_local_binary_disappears(
+) -> anyhow::Result<()> {
+    let temp = tempfile::tempdir()?;
+    let project = temp.path().join("remembered-vite");
+    let state = temp.path().join("state");
+    let local_vite = project.join("node_modules/.bin/vite");
+    fs::create_dir_all(local_vite.parent().unwrap_or(&project))?;
+    fs::write(
+        project.join("package.json"),
+        r#"{"name":"web","devDependencies":{"vite":"7"}}"#,
+    )?;
+    write_executable(&local_vite, "#!/bin/sh\n")?;
+    let bin = fake_program(temp.path(), "npm")?;
+    remember_with_picker(&project, &state, &bin, &["dev"])?;
+    let store: serde_json::Value =
+        serde_json::from_slice(&fs::read(state.join("dev/choices.json"))?)?;
+    assert_eq!(store["entries"][0]["query_display"][0], "dev");
+    let mut list = cargo_bin_cmd!("dev");
+    let output = list
+        .args(["cache", "list"])
+        .env("XDG_STATE_HOME", &state)
+        .output()?;
+    anyhow::ensure!(output.status.success(), "cache list failed: {output:?}");
+    let columns = String::from_utf8(output.stdout)?
+        .split_whitespace()
+        .map(str::to_owned)
+        .collect::<Vec<_>>();
+    assert_eq!(columns.get(2).map(String::as_str), Some("dev"));
+
+    fs::remove_file(local_vite)?;
+    let mut command = cargo_bin_cmd!("dev");
+    command
+        .args(["run", "--quiet", "dev", "--at"])
+        .arg(&project)
+        .env("PATH", &bin)
+        .env("XDG_STATE_HOME", &state);
+    command
+        .assert()
+        .code(6)
+        .stdout("")
+        .stderr(predicates::str::contains(
+            "project-local vite binary is not installed",
+        ));
+    Ok(())
+}
+
+#[test]
 fn child_stdio_and_exit_status_are_preserved() -> anyhow::Result<()> {
     let temp = tempfile::tempdir()?;
     let project = temp.path().join("stdio-project");
