@@ -123,9 +123,11 @@ struct WorkspaceMember {
 impl WorkspaceMember {
     fn selector(&self) -> OsString {
         self.name.as_ref().map(OsString::from).unwrap_or_else(|| {
-            PathBuf::from(".")
-                .join(&self.relative_path)
-                .into_os_string()
+            let mut selector = PathBuf::from(".");
+            for component in self.relative_path.components() {
+                selector.push(component);
+            }
+            selector.into_os_string()
         })
     }
 

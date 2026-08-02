@@ -48,7 +48,22 @@ fn structural_corpus_matches_golden_and_is_repeatable() -> anyhow::Result<()> {
         )?;
         return Ok(());
     }
-    assert_eq!(actual, GOLDEN);
+    assert_eq!(actual, GOLDEN, "golden mismatch: first diff at byte {}", {
+        let pos = actual
+            .as_bytes()
+            .iter()
+            .zip(GOLDEN.as_bytes().iter())
+            .position(|(a, b)| a != b)
+            .unwrap_or(actual.len().min(GOLDEN.len()));
+        let start = pos.saturating_sub(200);
+        let actual_end = (pos + 200).min(actual.len());
+        let golden_end = (pos + 200).min(GOLDEN.len());
+        format!(
+            "{pos}: actual=...{}...\nexpected=...{}...",
+            String::from_utf8_lossy(&actual.as_bytes()[start..actual_end]),
+            String::from_utf8_lossy(&GOLDEN.as_bytes()[start..golden_end]),
+        )
+    });
     Ok(())
 }
 
