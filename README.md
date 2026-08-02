@@ -15,9 +15,6 @@
   <a href="website/index.html">Website</a>
 </p>
 
-> **Status:** Active development. The CLI is implemented and usable, but the
-> pre-1.0 interface and candidate-ranking details may still change.
-
 `dev` finds commands a project already knows how to run, ranks the candidates
 deterministically, and executes the best match with the original process
 semantics intact. It is designed to provide IDE-style run configurations from
@@ -70,6 +67,43 @@ The selected command can still require dependencies that are not installed;
 use the project's normal setup command when that happens. `dev` deliberately
 does not insert `npm install`, `composer install`, `dotnet restore`, or similar
 steps.
+
+## Architecture
+
+The capability registry is the single source of truth for discovery behavior,
+project markers, tool availability, doctor probes, and cache identity.
+
+```mermaid
+flowchart TD
+    CLI["CLI parser"] -->|run · build · test| ROOTS["Root resolution<br/>package · workspace · scan root"]
+    CLI -->|doctor| DOCTOR
+    CLI -->|completions| COMPLETIONS["Shell completion generation"]
+    CLI -->|cache| CACHE_ADMIN["Remembered-choice list · clear"]
+    REGISTRY["Capability registry<br/>detectors · markers · tools · hooks"] --> ROOTS
+    REGISTRY --> CACHE["Cache identity<br/>project shape · registry · environment"]
+    REGISTRY --> INDEX["Bounded file indexes<br/>structural · optional target index"]
+    REGISTRY --> DETECT["Static detector dispatch"]
+    REGISTRY --> DOCTOR["Doctor<br/>bounded tool probes"]
+
+    ROOTS --> CACHE
+    CACHE --> HIT{"Valid remembered choice?"}
+    HIT -->|Yes| EXEC["Process executor<br/>argv · cwd · env · signals"]
+    HIT -->|No or inspection mode| INDEX
+    INDEX --> DETECT
+    DETECT --> CANDIDATES["Candidates + diagnostics"]
+    CANDIDATES --> RANK["Deduplicate · availability · scoring"]
+    RANK --> RESOLVE["Hint matching + deterministic resolution"]
+
+    RESOLVE -->|why · list · JSON| EXPLAIN["Explain only"]
+    RESOLVE -->|Ambiguous| PICKER["Interactive picker"]
+    RESOLVE -->|Clear winner| SELECTED["Selected candidate"]
+    PICKER --> REMEMBER["Optional remembered choice"]
+    REMEMBER --> SELECTED
+    SELECTED --> DRY{"Dry run?"}
+    DRY -->|Yes| PRINT["Print command only"]
+    DRY -->|No| EXEC
+    EXEC --> EXIT["Child exit status"]
+```
 
 ## Usage
 
