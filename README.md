@@ -65,6 +65,29 @@ dev test --json
 dev build --dry-run -- --release
 ```
 
+## Shell completions
+
+Generate completion scripts from the installed binary for Bash, Zsh, Fish,
+Elvish, or PowerShell:
+
+```console
+dev completions --install
+
+# Or generate/install a specific shell explicitly:
+dev completions zsh --install
+dev completions bash > ~/.local/share/bash-completion/completions/dev
+dev completions zsh > ~/.zsh/completions/_dev
+dev completions fish > ~/.config/fish/completions/dev.fish
+dev completions elvish > ~/.config/elvish/lib/dev.elv
+dev completions powershell >> $PROFILE
+```
+
+`--install` detects the current shell from `$SHELL`, respects the XDG and
+`$ZDOTDIR` configuration directories, creates the user-local completion
+directory, and writes the script there. It prints any shell-specific activation
+step. PowerShell requires the manual `$PROFILE` command shown above. Restart the
+shell after installing a completion script.
+
 ## Project principles
 
 1. Discover commands; do not define a new task language.

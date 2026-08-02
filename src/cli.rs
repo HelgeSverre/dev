@@ -1,7 +1,9 @@
 use std::ffi::{OsStr, OsString};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 
-use clap::{Args, Parser, Subcommand, ValueEnum};
+use clap::{Args, CommandFactory, Parser, Subcommand, ValueEnum};
+use clap_complete::Shell;
 
 use crate::intent::{Intent, Invocation, Target};
 use crate::path::logical_absolute;
@@ -12,6 +14,7 @@ pub enum Request {
     Resolve(ResolveRequest),
     Cache(CacheRequest),
     Doctor,
+    Completions { shell: Option<Shell>, install: bool },
 }
 
 #[derive(Clone, Debug)]
@@ -85,6 +88,20 @@ enum RawCommand {
     },
     /// Check locally available toolchains with bounded version probes.
     Doctor,
+    /// Generate shell completion scripts.
+    #[command(after_help = "Examples:
+  dev completions --install
+  dev completions zsh --install
+  dev completions bash > ~/.local/share/bash-completion/completions/dev
+  dev completions powershell >> $PROFILE")]
+    Completions {
+        /// Shell to generate completions for.
+        #[arg(value_enum, required_unless_present = "install")]
+        shell: Option<Shell>,
+        /// Install the script, detecting the shell when it is omitted.
+        #[arg(long)]
+        install: bool,
+    },
 }
 
 #[derive(Clone, Debug, Args)]
@@ -205,7 +222,20 @@ where
             }
             Ok(Request::Doctor)
         }
+        RawCommand::Completions { shell, install } => {
+            if !passthrough.is_empty() {
+                return Err(CliError::Usage(
+                    "completions does not accept passthrough arguments".to_owned(),
+                ));
+            }
+            Ok(Request::Completions { shell, install })
+        }
     }
+}
+
+/// Write a completion script for `dev` to the supplied writer.
+pub fn write_completions(shell: Shell, writer: &mut impl Write) {
+    clap_complete::generate(shell, &mut RawCli::command(), "dev", writer);
 }
 
 fn resolve_request(
@@ -369,5 +399,52 @@ mod tests {
         let result = parse_from(["dev", "run", "./missing"], directory.path());
         assert!(matches!(result, Err(CliError::Target { .. })));
         Ok(())
+    }
+
+    #[test]
+    fn completion_shell_is_parsed() -> anyhow::Result<()> {
+        let directory = tempfile::tempdir()?;
+        let request = parse_from(["dev", "completions", "fish"], directory.path())?;
+        assert!(matches!(
+            request,
+            Request::Completions {
+                shell: Some(Shell::Fish),
+                install: false
+            }
+        ));
+        Ok(())
+    }
+
+    #[test]
+    fn completion_install_can_detect_the_shell() -> anyhow::Result<()> {
+        let directory = tempfile::tempdir()?;
+        let request = parse_from(["dev", "completions", "--install"], directory.path())?;
+        assert!(matches!(
+            request,
+            Request::Completions {
+                shell: None,
+                install: true
+            }
+        ));
+        Ok(())
+    }
+
+    #[test]
+    fn every_supported_completion_script_is_generated() {
+        for shell in [
+            Shell::Bash,
+            Shell::Elvish,
+            Shell::Fish,
+            Shell::PowerShell,
+            Shell::Zsh,
+        ] {
+            let mut output = Vec::new();
+            write_completions(shell, &mut output);
+            assert!(!output.is_empty(), "{shell:?} completion was empty");
+            assert!(
+                output.windows(3).any(|window| window == b"dev"),
+                "{shell:?} completion did not reference dev"
+            );
+        }
     }
 }

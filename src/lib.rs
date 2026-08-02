@@ -3,6 +3,7 @@
 pub mod cache;
 pub mod candidate;
 pub mod cli;
+pub mod completions;
 pub mod dedupe;
 pub mod detect;
 pub mod diagnostic;

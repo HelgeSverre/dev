@@ -79,6 +79,30 @@ fn remember_with_picker(
 }
 
 #[test]
+fn completions_can_detect_and_install_the_current_shell() -> anyhow::Result<()> {
+    let temporary = tempfile::tempdir()?;
+    let config = temporary.path().join("config");
+
+    let mut command = cargo_bin_cmd!("dev");
+    command
+        .args(["completions", "--install"])
+        .env("SHELL", "/usr/bin/fish")
+        .env("HOME", temporary.path())
+        .env("XDG_CONFIG_HOME", &config)
+        .env("XDG_DATA_HOME", temporary.path().join("data"));
+    command
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("Installed fish completions"));
+
+    let completion = config.join("fish/completions/dev.fish");
+    let contents = fs::read(completion)?;
+    assert!(!contents.is_empty());
+    assert!(contents.windows(3).any(|window| window == b"dev"));
+    Ok(())
+}
+
+#[test]
 fn node_script_executes_real_child_with_exact_passthrough_and_cwd() -> anyhow::Result<()> {
     let temp = tempfile::tempdir()?;
     let project = temp.path().join("project with spaces");

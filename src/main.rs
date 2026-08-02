@@ -40,6 +40,22 @@ fn run() -> anyhow::Result<i32> {
         Request::Resolve(request) => run_resolution(request),
         Request::Cache(request) => run_cache(request),
         Request::Doctor => run_doctor(),
+        Request::Completions { shell, install } => {
+            if install {
+                let installation = dev_launcher::completions::install(shell)?;
+                println!(
+                    "Installed {} completions to {}",
+                    installation.shell_name,
+                    installation.path.display()
+                );
+                if let Some(hint) = installation.hint {
+                    println!("  {hint}");
+                }
+            } else if let Some(shell) = shell {
+                dev_launcher::cli::write_completions(shell, &mut io::stdout().lock());
+            }
+            Ok(0)
+        }
     }
 }
 
