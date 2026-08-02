@@ -6,6 +6,8 @@ use crate::candidate::Candidate;
 pub enum DisplayError {
     #[error("cannot render non-Unicode value as a reproducible shell command: {0}")]
     NonUnicode(String),
+    #[error("cannot safely print a shell command containing terminal control characters")]
+    ControlCharacters,
 }
 
 /// Render the exact argv as an inspectable, non-shell diagnostic string.
@@ -62,9 +64,13 @@ pub fn powershell(candidate: &Candidate, passthrough: &[OsString]) -> Result<Str
 }
 
 fn unicode(value: &OsStr) -> Result<&str, DisplayError> {
-    value
+    let value = value
         .to_str()
-        .ok_or_else(|| DisplayError::NonUnicode(diagnostic_value(value)))
+        .ok_or_else(|| DisplayError::NonUnicode(diagnostic_value(value)))?;
+    if value.chars().any(char::is_control) {
+        return Err(DisplayError::ControlCharacters);
+    }
+    Ok(value)
 }
 
 fn diagnostic_value(value: &OsStr) -> String {
@@ -181,6 +187,30 @@ mod tests {
             "Set-Location -LiteralPath 'C:/work/a b'; $env:MODE = 'reader''s'; & 'tool.exe' 'it''s' '' 'tail arg'"
         );
         Ok(())
+    }
+
+    #[test]
+    fn copyable_commands_reject_terminal_controls() {
+        let candidate = Candidate::new(
+            "test",
+            NODE,
+            NODE_SOURCE,
+            Intent::Run,
+            "test",
+            "tool",
+            vec![OsString::from("unsafe\u{1b}[2J")],
+            PathBuf::from("/tmp"),
+            1,
+            SelectionPolicy::Automatic,
+        );
+        assert!(matches!(
+            posix(&candidate, &[]),
+            Err(DisplayError::ControlCharacters)
+        ));
+        assert!(matches!(
+            powershell(&candidate, &[]),
+            Err(DisplayError::ControlCharacters)
+        ));
     }
 
     #[cfg(unix)]

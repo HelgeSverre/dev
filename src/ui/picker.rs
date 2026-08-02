@@ -18,7 +18,7 @@ use crate::query::rank::compare_hinted;
 use crate::query::{match_candidate, normalize_query, QueryMatch};
 use crate::resolve::Resolution;
 
-use super::command_display;
+use super::{command_display, terminal_text};
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum PickerOutcome {
@@ -257,7 +257,7 @@ fn render(frame: &mut Frame<'_>, app: &mut PickerApp<'_>) {
         _ => "choose a project command",
     };
     frame.render_widget(
-        Paragraph::new(app.query.as_str()).block(
+        Paragraph::new(terminal_text(&app.query)).block(
             Block::default()
                 .borders(Borders::ALL)
                 .title(format!(" dev — {title} ")),
@@ -308,13 +308,13 @@ fn render_list(frame: &mut Frame<'_>, app: &mut PickerApp<'_>, area: Rect) {
                 Line::from(vec![
                     Span::raw(warning),
                     Span::styled(
-                        &candidate.label,
+                        terminal_text(&candidate.label),
                         color_style(app.colors, Style::default().add_modifier(Modifier::BOLD)),
                     ),
                     Span::raw(format!("  {score}")),
                 ]),
                 Line::styled(
-                    &candidate.description,
+                    terminal_text(&candidate.description),
                     color_style(app.colors, Style::default().fg(Color::DarkGray)),
                 ),
             ])
@@ -365,11 +365,17 @@ fn render_details(frame: &mut Frame<'_>, app: &PickerApp<'_>, area: Rect) {
     let candidate = &app.resolution.candidates[*index].candidate;
     let mut lines = vec![
         Line::styled(
-            command_display::diagnostic(candidate, &[]),
+            terminal_text(&command_display::diagnostic(candidate, &[])),
             color_style(app.colors, Style::default().fg(Color::Cyan)),
         ),
-        Line::from(format!("cwd: {}", candidate.cwd.display())),
-        Line::from(format!("availability: {:?}", candidate.availability)),
+        Line::from(format!(
+            "cwd: {}",
+            terminal_text(&candidate.cwd.to_string_lossy())
+        )),
+        Line::from(terminal_text(&format!(
+            "availability: {:?}",
+            candidate.availability
+        ))),
         Line::from(""),
     ];
     if !query.terms.is_empty() {
@@ -383,7 +389,10 @@ fn render_details(frame: &mut Frame<'_>, app: &PickerApp<'_>, area: Rect) {
         lines.extend(query.terms.iter().map(|matched| {
             Line::from(format!(
                 "{:+4} {:?}: {} → {}",
-                matched.points, matched.class, matched.hint, matched.candidate_value
+                matched.points,
+                matched.class,
+                terminal_text(&matched.hint),
+                terminal_text(&matched.candidate_value)
             ))
         }));
         lines.push(Line::from(""));
@@ -392,12 +401,13 @@ fn render_details(frame: &mut Frame<'_>, app: &PickerApp<'_>, area: Rect) {
         "Structural evidence",
         color_style(app.colors, Style::default().add_modifier(Modifier::BOLD)),
     ));
-    lines.extend(
-        candidate
-            .evidence
-            .iter()
-            .map(|evidence| Line::from(format!("{:+4} {}", evidence.points, evidence.reason))),
-    );
+    lines.extend(candidate.evidence.iter().map(|evidence| {
+        Line::from(format!(
+            "{:+4} {}",
+            evidence.points,
+            terminal_text(&evidence.reason)
+        ))
+    }));
     let availability_style = if !app.colors {
         Style::default()
     } else {

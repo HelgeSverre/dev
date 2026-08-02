@@ -278,15 +278,9 @@ fn selected_line(bytes: &[u8], output: CommandOutput) -> Option<String> {
 fn summarize_line(line: &[u8]) -> String {
     let mut output = String::from_utf8_lossy(line)
         .chars()
-        .map(|character| {
-            if character.is_control() {
-                '\u{fffd}'
-            } else {
-                character
-            }
-        })
         .take(160)
         .collect::<String>();
+    output = crate::ui::terminal_text(&output);
     if line.len() > 160 {
         output.push('…');
     }

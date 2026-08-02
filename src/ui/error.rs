@@ -6,6 +6,7 @@ use crate::resolve::{Resolution, ResolutionStatus};
 use crate::scan::{FileIndex, RootInfo};
 
 use super::command_display;
+use super::terminal_text;
 
 #[must_use]
 pub fn candidate_table(
@@ -29,7 +30,7 @@ pub fn candidate_table(
             output,
             "  {:>4}  {}",
             ranked.candidate.structural_points + ranked.query.total_points,
-            command_display::diagnostic(&ranked.candidate, &[])
+            terminal_text(&command_display::diagnostic(&ranked.candidate, &[]))
         );
     }
     if resolution.status == ResolutionStatus::HintNoMatch {
@@ -52,25 +53,29 @@ fn no_candidates(
         output,
         "dev: nothing runnable found for {:?} in {}\n",
         invocation.intent,
-        invocation.target.path().display()
+        terminal_text(&invocation.target.path().to_string_lossy())
     );
     let _ = writeln!(
         output,
         "  package root:   {}",
-        roots
-            .package_root
-            .as_deref()
-            .map_or_else(|| "—".to_owned(), |path| path.display().to_string())
+        roots.package_root.as_deref().map_or_else(
+            || "—".to_owned(),
+            |path| terminal_text(&path.to_string_lossy())
+        )
     );
     let _ = writeln!(
         output,
         "  workspace root: {}",
-        roots
-            .workspace_root
-            .as_deref()
-            .map_or_else(|| "—".to_owned(), |path| path.display().to_string())
+        roots.workspace_root.as_deref().map_or_else(
+            || "—".to_owned(),
+            |path| terminal_text(&path.to_string_lossy())
+        )
     );
-    let _ = writeln!(output, "  scan root:      {}", roots.scan_root.display());
+    let _ = writeln!(
+        output,
+        "  scan root:      {}",
+        terminal_text(&roots.scan_root.to_string_lossy())
+    );
     let _ = writeln!(
         output,
         "  scanned:        {} entries ({})",
@@ -88,7 +93,7 @@ fn no_candidates(
         if manifests.is_empty() {
             "—".to_owned()
         } else {
-            manifests.join(", ")
+            terminal_text(&manifests.join(", "))
         }
     );
     for diagnostic in diagnostics {
@@ -96,11 +101,10 @@ fn no_candidates(
             output,
             "  {}: {}{}",
             diagnostic.detector,
-            diagnostic.message,
-            diagnostic
-                .source
-                .as_ref()
-                .map_or_else(String::new, |path| format!(" ({})", path.display()))
+            terminal_text(&diagnostic.message),
+            diagnostic.source.as_ref().map_or_else(String::new, |path| {
+                format!(" ({})", terminal_text(&path.to_string_lossy()))
+            })
         );
     }
     let alternatives = match invocation.intent {
@@ -113,14 +117,14 @@ fn no_candidates(
         let _ = writeln!(
             output,
             "    dev {alternative} --at {}",
-            invocation.target.path().display()
+            terminal_text(&invocation.target.path().to_string_lossy())
         );
     }
     let _ = writeln!(
         output,
         "    dev {} --pick --at {}",
         invocation.intent,
-        invocation.target.path().display()
+        terminal_text(&invocation.target.path().to_string_lossy())
     );
     output
 }

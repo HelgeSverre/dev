@@ -62,25 +62,22 @@ pub fn execute(
     check_recursion(resolved_program)?;
 
     if !options.quiet {
-        let command = command_display::diagnostic(candidate, passthrough);
+        let command =
+            crate::ui::terminal_text(&command_display::diagnostic(candidate, passthrough));
+        let cwd = crate::ui::terminal_text(&candidate.cwd.to_string_lossy());
         if options.colors {
             eprintln!(
                 "\x1b[36m›\x1b[0m {command}  ({}, {})",
-                candidate.detector,
-                candidate.cwd.display()
+                candidate.detector, cwd
             );
         } else {
-            eprintln!(
-                "› {command}  ({}, {})",
-                candidate.detector,
-                candidate.cwd.display()
-            );
+            eprintln!("› {command}  ({}, {})", candidate.detector, cwd);
         }
         if let Some(matched) = options.decisive_match {
-            let detail = format!(
+            let detail = crate::ui::terminal_text(&format!(
                 "  matched: {:?} -> {:?}",
                 matched.hint, matched.candidate_value
-            );
+            ));
             if options.colors {
                 eprintln!("\x1b[2m{detail}\x1b[0m");
             } else {
