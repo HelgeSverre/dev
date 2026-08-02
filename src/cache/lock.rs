@@ -7,6 +7,9 @@ use std::time::{Duration, Instant};
 
 use fs4::{FileExt, TryLockError};
 
+#[cfg(unix)]
+use std::os::unix::fs::{OpenOptionsExt as _, PermissionsExt as _};
+
 use super::{state_file, CacheError, ChoiceStore, CACHE_SCHEMA};
 
 const LOCK_TIMEOUT: Duration = Duration::from_millis(250);
@@ -15,22 +18,11 @@ static UNIQUE_FILE_ID: AtomicU64 = AtomicU64::new(0);
 pub(super) fn update_store(update: impl FnOnce(&mut ChoiceStore)) -> Result<(), CacheError> {
     let state_file = state_file()?;
     let directory = state_file.parent().ok_or(CacheError::NoStateDirectory)?;
-    std::fs::create_dir_all(directory).map_err(|source| CacheError::Io {
-        path: directory.to_path_buf(),
-        source,
-    })?;
+    prepare_directory(directory)?;
     let lock_path = directory.join("choices.lock");
-    let lock = OpenOptions::new()
-        .create(true)
-        .truncate(false)
-        .read(true)
-        .write(true)
-        .open(&lock_path)
-        .map_err(|source| CacheError::Io {
-            path: lock_path.clone(),
-            source,
-        })?;
+    let lock = open_lock(&lock_path)?;
     acquire(&lock)?;
+    sweep_temporary_files(directory)?;
 
     let mut store = load_locked(&state_file)?;
     update(&mut store);
@@ -43,17 +35,9 @@ pub(super) fn update_store(update: impl FnOnce(&mut ChoiceStore)) -> Result<(), 
 
 pub(super) fn quarantine_corrupt(path: &Path) -> Result<(), CacheError> {
     let directory = path.parent().ok_or(CacheError::NoStateDirectory)?;
+    prepare_directory(directory)?;
     let lock_path = directory.join("choices.lock");
-    let lock = OpenOptions::new()
-        .create(true)
-        .truncate(false)
-        .read(true)
-        .write(true)
-        .open(&lock_path)
-        .map_err(|source| CacheError::Io {
-            path: lock_path.clone(),
-            source,
-        })?;
+    let lock = open_lock(&lock_path)?;
     acquire(&lock)?;
     if std::fs::read(path)
         .ok()
@@ -65,6 +49,27 @@ pub(super) fn quarantine_corrupt(path: &Path) -> Result<(), CacheError> {
         path: lock_path,
         source,
     })
+}
+
+fn prepare_directory(directory: &Path) -> Result<(), CacheError> {
+    std::fs::create_dir_all(directory).map_err(|source| CacheError::Io {
+        path: directory.to_path_buf(),
+        source,
+    })?;
+    secure_directory(directory)
+}
+
+fn open_lock(path: &Path) -> Result<File, CacheError> {
+    let mut options = OpenOptions::new();
+    options.create(true).truncate(false).read(true).write(true);
+    #[cfg(unix)]
+    options.mode(0o600);
+    let file = options.open(path).map_err(|source| CacheError::Io {
+        path: path.to_path_buf(),
+        source,
+    })?;
+    secure_file(&file, path)?;
+    Ok(file)
 }
 
 fn acquire(lock: &File) -> Result<(), CacheError> {
@@ -87,6 +92,7 @@ fn acquire(lock: &File) -> Result<(), CacheError> {
 }
 
 fn load_locked(path: &Path) -> Result<ChoiceStore, CacheError> {
+    secure_existing_file(path)?;
     match std::fs::read(path) {
         Ok(contents) => match serde_json::from_slice::<ChoiceStore>(&contents) {
             Ok(store) if store.schema_version == CACHE_SCHEMA => Ok(store),
@@ -106,6 +112,23 @@ fn load_locked(path: &Path) -> Result<ChoiceStore, CacheError> {
             source,
         }),
     }
+}
+
+#[cfg(unix)]
+pub(super) fn secure_existing_file(path: &Path) -> Result<(), CacheError> {
+    match File::open(path) {
+        Ok(file) => secure_file(&file, path),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(source) => Err(CacheError::Io {
+            path: path.to_path_buf(),
+            source,
+        }),
+    }
+}
+
+#[cfg(not(unix))]
+pub(super) fn secure_existing_file(_path: &Path) -> Result<(), CacheError> {
+    Ok(())
 }
 
 fn write_atomic(directory: &Path, path: &Path, store: &ChoiceStore) -> Result<(), CacheError> {
@@ -139,12 +162,76 @@ fn create_temporary(directory: &Path) -> Result<(File, PendingTemporary), CacheE
     loop {
         let unique = UNIQUE_FILE_ID.fetch_add(1, Ordering::Relaxed);
         let path = directory.join(format!("choices.{}.{unique}.tmp", std::process::id()));
-        match OpenOptions::new().create_new(true).write(true).open(&path) {
+        let mut options = OpenOptions::new();
+        options.create_new(true).write(true);
+        #[cfg(unix)]
+        options.mode(0o600);
+        match options.open(&path) {
             Ok(file) => return Ok((file, PendingTemporary { path, keep: false })),
             Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
             Err(source) => return Err(CacheError::Io { path, source }),
         }
     }
+}
+
+fn sweep_temporary_files(directory: &Path) -> Result<(), CacheError> {
+    let entries = std::fs::read_dir(directory).map_err(|source| CacheError::Io {
+        path: directory.to_path_buf(),
+        source,
+    })?;
+    for entry in entries.filter_map(Result::ok) {
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        if name.starts_with("choices.") && name.ends_with(".tmp") {
+            let path = entry.path();
+            if path.is_file() {
+                std::fs::remove_file(&path).map_err(|source| CacheError::Io { path, source })?;
+            }
+        }
+    }
+    Ok(())
+}
+
+#[cfg(unix)]
+fn secure_directory(directory: &Path) -> Result<(), CacheError> {
+    let mut permissions = std::fs::metadata(directory)
+        .map_err(|source| CacheError::Io {
+            path: directory.to_path_buf(),
+            source,
+        })?
+        .permissions();
+    permissions.set_mode(0o700);
+    std::fs::set_permissions(directory, permissions).map_err(|source| CacheError::Io {
+        path: directory.to_path_buf(),
+        source,
+    })
+}
+
+#[cfg(not(unix))]
+fn secure_directory(_directory: &Path) -> Result<(), CacheError> {
+    Ok(())
+}
+
+#[cfg(unix)]
+fn secure_file(file: &File, path: &Path) -> Result<(), CacheError> {
+    let mut permissions = file
+        .metadata()
+        .map_err(|source| CacheError::Io {
+            path: path.to_path_buf(),
+            source,
+        })?
+        .permissions();
+    permissions.set_mode(0o600);
+    file.set_permissions(permissions)
+        .map_err(|source| CacheError::Io {
+            path: path.to_path_buf(),
+            source,
+        })
+}
+
+#[cfg(not(unix))]
+fn secure_file(_file: &File, _path: &Path) -> Result<(), CacheError> {
+    Ok(())
 }
 
 fn quarantine_locked(path: &Path) -> Result<(), CacheError> {
@@ -188,5 +275,76 @@ impl Drop for PendingTemporary {
         if !self.keep {
             let _ = std::fs::remove_file(&self.path);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn corrupt_store_is_quarantined_before_returning_empty_state() -> anyhow::Result<()> {
+        let temporary = tempfile::tempdir()?;
+        let path = temporary.path().join("choices.json");
+        std::fs::write(&path, "{not-json")?;
+
+        let store = load_locked(&path)?;
+
+        assert!(store.entries.is_empty());
+        assert!(!path.exists());
+        let quarantined = std::fs::read_dir(temporary.path())?
+            .filter_map(Result::ok)
+            .filter(|entry| {
+                let name = entry.file_name();
+                let name = name.to_string_lossy();
+                name.starts_with("choices.corrupt-") && name.ends_with(".json")
+            })
+            .map(|entry| entry.path())
+            .collect::<Vec<_>>();
+        assert_eq!(quarantined.len(), 1);
+        #[cfg(unix)]
+        assert_eq!(
+            std::fs::metadata(&quarantined[0])?.permissions().mode() & 0o777,
+            0o600
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn orphaned_atomic_temps_are_swept_without_touching_other_files() -> anyhow::Result<()> {
+        let temporary = tempfile::tempdir()?;
+        let stale = temporary.path().join("choices.123.0.tmp");
+        let unrelated = temporary.path().join("choices.keep");
+        std::fs::write(&stale, "partial")?;
+        std::fs::write(&unrelated, "keep")?;
+
+        sweep_temporary_files(temporary.path())?;
+
+        assert!(!stale.exists());
+        assert!(unrelated.exists());
+        Ok(())
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn state_directory_and_files_are_private() -> anyhow::Result<()> {
+        let temporary = tempfile::tempdir()?;
+        let directory = temporary.path().join("dev");
+        prepare_directory(&directory)?;
+        let lock_path = directory.join("choices.lock");
+        let lock = open_lock(&lock_path)?;
+        let store_path = directory.join("choices.json");
+        write_atomic(&directory, &store_path, &empty_store())?;
+
+        assert_eq!(
+            std::fs::metadata(&directory)?.permissions().mode() & 0o777,
+            0o700
+        );
+        assert_eq!(lock.metadata()?.permissions().mode() & 0o777, 0o600);
+        assert_eq!(
+            std::fs::metadata(&store_path)?.permissions().mode() & 0o777,
+            0o600
+        );
+        Ok(())
     }
 }

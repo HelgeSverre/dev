@@ -228,7 +228,7 @@ mod tests {
             NODE_SOURCE,
             Intent::Run,
             "run",
-            "missing-test-program",
+            "wibblewabble",
             Vec::new(),
             cwd.to_path_buf(),
             80,

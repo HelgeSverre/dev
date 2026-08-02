@@ -340,6 +340,7 @@ pub(crate) fn state_file() -> Result<PathBuf, CacheError> {
 
 fn load_store() -> Result<ChoiceStore, CacheError> {
     let path = state_file()?;
+    lock::secure_existing_file(&path)?;
     let contents = match std::fs::read(&path) {
         Ok(contents) => contents,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
