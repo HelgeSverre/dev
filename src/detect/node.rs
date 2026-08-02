@@ -1401,6 +1401,11 @@ mod tests {
             name: None,
             ..named.clone()
         };
+        #[cfg(windows)]
+        let unnamed_selector = OsString::from(".\\apps\\web");
+        #[cfg(not(windows))]
+        let unnamed_selector = OsString::from("./apps/web");
+
         let arguments = |manager: PackageManager, member: &WorkspaceMember| {
             manager.script_args("dev", Some(member))
         };
@@ -1411,7 +1416,12 @@ mod tests {
         );
         assert_eq!(
             arguments(PackageManager::Npm, &unnamed),
-            ["run", "dev", "--workspace", "./apps/web"].map(OsString::from)
+            [
+                OsString::from("run"),
+                OsString::from("dev"),
+                OsString::from("--workspace"),
+                unnamed_selector.clone(),
+            ]
         );
         assert_eq!(
             arguments(PackageManager::Pnpm, &named),
@@ -1419,7 +1429,12 @@ mod tests {
         );
         assert_eq!(
             arguments(PackageManager::Pnpm, &unnamed),
-            ["--filter", "./apps/web", "run", "dev"].map(OsString::from)
+            [
+                OsString::from("--filter"),
+                unnamed_selector.clone(),
+                OsString::from("run"),
+                OsString::from("dev"),
+            ]
         );
         assert_eq!(
             arguments(PackageManager::Yarn, &named),
@@ -1427,7 +1442,12 @@ mod tests {
         );
         assert_eq!(
             arguments(PackageManager::Yarn, &unnamed),
-            ["--cwd", "./apps/web", "run", "dev"].map(OsString::from)
+            [
+                OsString::from("--cwd"),
+                unnamed_selector.clone(),
+                OsString::from("run"),
+                OsString::from("dev"),
+            ]
         );
         assert_eq!(
             arguments(PackageManager::Bun, &named),
@@ -1435,7 +1455,12 @@ mod tests {
         );
         assert_eq!(
             arguments(PackageManager::Bun, &unnamed),
-            ["run", "--filter", "./apps/web", "dev"].map(OsString::from)
+            [
+                OsString::from("run"),
+                OsString::from("--filter"),
+                unnamed_selector,
+                OsString::from("dev"),
+            ]
         );
     }
 }
